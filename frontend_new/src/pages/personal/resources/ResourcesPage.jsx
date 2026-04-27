@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./ResourcesPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import { ResourcesService } from "../../../services/resources";
+import TerminalDialog from "./TerminalDialog";
+import VncDialog from "./VncDialog";
 
 /* ── Constants ── */
 const STATUS_MAP = {
   running: { label: "運行中", color: "success", icon: "play_circle"  },
-  stopped: { label: "已停止", color: "warning", icon: "stop_circle"  },
-  paused:  { label: "已暫停", color: "info",    icon: "pause_circle" },
+  stopped: { label: "已停止", color: "muted",   icon: "stop_circle"  },
+  paused:  { label: "已暫停", color: "muted",   icon: "pause_circle" },
 };
 
 const TYPE_MAP = {
@@ -20,16 +22,6 @@ function formatBytes(bytes) {
   if (!bytes) return null;
   const gb = bytes / (1024 ** 3);
   return gb >= 1 ? `${gb % 1 === 0 ? gb : gb.toFixed(1)} GB` : `${Math.round(bytes / (1024 ** 2))} MB`;
-}
-
-function formatUptime(seconds) {
-  if (!seconds) return null;
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d} 天 ${h} 小時`;
-  if (h > 0) return `${h} 小時 ${m} 分`;
-  return `${m} 分`;
 }
 
 function formatDate(isoStr) {
@@ -58,16 +50,6 @@ function InfoRow({ icon, label, value }) {
         {label}
       </span>
       <span className={styles.infoValue}>{value}</span>
-    </div>
-  );
-}
-
-function SpecChip({ label, value }) {
-  if (!value) return null;
-  return (
-    <div className={styles.specChip}>
-      <span className={styles.specChipLabel}>{label}</span>
-      <span className={styles.specChipValue}>{value}</span>
     </div>
   );
 }
@@ -112,17 +94,77 @@ function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, lo
   );
 }
 
+/* ── Power dropdown ── */
+function PowerMenu({ resource, actionLoading, onControl, onDeleteClick, onClose, anchorRef, closing }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handler(e) {
+      if (!ref.current?.contains(e.target) && !anchorRef?.current?.contains(e.target)) onClose();
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose, anchorRef]);
+
+  const isRunning = resource.status === "running";
+  const isStopped = resource.status === "stopped" || resource.status === "paused";
+
+  return (
+    <div
+      ref={ref}
+      className={`${styles.powerMenu} ${closing ? styles.powerMenuOut : ""}`}
+    >
+      <div className={styles.powerMenuTitle}>電源控制</div>
+      <div className={styles.powerMenuGrid}>
+        <button type="button" className={styles.powerMenuItem}
+          disabled={!isStopped || !!actionLoading} onClick={() => { onClose(); onControl("start"); }}>
+          <span className="material-icons" style={{ fontSize: 15, lineHeight: 1, color: "#28a745" }}>play_arrow</span>
+          啟動
+        </button>
+        <button type="button" className={`${styles.powerMenuItem} ${styles.powerMenuItemWarn}`}
+          disabled={!isRunning || !!actionLoading} onClick={() => { onClose(); onControl("stop"); }}>
+          <MIcon name="stop" size={15} />強制停止
+        </button>
+        <button type="button" className={styles.powerMenuItem}
+          disabled={!isRunning || !!actionLoading} onClick={() => { onClose(); onControl("shutdown"); }}>
+          <MIcon name="power_settings_new" size={15} />關機
+        </button>
+        <button type="button" className={`${styles.powerMenuItem} ${styles.powerMenuItemWarn}`}
+          disabled={!isRunning || !!actionLoading} onClick={() => { onClose(); onControl("reset"); }}>
+          <MIcon name="restart_alt" size={15} />強制重置
+        </button>
+        <button type="button" className={styles.powerMenuItem}
+          disabled={!isRunning || !!actionLoading} onClick={() => { onClose(); onControl("reboot"); }}>
+          <MIcon name="replay" size={15} />重新啟動
+        </button>
+        <button type="button" className={`${styles.powerMenuItem} ${styles.powerMenuItemDanger}`}
+          onClick={() => onDeleteClick()}>
+          <MIcon name="delete_outline" size={15} />刪除
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ── ResourceCard ── */
 function ResourceCard({ resource, onUpdated, onDeleted }) {
   const [actionLoading, setActionLoading] = useState(null);
   const [deleteConfirm, setDeleteConfirm]  = useState(false);
   const [deleting, setDeleting]            = useState(false);
+  const [menuOpen, setMenuOpen]            = useState(false);
+  const [menuClosing, setMenuClosing]      = useState(false);
+  const [consoleOpen, setConsoleOpen]      = useState(false);
+  const menuBtnRef = useRef(null);
 
-  const type   = TYPE_MAP[resource.type] ?? { label: resource.type, icon: "computer" };
-  const isRunning = resource.status === "running";
-  const isStopped = resource.status === "stopped" || resource.status === "paused";
+  function closeMenu() {
+    setMenuClosing(true);
+    setTimeout(() => { setMenuOpen(false); setMenuClosing(false); }, 130);
+  }
 
-  async function handleControl(action, label) {
+  const type  = TYPE_MAP[resource.type] ?? { label: resource.type, icon: "computer" };
+  const isLxc = resource.type === "lxc";
+
+  async function handleControl(action) {
     setActionLoading(action);
     try {
       await ResourcesService[action](resource.vmid);
@@ -150,7 +192,7 @@ function ResourceCard({ resource, onUpdated, onDeleted }) {
         {/* ── Header ── */}
         <div className={styles.cardHeader}>
           <div className={styles.cardIcon}>
-            <MIcon name={type.icon} size={22} />
+            <MIcon name={type.icon} size={20} />
           </div>
           <div className={styles.cardMeta}>
             <span className={styles.cardName}>{resource.name}</span>
@@ -164,86 +206,56 @@ function ResourceCard({ resource, onUpdated, onDeleted }) {
 
         {/* ── Info rows ── */}
         <div className={styles.cardInfo}>
-          <InfoRow icon="monitor"    label="系統"   value={resource.os_info} />
-          <InfoRow icon="wifi"       label="IP"     value={resource.ip_address} />
-          <InfoRow icon="apps"       label="模板"   value={resource.service_template_slug} />
-          <InfoRow icon="dns"        label="節點"   value={resource.node} />
-        </div>
-
-        {/* ── Spec chips ── */}
-        <div className={styles.specRow}>
-          <SpecChip label="CPU"    value={resource.maxcpu ? `${resource.maxcpu} 核` : null} />
-          <SpecChip label="記憶體" value={formatBytes(resource.maxmem)} />
-          {isRunning && <SpecChip label="已運行" value={formatUptime(resource.uptime)} />}
-        </div>
-
-        {/* ── Expiry ── */}
-        {resource.expiry_date && (
-          <div className={styles.cardPeriod}>
-            <MIcon name="event" size={13} />
-            <span>到期 {formatDate(resource.expiry_date)}</span>
+          <InfoRow icon="monitor"  label="系統" value={resource.os_info} />
+          <InfoRow icon="category" label="環境" value={resource.environment_type} />
+          <InfoRow icon="wifi"     label="IP"   value={resource.ip_address ?? "N/A"} />
+          <div className={styles.infoRow}>
+            <span className={styles.infoLabel}>
+              <MIcon name="event" size={12} />
+              到期
+            </span>
+            <span className={styles.infoValue}>
+              {resource.expiry_date
+                ? formatDate(resource.expiry_date)
+                : <span className={styles.cardPeriodUnlimited}>∞ 無期限</span>
+              }
+            </span>
           </div>
-        )}
+        </div>
 
         {/* ── Footer ── */}
         <div className={styles.cardFooter}>
-          <div className={styles.powerActions}>
-            {isStopped && (
-              <button
-                type="button"
-                className={`${styles.powerBtn} ${styles.powerBtnStart}`}
-                disabled={!!actionLoading}
-                onClick={() => handleControl("start")}
-                title="啟動"
-              >
-                {actionLoading === "start"
-                  ? <MIcon name="hourglass_empty" size={16} />
-                  : <span className="material-icons" style={{ fontSize: 16, lineHeight: 1 }}>play_arrow</span>
-                }
-              </button>
-            )}
-            {isRunning && (
-              <>
-                <button
-                  type="button"
-                  className={styles.powerBtn}
-                  disabled={!!actionLoading}
-                  onClick={() => handleControl("reboot")}
-                  title="重新啟動"
-                >
-                  <MIcon name={actionLoading === "reboot" ? "hourglass_empty" : "replay"} size={16} />
-                </button>
-                <button
-                  type="button"
-                  className={styles.powerBtn}
-                  disabled={!!actionLoading}
-                  onClick={() => handleControl("shutdown")}
-                  title="正常關機"
-                >
-                  <MIcon name={actionLoading === "shutdown" ? "hourglass_empty" : "power_settings_new"} size={16} />
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.powerBtn} ${styles.powerBtnStop}`}
-                  disabled={!!actionLoading}
-                  onClick={() => handleControl("stop")}
-                  title="強制停止"
-                >
-                  <MIcon name={actionLoading === "stop" ? "hourglass_empty" : "stop"} size={16} />
-                </button>
-              </>
-            )}
-          </div>
-          <button
-            type="button"
-            className={styles.deleteBtn}
-            onClick={() => setDeleteConfirm(true)}
-            title="刪除資源"
-          >
-            <MIcon name="delete_outline" size={15} />
-            刪除
+          <button type="button" className={styles.terminalBtn} title={isLxc ? "終端機" : "控制台"} disabled={resource.status !== "running"} onClick={() => setConsoleOpen(true)}>
+            <MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />
+            {isLxc ? "終端機" : "控制台"}
           </button>
+          <div className={styles.cardActions}>
+            {actionLoading && <MIcon name="hourglass_empty" size={16} />}
+            <div className={styles.menuWrap}>
+              {menuOpen && (
+                <PowerMenu
+                  resource={resource}
+                  actionLoading={actionLoading}
+                  onControl={handleControl}
+                  onDeleteClick={() => { closeMenu(); setDeleteConfirm(true); }}
+                  onClose={closeMenu}
+                  anchorRef={menuBtnRef}
+                  closing={menuClosing}
+                />
+              )}
+              <button
+                ref={menuBtnRef}
+                type="button"
+                className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`}
+                onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)}
+                title="電源控制"
+              >
+                <MIcon name="more_vert" size={18} />
+              </button>
+            </div>
+          </div>
         </div>
+
       </div>
 
       {deleteConfirm && (
@@ -256,6 +268,13 @@ function ResourceCard({ resource, onUpdated, onDeleted }) {
           onConfirm={handleDelete}
           onClose={() => setDeleteConfirm(false)}
         />
+      )}
+
+      {consoleOpen && isLxc && (
+        <TerminalDialog resource={resource} onClose={() => setConsoleOpen(false)} />
+      )}
+      {consoleOpen && !isLxc && (
+        <VncDialog resource={resource} onClose={() => setConsoleOpen(false)} />
       )}
     </>
   );
@@ -280,14 +299,6 @@ function SkeletonCard() {
             <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: "55%", height: 11 }} />
           </div>
         ))}
-      </div>
-      <div className={styles.specRow}>
-        {[0, 1].map((i) => (
-          <div key={i} className={`${styles.skeleton} ${styles.skChip}`} />
-        ))}
-      </div>
-      <div className={styles.cardFooter}>
-        <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 100, height: 28 }} />
       </div>
     </div>
   );

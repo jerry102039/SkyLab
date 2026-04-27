@@ -26,9 +26,19 @@ export const ResourcesService = {
     return apiPost(`/api/v1/resources/${vmid}/reboot`, {});
   },
 
+  /** 強制重置 */
+  reset(vmid) {
+    return apiPost(`/api/v1/resources/${vmid}/reset`, {});
+  },
+
   /** 刪除（非同步，返回 202） */
   delete(vmid) {
     return apiDelete(`/api/v1/resources/${vmid}`);
+  },
+
+  /** 取得 VNC 控制台資訊（QEMU VM） */
+  getConsole(vmid) {
+    return apiGet(`/api/v1/vm/${vmid}/console`);
   },
 
   /** 取得 SSH 金鑰 */

@@ -202,7 +202,7 @@
 }
 
 .badge_success { background: color-mix(in srgb, #28a745 12%, transparent); color: #28a745; }
-.badge_warning { background: color-mix(in srgb, #ffc107 16%, transparent); color: #9a7500; }
+.badge_warning { background: var(--color-hover); color: var(--color-text-muted); }
 .badge_danger  { background: color-mix(in srgb, #dc3545 12%, transparent); color: #dc3545; }
 .badge_info    { background: color-mix(in srgb, #0891b2 12%, transparent); color: #0891b2; }
 .badge_muted   { background: var(--color-hover); color: var(--color-text-muted); }
@@ -273,40 +273,10 @@
   @include text-truncate;
 }
 
-/* ── Spec chips row ── */
-.specRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: $spacing-8;
-}
-
-.specChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: $radius-8;
-  background: var(--color-hover);
-}
-
-.specChipLabel {
-  font-size: $font-size-12;
-  color: var(--color-text-secondary);
-}
-
-.specChipValue {
-  font-size: $font-size-12;
-  font-weight: $font-weight-700;
-  color: var(--color-text);
-}
-
 /* ── Card period ── */
-.cardPeriod {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: $font-size-12;
-  color: var(--color-text-secondary);
+.cardPeriodUnlimited {
+  color: var(--color-primary);
+  font-weight: $font-weight-500;
 }
 
 /* ── Card footer ── */
@@ -314,11 +284,122 @@
   @include flex-between;
   align-items: center;
   gap: $spacing-8;
-  padding-top: $spacing-16;
-  border-top: 1px solid var(--color-border);
 }
 
-/* ── Power action buttons ── */
+/* ── Terminal / Console button ── */
+.terminalBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: $radius-8;
+  font-size: 13px;
+  font-weight: $font-weight-500;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: background $transition-base;
+
+  &:hover:not(:disabled) { background: var(--color-hover); }
+  &:disabled { opacity: 0.4; cursor: not-allowed; color: var(--color-text-muted); }
+}
+
+/* ── Card actions ── */
+.cardActions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-8;
+}
+
+/* ── ⋮ Menu ── */
+.menuWrap {
+  position: relative;
+}
+
+.menuBtn {
+  width: 30px;
+  height: 30px;
+  border-radius: $radius-8;
+  @include flex-center;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  transition: background $transition-base, color $transition-base;
+
+  &:hover { background: var(--color-hover); color: var(--color-text); }
+}
+
+.menuBtnActive {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+/* ── Power dropdown ── */
+.powerMenu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  width: 240px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: $radius-12;
+  padding: $spacing-8 0;
+  z-index: 50;
+  box-shadow: var(--shadow-md);
+  animation: slideUp 0.14s cubic-bezier(0.25, 0.8, 0.25, 1);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.powerMenuOut {
+  animation: none;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+}
+
+.powerMenuTitle {
+  font-size: $font-size-12;
+  font-weight: $font-weight-500;
+  color: var(--color-text-muted);
+  padding: 2px $spacing-16 $spacing-8;
+}
+
+.powerMenuGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 0 $spacing-8;
+}
+
+.powerMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px $spacing-8;
+  font-size: $font-size-12;
+  color: var(--color-text);
+  text-align: left;
+  border-radius: $radius-8;
+  transition: background $transition-base;
+
+  &:hover:not(:disabled) { background: var(--color-hover); }
+  &:disabled { opacity: 0.35; cursor: not-allowed; }
+}
+
+.powerMenuItemWarn {
+  color: #dc3545;
+  &:hover:not(:disabled) { background: color-mix(in srgb, #dc3545 8%, transparent); }
+}
+
+.powerMenuItemDanger {
+  color: #dc3545;
+  &:hover:not(:disabled) { background: color-mix(in srgb, #dc3545 8%, transparent); }
+}
+
+/* ── Power action buttons (legacy, kept for skeleton) ── */
 .powerActions {
   display: flex;
   align-items: center;
