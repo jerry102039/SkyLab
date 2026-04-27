@@ -309,6 +309,7 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose, acti
           >
             <MIcon name="palette" size={20} />
             {!collapsed && <span className={styles.navLabel}>外觀</span>}
+            {!collapsed && <span className={styles.navHint}>{THEME_OPTIONS.find(o => o.key === mode)?.label}</span>}
           </button>
         </div>
 
@@ -333,6 +334,7 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose, acti
           >
             <MIcon name="language" size={20} />
             {!collapsed && <span className={styles.navLabel}>語言 / Language</span>}
+            {!collapsed && <span className={styles.navHint}>{LANG_OPTIONS.find(o => o.key === lang)?.label}</span>}
           </button>
         </div>
 

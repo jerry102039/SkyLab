@@ -331,7 +331,6 @@
   border-radius: $radius-8;
   @include flex-center;
   color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
   background: var(--color-surface);
   transition: background $transition-base, color $transition-base, border-color $transition-base;
 
@@ -344,10 +343,8 @@
 }
 
 .powerBtnStart {
-  
   background: color-mix(in srgb, #28a745 10%, transparent);
   color: #28a745;
-  border-color: color-mix(in srgb, #28a745 30%, var(--color-border));
 
   &:hover:not(:disabled) {
     background: color-mix(in srgb, #28a745 10%, var(--color-border));
