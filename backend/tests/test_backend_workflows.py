@@ -194,6 +194,81 @@ def test_vm_request_create_rejects_unavailable_window(
         vm_request_service.create(session=db, request_in=request_in, user=user)
 
 
+def test_student_quick_template_is_limited_and_auto_approved(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _create_user(db, role=UserRole.student)
+    calls: list[uuid.UUID] = []
+
+    monkeypatch.setattr(
+        "app.services.vm.vm_request_service.vm_request_availability_service.validate_request_window",
+        lambda **kwargs: None,
+    )
+
+    def fake_approve_and_place(*, session: Session, db_request: VMRequest, reviewer_id: uuid.UUID):
+        db_request.status = VMRequestStatus.approved
+        db_request.reviewer_id = reviewer_id
+        db_request.assigned_node = "pve-a"
+        db_request.desired_node = "pve-a"
+        session.add(db_request)
+        session.flush()
+        return None
+
+    monkeypatch.setattr(
+        "app.services.vm.vm_request_service._approve_and_place",
+        fake_approve_and_place,
+    )
+    monkeypatch.setattr(
+        "app.services.vm.vm_request_service.submit_sync",
+        lambda _fn, request_id, **_kwargs: calls.append(request_id),
+    )
+
+    request_in = VMRequestCreate(
+        reason="Need a short PostgreSQL lab environment",
+        resource_type="lxc",
+        hostname="quick-pg",
+        cores=2,
+        memory=2048,
+        password="strongpass123",
+        ostemplate="local:vztmpl/ubuntu-24.04.tar.zst",
+        rootfs_size=16,
+        service_template_slug="postgresql",
+        mode="quick_template",
+    )
+
+    result = vm_request_service.create(session=db, request_in=request_in, user=user)
+
+    db.expire_all()
+    saved = db.exec(select(VMRequest).where(VMRequest.id == result.id)).first()
+    assert saved is not None
+    assert result.request_kind == "quick_template"
+    assert saved.request_kind == "quick_template"
+    assert saved.status == VMRequestStatus.approved
+    assert saved.start_at is not None
+    assert saved.end_at is not None
+    assert saved.end_at - saved.start_at == timedelta(hours=3)
+    assert calls == [saved.id]
+
+
+def test_student_quick_template_rejects_unlisted_template(db: Session) -> None:
+    user = _create_user(db, role=UserRole.student)
+    request_in = VMRequestCreate(
+        reason="Need a short unlisted service template",
+        resource_type="lxc",
+        hostname="quick-bad",
+        cores=2,
+        memory=2048,
+        password="strongpass123",
+        ostemplate="local:vztmpl/ubuntu-24.04.tar.zst",
+        rootfs_size=16,
+        service_template_slug="openwebui",
+        mode="quick_template",
+    )
+
+    with pytest.raises(BadRequestError):
+        vm_request_service.create(session=db, request_in=request_in, user=user)
+
+
 def test_vm_request_review_rolls_back_and_cleans_up_on_failure(
     db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
