@@ -135,14 +135,10 @@ function EmptyState({ onAdd }) {
       <div className={styles.emptyIcon}>
         <MIcon name="swap_horiz" size={36} />
       </div>
-      <h2 className={styles.emptyTitle}>還沒有設定任何反向代理</h2>
+      <h2 className={styles.emptyTitle}>尚無設定網域</h2>
       <p className={styles.emptyDesc}>
-        將你 VM 裡跑的服務綁定到公開網域，讓外部可以直接訪問。
+        網域設定可以讓別人透過一個好記的網址（例如 app.example.edu.tw）直接訪問你 VM 裡跑的網站或服務，不需要記 IP 和 Port。
       </p>
-      <button type="button" className={styles.btnPrimary} onClick={onAdd}>
-        <MIcon name="add" size={16} />
-        新增第一筆路由
-      </button>
     </div>
   );
 }
@@ -240,12 +236,12 @@ export default function ReverseProxyPage() {
         <div className={styles.pageHeading}>
           <h1 className={styles.pageTitle}>反向代理</h1>
           <p className={styles.pageSubtitle}>
-            將 VM 內的服務綁定至公開網域，平台自動處理路由與 SSL 憑證。
+            讓別人透過一個好記的網址來訪問你 VM 裡的網站或服務
           </p>
         </div>
         <button type="button" className={styles.btnPrimary}>
           <MIcon name="add" size={16} />
-          新增路由
+          新增網域
         </button>
       </div>
 
