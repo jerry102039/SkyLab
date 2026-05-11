@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.ai.navigation.schemas import NavigationResolveRequest, NavigationResolveResponse
+from app.ai.navigation.schemas import (
+    NavigationResolveRequest,
+    NavigationResolveResponse,
+)
 from app.ai.navigation.service import resolve_navigation
 from app.api.deps import CurrentUser
 

@@ -29,12 +29,12 @@ from app.ai.template_recommendation.schemas import (
     ChatResponse,
     RecommendationRequest,
 )
+from app.ai.utils import apply_thinking_control, strip_think_tags
 from app.api.deps import CurrentUser, SessionDep
 from app.infrastructure.ai.template_recommendation import client
 from app.repositories import vm_request as vm_request_repo
 from app.services.llm_gateway import ai_gateway_service
 from app.services.proxmox import gpu_service
-from app.ai.utils import apply_thinking_control, strip_think_tags
 
 logger = logging.getLogger(__name__)
 

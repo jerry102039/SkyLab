@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.ai.utils import safe_int
-
 from app.ai.template_recommendation.catalog_service import (
     TemplateCatalog,
     build_catalog_prompt_bundle,
 )
 from app.ai.template_recommendation.schemas import ChatMessage
+from app.ai.utils import safe_int
 
 
 def build_chat_catalog_context(

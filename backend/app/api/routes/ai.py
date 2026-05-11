@@ -2,8 +2,8 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     ai_api,
-    ai_navigation,
     ai_monitoring,
+    ai_navigation,
     ai_proxy,
     ai_pve_log,
     ai_template_recommendation,

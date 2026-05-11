@@ -12,7 +12,6 @@ from typing import Any, cast
 from sqlmodel import Session, func, select
 
 from app.ai.pve_advisor.config import settings
-from app.ai.utils import apply_thinking_control, safe_int, strip_think_tags
 from app.ai.pve_advisor.prompt import (
     build_advisor_system_prompt,
     build_advisor_user_prompt,
@@ -30,6 +29,7 @@ from app.ai.pve_advisor.schemas import (
     ResourceSnapshot,
     ResourceType,
 )
+from app.ai.utils import apply_thinking_control, safe_int, strip_think_tags
 from app.infrastructure.ai.pve_advisor import client
 from app.models import AuditAction, AuditLog, VMRequest, VMRequestStatus
 from app.repositories import proxmox_config as proxmox_config_repo
