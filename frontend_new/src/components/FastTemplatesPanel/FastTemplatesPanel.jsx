@@ -6,12 +6,7 @@
 import { useMemo, useState } from "react";
 import rawData from "virtual:templates";
 import styles from "./FastTemplatesPanel.module.scss";
-
-const MIcon = ({ name, size = 20 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
+import MIcon from "../MIcon";
 
 /* ── 解析原始資料 ── */
 const metadataFile = rawData["metadata.json"] ?? { categories: [] };

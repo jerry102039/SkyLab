@@ -30,6 +30,7 @@ import ConnectionEdge   from "./edges/ConnectionEdge";
 import { buildFlow, portLabel } from "./utils/buildFlow";
 import { useTheme } from "../../../contexts/ThemeContext";
 import styles from "./FirewallPage.module.scss";
+import MIcon from "../../../components/MIcon";
 
 /* ─── 常數 ──────────────────────────────────────────────── */
 const GATEWAY_KEY   = "gateway";
@@ -41,13 +42,6 @@ const GATEWAY_X     = VM_COL_X + 520;
 /* ─── 類型映射（必須在元件外定義） ─────────────────────── */
 const NODE_TYPES = { gateway: GatewayNode, vm: VMNode };
 const EDGE_TYPES = { connection: ConnectionEdge };
-
-/* ─── 工具元件 ───────────────────────────────────────────── */
-const MIcon = ({ name, size = 18 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
 
 /* ─── 主頁面 ─────────────────────────────────────────────── */
 export default function FirewallPage() {

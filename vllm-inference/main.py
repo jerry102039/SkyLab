@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 
 # 確保專案根目錄在 sys.path

@@ -14,7 +14,6 @@ import asyncio
 import httpx
 from rich.console import Console
 from rich.panel import Panel
-from rich.markdown import Markdown
 
 console = Console()
 

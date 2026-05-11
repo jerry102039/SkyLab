@@ -16,7 +16,7 @@ from pathlib import Path
 from openai import AsyncOpenAI
 
 from config.settings import Settings, get_settings
-from benchmark.dataset import TestCase, TestDataset, load_dataset
+from benchmark.dataset import TestCase, load_dataset
 
 
 @dataclass
@@ -102,7 +102,7 @@ class EnhancedBenchmarkReport:
     def print_report(self) -> None:
         """印出格式化報告"""
         print(f"\n{'='*80}")
-        print(f"  🚀 增強版 vLLM Benchmark 報告")
+        print("  🚀 增強版 vLLM Benchmark 報告")
         print(f"{'='*80}")
         print(f"  時間:          {self.timestamp}")
         print(f"  模型:          {self.model_name}")
@@ -114,17 +114,17 @@ class EnhancedBenchmarkReport:
         print(f"  併發數:        {self.concurrency}")
         print(f"  總耗時:        {self.total_time:.2f}s")
         print(f"{'─'*80}")
-        print(f"  ▸ Token 統計")
+        print("  ▸ Token 統計")
         print(f"    Prompt Token:      {self.total_prompt_tokens:,}")
         print(f"    Completion Token:  {self.total_completion_tokens:,}")
         print(f"    總 Token:          {self.total_tokens:,}")
         print(f"{'─'*80}")
-        print(f"  ▸ 吞吐量")
+        print("  ▸ 吞吐量")
         print(f"    請求/秒:           {self.requests_per_second:.2f} req/s")
         print(f"    總 Token/秒:       {self.tokens_per_second:.2f} tok/s")
         print(f"    輸出 Token/秒:     {self.output_tokens_per_second:.2f} tok/s")
         print(f"{'─'*80}")
-        print(f"  ▸ 延遲 (End-to-End)")
+        print("  ▸ 延遲 (End-to-End)")
         print(f"    平均:    {self.avg_latency_ms:.1f}ms")
         print(f"    最小:    {self.min_latency_ms:.1f}ms")
         print(f"    最大:    {self.max_latency_ms:.1f}ms")
@@ -135,7 +135,7 @@ class EnhancedBenchmarkReport:
         
         if self.avg_ttft_ms > 0:
             print(f"{'─'*80}")
-            print(f"  ▸ TTFT (Time To First Token)")
+            print("  ▸ TTFT (Time To First Token)")
             print(f"    平均:    {self.avg_ttft_ms:.1f}ms")
             print(f"    P50:     {self.p50_ttft_ms:.1f}ms")
             print(f"    P90:     {self.p90_ttft_ms:.1f}ms")
@@ -143,13 +143,13 @@ class EnhancedBenchmarkReport:
 
         if self.avg_quality_score > 0:
             print(f"{'─'*80}")
-            print(f"  ▸ 品質指標")
+            print("  ▸ 品質指標")
             print(f"    平均品質分數:      {self.avg_quality_score:.2f}")
             print(f"    關鍵字匹配率:      {self.keyword_match_rate:.1%}")
 
         if self.category_stats:
             print(f"{'─'*80}")
-            print(f"  ▸ 類別統計")
+            print("  ▸ 類別統計")
             for cat_name, stats in sorted(self.category_stats.items()):
                 print(f"    [{stats.category}]")
                 print(f"      測試數: {stats.total_tests} | "
@@ -423,7 +423,7 @@ async def run_enhanced_benchmark(
 
     # 載入測試資料集
     print(f"\n{'='*80}")
-    print(f"  🚀 增強版 vLLM Benchmark")
+    print("  🚀 增強版 vLLM Benchmark")
     print(f"{'='*80}")
     print(f"[Benchmark] 載入測試資料集: {dataset_path}")
     
@@ -532,7 +532,7 @@ async def run_enhanced_benchmark(
     report.print_report()
 
     if failed:
-        print(f"\n[Benchmark] 失敗測試明細:")
+        print("\n[Benchmark] 失敗測試明細:")
         for r in failed[:10]:
             print(f"  [{r.test_id}] {r.category}: {r.error}")
         if len(failed) > 10:

@@ -326,7 +326,7 @@ if __name__ == "__main__":
         
         # 創建 OpenAI 格式內容
         content = create_image_content(test_image)
-        print(f"\nOpenAI 格式內容:")
+        print("\nOpenAI 格式內容:")
         print(f"  type: {content['type']}")
         print(f"  url 前 50 字元: {content['image_url']['url'][:50]}...")
         
@@ -346,5 +346,5 @@ if __name__ == "__main__":
     print("  功能檢查")
     print("=" * 70)
     print(f"PIL 可用: {PIL_AVAILABLE}")
-    print(f"支援的格式: .jpg, .jpeg, .png, .gif, .bmp, .webp")
+    print("支援的格式: .jpg, .jpeg, .png, .gif, .bmp, .webp")
     print()

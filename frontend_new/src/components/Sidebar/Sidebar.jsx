@@ -2,15 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth }  from "../../contexts/AuthContext";
 import styles from "./Sidebar.module.scss";
-
-const MIcon = ({ name, size = 22 }) => (
-  <span
-    className="material-icons-outlined"
-    style={{ fontSize: size, lineHeight: 1 }}
-  >
-    {name}
-  </span>
-);
+import MIcon from "../MIcon";
 
 const navGroups = [
   {
@@ -317,6 +309,7 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose, acti
           >
             <MIcon name="palette" size={20} />
             {!collapsed && <span className={styles.navLabel}>外觀</span>}
+            {!collapsed && <span className={styles.navHint}>{THEME_OPTIONS.find(o => o.key === mode)?.label}</span>}
           </button>
         </div>
 
@@ -341,6 +334,7 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose, acti
           >
             <MIcon name="language" size={20} />
             {!collapsed && <span className={styles.navLabel}>語言 / Language</span>}
+            {!collapsed && <span className={styles.navHint}>{LANG_OPTIONS.find(o => o.key === lang)?.label}</span>}
           </button>
         </div>
 

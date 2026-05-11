@@ -82,7 +82,6 @@ def _iter_block_items(doc):  # type: ignore
     python-docx 的 doc.paragraphs 和 doc.tables 是分開的，
     此函式利用 XML element 順序確保正確排列。
     """
-    from docx.oxml.ns import qn  # type: ignore
 
     body = doc.element.body
     for child in body.iterchildren():

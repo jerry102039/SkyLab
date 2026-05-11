@@ -24,6 +24,7 @@ from app.ai.template_recommendation.schemas import (
     ExtractedIntent,
     RecommendationRequest,
 )
+from app.ai.utils import apply_thinking_control, safe_int
 from app.infrastructure.ai.template_recommendation import client
 
 MIN_VM_DISK_GB = 20
@@ -138,24 +139,7 @@ def _normalize_user_text_for_intent(text: str) -> str:
     return normalized
 
 
-def _apply_thinking_control(payload: dict[str, Any]) -> dict[str, Any]:
-    payload["chat_template_kwargs"] = {
-        **dict(payload.get("chat_template_kwargs") or {}),
-        "enable_thinking": settings.vllm_enable_thinking,
-    }
-    return payload
 
-
-def _safe_int(value: Any, default: int, minimum: int) -> int:
-    try:
-        if isinstance(value, str):
-            digits = "".join(char for char in value if char.isdigit())
-            parsed = int(digits) if digits else int(value)
-        else:
-            parsed = int(value)
-    except (TypeError, ValueError):
-        parsed = default
-    return max(parsed, minimum)
 
 
 def _minimum_disk_gb(resource_type: str) -> int:
@@ -211,7 +195,7 @@ def _build_submission_reason(
 
 
 async def extract_intent_from_chat(request: ChatRequest) -> ExtractedIntent:
-    model_name = settings.resolved_vllm_model_name
+    model_name = settings.VLLM_MODEL_NAME
     if not model_name:
         raise HTTPException(
             status_code=503,
@@ -235,14 +219,15 @@ async def extract_intent_from_chat(request: ChatRequest) -> ExtractedIntent:
         formatted_history="\n\n".join(full_chat_history) if full_chat_history else "(No conversation history)",
         user_signal_flags=_extract_user_signal_flags(recent_messages),
     )
-    payload = _apply_thinking_control(
+    payload = apply_thinking_control(
         {
             "model": model_name,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 1024,
             "temperature": 0.1,
             "response_format": {"type": "json_object"},
-        }
+        },
+        settings.VLLM_ENABLE_THINKING,
     )
 
     try:
@@ -260,7 +245,7 @@ async def generate_ai_plan(
     *,
     resource_options: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    model_name = settings.resolved_vllm_model_name
+    model_name = settings.VLLM_MODEL_NAME
     if not model_name:
         raise HTTPException(
             status_code=503,
@@ -363,7 +348,7 @@ async def generate_ai_plan(
         "decision_factors": ["Traditional Chinese short bullet"],
         "upgrade_when": "Traditional Chinese upgrade timing with measurable thresholds",
     }
-    payload = _apply_thinking_control(
+    payload = apply_thinking_control(
         {
             "model": model_name,
             "messages": [
@@ -381,15 +366,16 @@ async def generate_ai_plan(
                     ),
                 }
             ],
-            "max_tokens": settings.vllm_max_tokens,
-            "temperature": settings.vllm_temperature,
-            "top_p": settings.vllm_top_p,
-            "top_k": settings.vllm_top_k,
-            "min_p": settings.vllm_min_p,
-            "presence_penalty": settings.vllm_presence_penalty,
-            "repetition_penalty": settings.vllm_repetition_penalty,
+            "max_tokens": settings.VLLM_MAX_TOKENS,
+            "temperature": settings.VLLM_TEMPERATURE,
+            "top_p": settings.VLLM_TOP_P,
+            "top_k": settings.VLLM_TOP_K,
+            "min_p": settings.VLLM_MIN_P,
+            "presence_penalty": settings.VLLM_PRESENCE_PENALTY,
+            "repetition_penalty": settings.VLLM_REPETITION_PENALTY,
             "response_format": {"type": "json_object"},
-        }
+        },
+        settings.VLLM_ENABLE_THINKING,
     )
 
     try:
@@ -466,17 +452,18 @@ def normalize_ai_result(
 
         install_methods = template.raw.get("install_methods") or []
         default_resources = dict(install_methods[0].get("resources") or {}) if install_methods else {}
-        cpu = _safe_int(machine.get("cpu"), int(default_resources.get("cpu") or 2), 1)
-        memory_mb = _safe_int(machine.get("memory_mb"), int(default_resources.get("ram") or 2048), 256)
-        gpu = _safe_int(machine.get("gpu"), 1 if request.requires_gpu else 0, 0)
+        cpu = safe_int(machine.get("cpu"), int(default_resources.get("cpu") or 2), minimum=1, extract_digits=True)
+        memory_mb = safe_int(machine.get("memory_mb"), int(default_resources.get("ram") or 2048), minimum=256, extract_digits=True)
+        gpu = safe_int(machine.get("gpu"), 1 if request.requires_gpu else 0, minimum=0, extract_digits=True)
         deployment_type = str(machine.get("deployment_type") or "").strip().lower()
         if deployment_type not in {"lxc", "vm"}:
             deployment_type = "vm" if (request.needs_windows or gpu > 0) else "lxc"
         default_disk_gb = int(default_resources.get("hdd") or _minimum_disk_gb(deployment_type))
-        disk_gb = _safe_int(
+        disk_gb = safe_int(
             machine.get("disk_gb"),
             default_disk_gb,
-            _minimum_disk_gb(deployment_type),
+            minimum=_minimum_disk_gb(deployment_type),
+            extract_digits=True,
         )
 
         machines.append(
@@ -532,7 +519,7 @@ def normalize_ai_result(
     selected_vm_template_id = 0
     selected_vm_os = ""
     if resource_type == "vm" and vm_operating_systems:
-        requested_vm_template_id = _safe_int(ai_result.get("form_prefill", {}).get("vm_template_id"), 0, 0)
+        requested_vm_template_id = safe_int(ai_result.get("form_prefill", {}).get("vm_template_id"), 0, minimum=0, extract_digits=True)
         selected_vm = next(
             (item for item in vm_operating_systems if int(item.get("template_id") or 0) == requested_vm_template_id),
             vm_operating_systems[0],
@@ -583,12 +570,13 @@ def normalize_ai_result(
         selected_gpu_mapping_id = str(selected_gpu.get("mapping_id") or "").strip()
         selected_gpu_label = _gpu_option_label(selected_gpu)
 
-    cores = _safe_int(ai_result.get("form_prefill", {}).get("cores") or primary_machine.get("cpu"), 2, 1)
-    memory_mb = _safe_int(ai_result.get("form_prefill", {}).get("memory_mb") or primary_machine.get("memory_mb"), 2048, 512)
-    disk_gb = _safe_int(
+    cores = safe_int(ai_result.get("form_prefill", {}).get("cores") or primary_machine.get("cpu"), 2, minimum=1, extract_digits=True)
+    memory_mb = safe_int(ai_result.get("form_prefill", {}).get("memory_mb") or primary_machine.get("memory_mb"), 2048, minimum=512, extract_digits=True)
+    disk_gb = safe_int(
         ai_result.get("form_prefill", {}).get("disk_gb") or primary_machine.get("disk_gb"),
         _minimum_disk_gb(resource_type),
-        _minimum_disk_gb(resource_type),
+        minimum=_minimum_disk_gb(resource_type),
+        extract_digits=True,
     )
     username = ""
     if resource_type == "vm":

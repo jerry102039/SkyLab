@@ -46,7 +46,7 @@ class MultiModelEngineManager:
         total = len(self.instances)
         self.logger.section("集群部署進度")
         self.logger.info(f"目標模型數量: {total}")
-        self.logger.info(f"啟動模式: SEQUENTIAL (串行)")
+        self.logger.info("啟動模式: SEQUENTIAL (串行)")
 
         self._start_sequential(wait_ready, timeout, startup_delay)
 

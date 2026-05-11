@@ -75,7 +75,7 @@ class BenchmarkReport:
     def print_report(self) -> None:
         """印出格式化報告"""
         print(f"\n{'='*70}")
-        print(f"  vLLM 異步 Benchmark 報告")
+        print("  vLLM 異步 Benchmark 報告")
         print(f"{'='*70}")
         print(f"  時間:           {self.timestamp}")
         print(f"  模型:           {self.model_name}")
@@ -88,17 +88,17 @@ class BenchmarkReport:
         print(f"  併發數:         {self.concurrency}")
         print(f"  總耗時:         {self.total_time:.2f}s")
         print(f"{'─'*70}")
-        print(f"  ▸ Token 統計")
+        print("  ▸ Token 統計")
         print(f"    Prompt Token:      {self.total_prompt_tokens:,}")
         print(f"    Completion Token:  {self.total_completion_tokens:,}")
         print(f"    總 Token:          {self.total_tokens:,}")
         print(f"{'─'*70}")
-        print(f"  ▸ 吞吐量")
+        print("  ▸ 吞吐量")
         print(f"    請求/秒:           {self.requests_per_second:.2f} req/s")
         print(f"    總 Token/秒:       {self.tokens_per_second:.2f} tok/s")
         print(f"    輸出 Token/秒:     {self.output_tokens_per_second:.2f} tok/s")
         print(f"{'─'*70}")
-        print(f"  ▸ 延遲 (End-to-End)")
+        print("  ▸ 延遲 (End-to-End)")
         print(f"    平均:    {self.avg_latency*1000:.1f}ms")
         print(f"    最小:    {self.min_latency*1000:.1f}ms")
         print(f"    最大:    {self.max_latency*1000:.1f}ms")
@@ -108,7 +108,7 @@ class BenchmarkReport:
         print(f"    P99:     {self.p99_latency*1000:.1f}ms")
         if self.avg_ttft > 0:
             print(f"{'─'*70}")
-            print(f"  ▸ TTFT (Time To First Token)")
+            print("  ▸ TTFT (Time To First Token)")
             print(f"    平均:    {self.avg_ttft*1000:.1f}ms")
             print(f"    P50:     {self.p50_ttft*1000:.1f}ms")
             print(f"    P90:     {self.p90_ttft*1000:.1f}ms")
@@ -295,7 +295,7 @@ async def run_benchmark(
     _model = s.resolved_model_path
 
     print(f"\n{'='*70}")
-    print(f"  vLLM 異步 Benchmark")
+    print("  vLLM 異步 Benchmark")
     print(f"{'='*70}")
     print(f"  模型:       {s.model_name}")
     print(f"  總請求數:   {_total}")
@@ -373,7 +373,7 @@ async def run_benchmark(
     report.print_report()
 
     if failed:
-        print(f"[Benchmark] 失敗請求明細:")
+        print("[Benchmark] 失敗請求明細:")
         for r in failed[:5]:
             print(f"  #{r.request_id}: {r.error}")
         if len(failed) > 5:

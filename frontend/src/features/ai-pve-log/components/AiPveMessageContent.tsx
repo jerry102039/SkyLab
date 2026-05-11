@@ -41,13 +41,8 @@ function sanitizeContent(text: string): string {
 /**
  * AI PVE Message Content Block - extracted from Page
  */
-export function AiPveMessageContent({
-  groupId: _groupId,
-}: {
-  groupId: string
-}) {
+export function AiPveMessageContent({ groupId }: { groupId: string }) {
   const { showErrorToast } = useCustomToast()
-
   const [input, setInput] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [messages, setMessages] = useState<LocalMessage[]>([
@@ -117,7 +112,9 @@ export function AiPveMessageContent({
 
     try {
       const response = await AiPveLogService.chat(
-        newHistory.length > 0 ? { messages: newHistory } : { message },
+        newHistory.length > 0
+          ? { messages: newHistory, group_id: groupId }
+          : { message, group_id: groupId },
       )
       handleChatResponse(response)
     } catch (err: any) {
@@ -177,7 +174,10 @@ export function AiPveMessageContent({
         }
       }
 
-      const chatRes = await AiPveLogService.chat({ messages: updatedHistory })
+      const chatRes = await AiPveLogService.chat({
+        messages: updatedHistory,
+        group_id: groupId,
+      })
       handleChatResponse(chatRes)
     } catch (err: any) {
       showErrorToast(err.message || "確認失敗")

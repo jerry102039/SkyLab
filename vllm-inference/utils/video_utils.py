@@ -8,19 +8,14 @@
 from __future__ import annotations
 
 import base64
+import importlib.util
 import io
 import math
-import os
-import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
-try:
-    import numpy as np
-    NUMPY_AVAILABLE = True
-except ImportError:
-    NUMPY_AVAILABLE = False
+NUMPY_AVAILABLE = importlib.util.find_spec("numpy") is not None
 
 try:
     import cv2
@@ -535,7 +530,7 @@ if __name__ == "__main__":
     # 取得影片資訊
     try:
         info = get_video_info(vpath)
-        print(f"\n--- 影片資訊 ---")
+        print("\n--- 影片資訊 ---")
         print(f"  時長      : {info.duration_sec:.1f} 秒")
         print(f"  原始幀數  : {info.total_frames}")
         print(f"  原始 FPS  : {info.native_fps}")
@@ -554,7 +549,7 @@ if __name__ == "__main__":
         quality=80,
     )
 
-    print(f"\n--- 抽幀結果 ---")
+    print("\n--- 抽幀結果 ---")
     print(f"  抽樣幀數  : {plan.total_sampled_frames}")
     print(f"  需要分段  : {'是' if plan.use_chunked else '否'}")
     print(f"  總段數    : {plan.num_chunks}")

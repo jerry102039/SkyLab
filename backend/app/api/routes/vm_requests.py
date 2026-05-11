@@ -12,6 +12,8 @@ from app.schemas import (
     VMRequestReview,
     VMRequestReviewContext,
     VMRequestsPublic,
+    VMRequestWindowAvailabilityRequest,
+    VMRequestWindowAvailabilityResponse,
 )
 from app.services.vm import vm_request_availability_service, vm_request_service
 
@@ -39,6 +41,22 @@ def get_vm_request_availability(
     current_user: CurrentUser,
 ):
     return vm_request_availability_service.assess_request(
+        session=session,
+        current_user=current_user,
+        request_in=request_in,
+    )
+
+
+@router.post(
+    "/window-availability",
+    response_model=VMRequestWindowAvailabilityResponse,
+)
+def get_vm_request_window_availability(
+    request_in: VMRequestWindowAvailabilityRequest,
+    session: SessionDep,
+    current_user: CurrentUser,
+):
+    return vm_request_availability_service.assess_request_window(
         session=session,
         current_user=current_user,
         request_in=request_in,

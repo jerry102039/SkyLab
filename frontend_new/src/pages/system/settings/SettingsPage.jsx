@@ -1,11 +1,6 @@
 import { useState } from "react";
 import styles from "./SettingsPage.module.scss";
-
-const MIcon = ({ name, size = 20 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
+import MIcon from "../../../components/MIcon";
 
 const TABS = [
   { key: "overview",  label: "叢集概覽", icon: "layers"         },

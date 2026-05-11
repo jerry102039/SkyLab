@@ -17,6 +17,7 @@ from app.core.logging import configure_logging
 from app.core.metrics import PrometheusMiddleware, metrics_endpoint
 from app.core.request_context import RequestContextMiddleware
 from app.exceptions import AppError
+from app.infrastructure.ai import close_ai_clients
 from app.infrastructure.redis import close_redis, init_redis
 from app.infrastructure.worker import init_background_runner, shutdown_background_runner
 from app.services.scheduling import vm_request_schedule_service
@@ -107,6 +108,7 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 pass
         await shutdown_background_runner()
+        await close_ai_clients()
         await close_redis()
 
 

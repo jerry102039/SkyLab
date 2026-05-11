@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import styles from "./RequestsPage.module.scss";
+import styles from "./RequestFormPage.module.scss";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../hooks/useToast";
 import { VmRequestsService } from "../../../services/vmRequests";
@@ -8,12 +8,7 @@ import { apiGet } from "../../../services/api";
 import AiSidePanel from "./AiSidePanel";
 import FastTemplatesPanel from "../../../components/FastTemplatesPanel/FastTemplatesPanel";
 import AvailabilityPanel from "../../../components/AvailabilityPanel/AvailabilityPanel";
-
-const MIcon = ({ name, size = 20 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
+import MIcon from "../../../components/MIcon";
 
 /* Hostname normalization — preserves alphanumeric, replaces others with hyphen */
 function normalizeHostname(value) {

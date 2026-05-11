@@ -78,12 +78,12 @@ def show_info(video_path: str) -> None:
     client = ModelClient()
     settings = client.settings
 
-    print(f"\n【模型】")
+    print("\n【模型】")
     print(f"  名稱    : {settings.model_name}")
     print(f"  路徑    : {settings.resolved_model_path}")
     print(f"  類型    : {'視覺模型 🖼' if client.is_vision_model else '純文字模型 📝'}")
 
-    print(f"\n【影片設定】")
+    print("\n【影片設定】")
     print(f"  採樣 FPS  : {settings.video_fps}")
     print(f"  每段上限  : {settings.max_video_frames_per_chunk} 幀")
     print(f"  幀最大邊長: {settings.max_video_frame_size}px")
@@ -111,9 +111,9 @@ def show_info(video_path: str) -> None:
             last_size = sampled - chunk_plan.chunk_size * (chunk_plan.num_chunks - 1)
             print(f"  每段幀數    : {chunk_plan.chunk_size}")
             print(f"  最後段幀數  : {last_size}")
-            print(f"\n  [注意] 影片較長，將使用分段推論策略（Chunked Inference）")
+            print("\n  [注意] 影片較長，將使用分段推論策略（Chunked Inference）")
         else:
-            print(f"  [單段] 影片可一次完整送入模型")
+            print("  [單段] 影片可一次完整送入模型")
     except Exception as e:
         print(f"  [錯誤] 無法讀取影片: {e}")
 
@@ -141,7 +141,7 @@ def demo_video_simple(video_path: str) -> None:
     print(f"\n模型  : {client.settings.model_name}")
     print(f"影片  : {video_path}")
     print(f"提問  : {prompt}")
-    print(f"\n[推論中...]\n")
+    print("\n[推論中...]\n")
 
     t0 = time.time()
     try:
@@ -179,7 +179,7 @@ def demo_video_stream(video_path: str) -> None:
 
     print(f"\n影片  : {video_path}")
     print(f"提問  : {prompt}")
-    print(f"\n[回應] ", end="", flush=True)
+    print("\n[回應] ", end="", flush=True)
 
     t0 = time.time()
     try:
@@ -271,7 +271,7 @@ def demo_chunk_plan(video_path: str) -> None:
         )
         elapsed = time.time() - t0
 
-        print(f"影片資訊:")
+        print("影片資訊:")
         print(f"  解析度  : {info.width} × {info.height}")
         print(f"  時長    : {info.duration_sec:.1f} 秒（{info.total_frames} 幀）")
         print(f"  已拝樣  : {plan.total_sampled_frames} 幀，耗時 {elapsed:.1f} 秒")
@@ -290,7 +290,7 @@ def demo_chunk_plan(video_path: str) -> None:
         total_tokens = total_frames * 512
         print(f"\n總計: {total_frames} 幀  |  預估視覺 token: ~{total_tokens:,}")
         if plan.num_chunks > 1:
-            print(f"[分段策略] 將依序推論每段，最後合併摘要")
+            print("[分段策略] 將依序推論每段，最後合併摘要")
     except Exception as e:
         print(f"[錯誤] {e}")
         import traceback

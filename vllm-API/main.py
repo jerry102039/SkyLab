@@ -310,7 +310,7 @@ def validate_model_integrity(settings, logger) -> bool:
     # 檢查 config.json
     config_file = model_path / "config.json"
     if not config_file.exists():
-        logger.error(f"模型配置檔缺失: config.json")
+        logger.error("模型配置檔缺失: config.json")
         logger.info(f"請檢查模型目錄: {model_path}")
         return False
     

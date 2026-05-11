@@ -149,7 +149,7 @@ def download_sharegpt_dataset(output_path: str | Path = "ShareGPT_V3_unfiltered_
         print(f"[ShareGPT] 數據集已存在: {output_path}")
         return output_path
     
-    print(f"[ShareGPT] 下載數據集...")
+    print("[ShareGPT] 下載數據集...")
     print(f"[ShareGPT] URL: {url}")
     print(f"[ShareGPT] 輸出: {output_path}")
     

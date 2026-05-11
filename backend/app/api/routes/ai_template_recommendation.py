@@ -29,6 +29,7 @@ from app.ai.template_recommendation.schemas import (
     ChatResponse,
     RecommendationRequest,
 )
+from app.ai.utils import apply_thinking_control, strip_think_tags
 from app.api.deps import CurrentUser, SessionDep
 from app.infrastructure.ai.template_recommendation import client
 from app.repositories import vm_request as vm_request_repo
@@ -46,20 +47,7 @@ router = APIRouter(
 )
 
 
-def _strip_think_tags(text: str) -> str:
-    marker = "</think>"
-    idx = text.find(marker)
-    if idx != -1:
-        return text[idx + len(marker) :].strip()
-    return text.strip()
 
-
-def _apply_thinking_control(payload: dict[str, Any]) -> dict[str, Any]:
-    payload["chat_template_kwargs"] = {
-        **dict(payload.get("chat_template_kwargs") or {}),
-        "enable_thinking": settings.vllm_enable_thinking,
-    }
-    return payload
 
 
 def _latest_user_text(request: ChatRequest) -> str:
@@ -155,7 +143,7 @@ def _resolve_chat_gpu_options(request: ChatRequest, session: SessionDep) -> list
 async def chat(
     request: ChatRequest, current_user: CurrentUser, session: SessionDep
 ) -> ChatResponse:
-    model_name = settings.resolved_vllm_model_name
+    model_name = settings.VLLM_MODEL_NAME
     if not model_name:
         raise HTTPException(
             status_code=503,
@@ -189,17 +177,18 @@ async def chat(
     for msg in request.messages:
         messages.append({"role": msg.role, "content": msg.content})
 
-    payload = _apply_thinking_control(
+    payload = apply_thinking_control(
         {
             "model": model_name,
             "messages": messages,
-            "max_tokens": settings.vllm_chat_max_tokens,
-            "temperature": settings.vllm_chat_temperature,
-            "top_p": settings.vllm_top_p,
-            "top_k": settings.vllm_top_k,
-            "min_p": settings.vllm_min_p,
-            "repetition_penalty": settings.vllm_repetition_penalty,
-        }
+            "max_tokens": settings.VLLM_CHAT_MAX_TOKENS,
+            "temperature": settings.VLLM_CHAT_TEMPERATURE,
+            "top_p": settings.VLLM_TOP_P,
+            "top_k": settings.VLLM_TOP_K,
+            "min_p": settings.VLLM_MIN_P,
+            "repetition_penalty": settings.VLLM_REPETITION_PENALTY,
+        },
+        settings.VLLM_ENABLE_THINKING,
     )
 
     try:
@@ -215,7 +204,7 @@ async def chat(
         )
         duration_ms = int(elapsed_seconds * 1000)
 
-        content = _strip_think_tags(data["choices"][0]["message"]["content"] or "")
+        content = strip_think_tags(data["choices"][0]["message"]["content"] or "")
 
         # 記錄 template chat 呼叫
         try:
@@ -262,7 +251,7 @@ async def chat(
 async def recommend(
     request: ChatRequest, current_user: CurrentUser, session: SessionDep
 ) -> dict[str, Any]:
-    model_name = settings.resolved_vllm_model_name or "unknown"
+    model_name = settings.VLLM_MODEL_NAME or "unknown"
     started_at = perf_counter()
 
     live_nodes = load_live_device_nodes()

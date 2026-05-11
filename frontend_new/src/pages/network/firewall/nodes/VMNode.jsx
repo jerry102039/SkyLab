@@ -1,13 +1,8 @@
 import { Handle, Position } from "@xyflow/react";
 import styles from "../FirewallPage.module.scss";
+import MIcon from "../../../../components/MIcon";
 
 const STATUS_COLOR = { running: "#38a169", stopped: "#e53e3e" };
-
-const MIcon = ({ name, size = 18 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
 
 export default function VMNode({ data, selected }) {
   const statusColor = STATUS_COLOR[data.status] ?? "#a0aec0";

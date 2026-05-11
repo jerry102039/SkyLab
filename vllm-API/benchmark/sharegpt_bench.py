@@ -18,7 +18,7 @@ from openai import AsyncOpenAI
 
 from config.multi_model import load_gateway_config, load_model_instances
 from config.settings import Settings, get_settings
-from benchmark.sharegpt_dataset import ShareGPTConversation, ShareGPTDataset, load_sharegpt_dataset
+from benchmark.sharegpt_dataset import ShareGPTConversation, load_sharegpt_dataset
 
 
 @dataclass
@@ -97,13 +97,13 @@ class ShareGPTBenchmarkReport:
     def print_report(self) -> None:
         """印出格式化報告"""
         print(f"\n{'='*80}")
-        print(f"  🚀 ShareGPT vLLM Benchmark 報告")
+        print("  🚀 ShareGPT vLLM Benchmark 報告")
         print(f"{'='*80}")
         print(f"  時間:          {self.timestamp}")
         print(f"  模型:          {self.model_name}")
         print(f"  數據集:        {self.dataset_name}")
         print(f"{'─'*80}")
-        print(f"  測試配置:")
+        print("  測試配置:")
         print(f"    樣本數:        {self.sample_size}")
         print(f"    總測試數:      {self.total_tests}")
         print(f"    成功測試:      {self.successful_tests}")
@@ -111,20 +111,20 @@ class ShareGPTBenchmarkReport:
         print(f"    併發數:        {self.concurrency}")
         print(f"    總耗時:        {self.total_time:.2f}s")
         print(f"{'─'*80}")
-        print(f"  ▸ Token 統計")
+        print("  ▸ Token 統計")
         print(f"    Prompt Token:      {self.total_prompt_tokens:,}")
         print(f"    Completion Token:  {self.total_completion_tokens:,}")
         print(f"    總 Token:          {self.total_tokens:,}")
         print(f"    平均輸入長度:      {self.avg_input_length:.0f} tokens")
         print(f"    平均輸出長度:      {self.avg_output_length:.0f} tokens")
         print(f"{'─'*80}")
-        print(f"  ▸ 吞吐量")
+        print("  ▸ 吞吐量")
         print(f"    請求/秒:           {self.requests_per_second:.2f} req/s")
         print(f"    總 Token/秒:       {self.tokens_per_second:.2f} tok/s")
         print(f"    輸入 Token/秒:     {self.input_tokens_per_second:.2f} tok/s")
         print(f"    輸出 Token/秒:     {self.output_tokens_per_second:.2f} tok/s")
         print(f"{'─'*80}")
-        print(f"  ▸ 延遲 (End-to-End)")
+        print("  ▸ 延遲 (End-to-End)")
         print(f"    平均:    {self.avg_latency_ms:.1f}ms")
         print(f"    最小:    {self.min_latency_ms:.1f}ms")
         print(f"    最大:    {self.max_latency_ms:.1f}ms")
@@ -135,7 +135,7 @@ class ShareGPTBenchmarkReport:
         
         if self.avg_ttft_ms > 0:
             print(f"{'─'*80}")
-            print(f"  ▸ TTFT (Time To First Token)")
+            print("  ▸ TTFT (Time To First Token)")
             print(f"    平均:    {self.avg_ttft_ms:.1f}ms")
             print(f"    最小:    {self.min_ttft_ms:.1f}ms")
             print(f"    最大:    {self.max_ttft_ms:.1f}ms")
@@ -145,7 +145,7 @@ class ShareGPTBenchmarkReport:
         
         if self.avg_tpot_ms > 0:
             print(f"{'─'*80}")
-            print(f"  ▸ TPOT (Time Per Output Token)")
+            print("  ▸ TPOT (Time Per Output Token)")
             print(f"    平均:    {self.avg_tpot_ms:.3f}ms/token")
             print(f"    P50:     {self.p50_tpot_ms:.3f}ms/token")
             print(f"    P90:     {self.p90_tpot_ms:.3f}ms/token")
@@ -634,7 +634,7 @@ async def run_sharegpt_benchmark(
 
     # 載入 ShareGPT 資料集
     print(f"\n{'='*80}")
-    print(f"  🚀 ShareGPT vLLM Benchmark")
+    print("  🚀 ShareGPT vLLM Benchmark")
     print(f"{'='*80}")
     print(f"[Benchmark] 載入 ShareGPT 資料集: {dataset_path}")
     
@@ -669,7 +669,7 @@ async def run_sharegpt_benchmark(
 
     # 發送所有測試請求
     print(f"[Benchmark] 開始測試 (併發: {_conc})...")
-    print(f"[Benchmark] 提示: 使用重試機制，每個請求最多嘗試 3 次")
+    print("[Benchmark] 提示: 使用重試機制，每個請求最多嘗試 3 次")
     overall_start = time.perf_counter()
 
     tasks = [
@@ -769,13 +769,13 @@ async def run_sharegpt_benchmark(
 
     if failed:
         print(f"\n{'─'*80}")
-        print(f"  ❌ 失敗測試統計:")
+        print("  ❌ 失敗測試統計:")
         print(f"    總失敗數: {len(failed)}")
         if error_types:
             for error_type, count in sorted(error_types.items(), key=lambda x: x[1], reverse=True):
                 print(f"    {error_type}: {count}")
         print(f"{'─'*80}")
-        print(f"\n[Benchmark] 失敗測試明細 (前10個):")
+        print("\n[Benchmark] 失敗測試明細 (前10個):")
         for i, r in enumerate(failed[:10], 1):
             error_preview = r.error[:100] + "..." if r.error and len(r.error) > 100 else r.error
             print(f"  {i}. [{r.conversation_id}] {error_preview}")
@@ -881,7 +881,7 @@ def main():
     # 檢查數據集是否存在，如果不存在則嘗試下載
     if not dataset_path.exists():
         print(f"[Benchmark] 數據集不存在: {dataset_path}")
-        print(f"[Benchmark] 嘗試下載 ShareGPT_V3 數據集...")
+        print("[Benchmark] 嘗試下載 ShareGPT_V3 數據集...")
         from benchmark.sharegpt_dataset import download_sharegpt_dataset
         dataset_path = download_sharegpt_dataset(dataset_path)
 

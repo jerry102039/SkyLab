@@ -155,6 +155,8 @@ from .vm_request import (
     VMRequestReviewProjectedNode,
     VMRequestReviewRuntimeResource,
     VMRequestsPublic,
+    VMRequestWindowAvailabilityRequest,
+    VMRequestWindowAvailabilityResponse,
 )
 
 __all__ = [
@@ -226,6 +228,8 @@ __all__ = [
     "VMRequestAvailabilityDay",
     "VMRequestAvailabilitySummary",
     "VMRequestAvailabilityResponse",
+    "VMRequestWindowAvailabilityRequest",
+    "VMRequestWindowAvailabilityResponse",
     "VMRequestCreate",
     "VMRequestPlacementPreview",
     "VMRequestReview",

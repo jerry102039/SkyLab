@@ -1,11 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import styles from "./RequestsPage.module.scss";
-
-const MIcon = ({ name, size = 20 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
+import styles from "./RequestFormPage.module.scss";
+import MIcon from "../../../components/MIcon";
 
 const GREETING = "嗨！我是 AI 助手，可以幫你決定要申請什麼規格的資源。\n你有什麼需求嗎？";
 

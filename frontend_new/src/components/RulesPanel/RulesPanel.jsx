@@ -7,12 +7,7 @@
 import { useState, useEffect } from "react";
 import { getVmRules, getVmOptions } from "../../services/firewall";
 import styles from "./RulesPanel.module.scss";
-
-const MIcon = ({ name, size = 16 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
+import MIcon from "../MIcon";
 
 function Badge({ label, variant }) {
   return <span className={`${styles.badge} ${styles[`badge_${variant}`]}`}>{label}</span>;

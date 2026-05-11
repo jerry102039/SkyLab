@@ -5,12 +5,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import styles from "./AiFloatingChat.module.scss";
-
-const MIcon = ({ name, size = 20 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
+import MIcon from "../MIcon";
 
 function TypingIndicator() {
   return (

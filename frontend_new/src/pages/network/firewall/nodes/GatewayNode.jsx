@@ -1,11 +1,6 @@
 import { Handle, Position } from "@xyflow/react";
 import styles from "../FirewallPage.module.scss";
-
-const MIcon = ({ name, size = 18 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
+import MIcon from "../../../../components/MIcon";
 
 export default function GatewayNode({ selected }) {
   return (

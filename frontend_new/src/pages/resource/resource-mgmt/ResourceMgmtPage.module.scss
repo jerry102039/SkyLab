@@ -206,7 +206,7 @@
 }
 
 .badge_running { background: color-mix(in srgb, #28a745 12%, transparent); color: #28a745; }
-.badge_stopped { background: color-mix(in srgb, #ffc107 16%, transparent); color: #9a7500; }
+.badge_stopped { background: var(--color-hover); color: var(--color-text-muted); }
 .badge_error   { background: color-mix(in srgb, #dc3545 12%, transparent); color: #dc3545; }
 
 /* ── Row actions ── */

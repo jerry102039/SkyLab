@@ -8,12 +8,11 @@ import base64
 import json
 import logging
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
 from typing import AsyncGenerator
-
-logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,11 +21,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # 導入專案的 API 客戶端
-import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from api.client import ModelClient
-from config.settings import get_settings
+from api.client import ModelClient  # noqa: E402
+from config.settings import get_settings  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 # 初始化
 app = FastAPI(title="vLLM Web UI", version="1.0.0")
@@ -210,7 +210,7 @@ async def chat_stream(request: ChatRequest):
             
             # 結束標記
             yield "data: [DONE]\n\n"
-        except Exception as e:
+        except Exception:
             logger.exception("聊天流式處理失敗")
             yield 'data: [ERROR] 處理請求時發生內部錯誤\n\n'
 
@@ -343,7 +343,7 @@ async def chat_vision_stream(
             
             yield "data: [DONE]\n\n"
         
-        except Exception as e:
+        except Exception:
             logger.exception("視覺聊天流式處理失敗")
             yield 'data: [ERROR] 處理請求時發生內部錯誤\n\n'
 
@@ -453,7 +453,7 @@ async def chat_document_stream(
             
             yield "data: [DONE]\n\n"
         
-        except Exception as e:
+        except Exception:
             logger.exception("文件處理失敗")
             yield 'data: [ERROR] 處理請求時發生內部錯誤\n\n'
 
@@ -587,7 +587,7 @@ async def chat_video_stream(
 
             yield "data: [DONE]\n\n"
 
-        except Exception as e:
+        except Exception:
             logger.exception("影片處理失敗")
             yield 'data: [ERROR] 處理請求時發生內部錯誤\n\n'
         finally:

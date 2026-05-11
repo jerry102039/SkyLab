@@ -53,27 +53,27 @@ class Settings(BaseSettings):
         return system_ai_config.pve_log
 
     @property
-    def vllm_base_url(self) -> str:
+    def VLLM_BASE_URL(self) -> str:
         return system_ai_env.vllm_base_url
 
     @property
-    def vllm_api_key(self) -> str:
+    def VLLM_API_KEY(self) -> str:
         return system_ai_env.vllm_api_key
 
     @property
-    def vllm_model_name(self) -> str:
+    def VLLM_MODEL_NAME(self) -> str:
         return system_ai_env.vllm_model_name.strip()
 
     @property
-    def chat_timeout(self) -> int:
+    def VLLM_TIMEOUT(self) -> int:
         return int(self.section.vllm.timeout)
 
     @property
-    def vllm_temperature(self) -> float:
+    def VLLM_TEMPERATURE(self) -> float:
         return float(self.section.vllm.temperature)
 
     @property
-    def vllm_max_tokens(self) -> int:
+    def VLLM_MAX_TOKENS(self) -> int:
         return int(self.section.vllm.max_tokens)
 
     @property

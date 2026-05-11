@@ -10,12 +10,7 @@
 
 import { useState } from "react";
 import styles from "./ConnectionDialog.module.scss";
-
-const MIcon = ({ name, size = 18 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
+import MIcon from "../MIcon";
 
 const PROTOCOLS = ["tcp", "udp", "icmp", "icmpv6", "sctp"];
 

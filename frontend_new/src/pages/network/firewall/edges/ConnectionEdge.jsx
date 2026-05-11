@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { EdgeLabelRenderer, getBezierPath } from "@xyflow/react";
 import styles from "../FirewallPage.module.scss";
+import MIcon from "../../../../components/MIcon";
 
 /* ─── 邊動畫 keyframes（注入 head，避免 React 19 的 <style> 提升行為破壞 SVG 結構） ── */
 if (!document.getElementById("flow-fwd-kf")) {
@@ -9,12 +10,6 @@ if (!document.getElementById("flow-fwd-kf")) {
   s.textContent = `@keyframes flow-fwd{from{stroke-dashoffset:12}to{stroke-dashoffset:0}}`;
   document.head.appendChild(s);
 }
-
-const MIcon = ({ name, size = 18 }) => (
-  <span className="material-icons-outlined" style={{ fontSize: size, lineHeight: 1 }}>
-    {name}
-  </span>
-);
 
 export default function ConnectionEdge(props) {
   const {
@@ -35,7 +30,7 @@ export default function ConnectionEdge(props) {
     ? (hovered ? "#93c5fd" : "#60a5fa")
     : isOutbound
     ? (hovered ? "#6ee7b7" : "#4ade80")
-    : (hovered ? "#fcd34d" : "#f59e0b");
+    : (hovered ? "#94a3b8" : "#64748b");
 
   const showLabel = hovered || data?.showLabel;
 

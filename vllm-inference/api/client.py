@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import AsyncIterator, Iterator, List, Tuple, Union
+from typing import AsyncIterator, Iterator, List, Union
 
 from openai import AsyncOpenAI, OpenAI
 
@@ -473,7 +473,8 @@ class ModelClient:
             )
 
         # === 多段：每段寫 temp MP4 再推論，最後彙整 ===
-        import tempfile, os
+        import tempfile
+        import os
         temp_files: list[str] = []
         summaries: list[str] = []
         try:
@@ -874,7 +875,8 @@ class ModelClient:
             )
 
         # === 多段：每段寫 temp MP4 再推論，最後彙整 ===
-        import tempfile, os
+        import tempfile
+        import os
         temp_files: list[str] = []
         summaries: list[str] = []
         try:
@@ -1043,7 +1045,7 @@ if __name__ == "__main__":
 
     print(f"\n[Prompt] {prompt}")
     print(f"[Model]  {client.model_name}")
-    print(f"\n[回應]")
+    print("\n[回應]")
 
     # 流式輸出
     for text in client.chat_stream(prompt, max_tokens=256):

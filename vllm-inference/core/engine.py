@@ -10,7 +10,6 @@ import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import httpx
 
@@ -195,7 +194,7 @@ class VLLMEngine:
         """輸出伺服器狀態"""
         running = self.is_running()
         print(f"\n{'='*60}")
-        print(f"  vLLM 伺服器狀態")
+        print("  vLLM 伺服器狀態")
         print(f"{'='*60}")
         print(f"  狀態:     {'✓ 運行中' if running else '✗ 未運行'}")
         print(f"  地址:     {self.base_url}")

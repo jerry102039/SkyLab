@@ -73,9 +73,9 @@
   color: var(--color-text-muted);
   text-align: left;
   margin-top: auto;
-  padding: $spacing-8 0;
+  padding: $spacing-16 0 $spacing-8;
 
   @include respond-to(md) {
-    padding: 0;
+    padding: $spacing-16 0 0;
   }
 }

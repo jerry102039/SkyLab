@@ -4,33 +4,31 @@ FastAPI Web 服務 - 提供 React UI 和 API 代理
 
 from __future__ import annotations
 
-import aiofiles
 import asyncio
 import base64
 import io
 import json
 import logging
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
 from typing import AsyncGenerator
 
-logger = logging.getLogger(__name__)
-
 import httpx
+import aiofiles
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 from PIL import Image
+from pydantic import BaseModel
 
 # 導入專案的 API 客戶端
-import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from api.client import ModelClient
+from api.client import ModelClient  # noqa: E402
 from config.multi_model import (
     GatewayRoute,
     build_gateway_routes,
@@ -38,8 +36,10 @@ from config.multi_model import (
     get_available_models_help,
     load_gateway_config,
     load_model_instances,
-)
-from config.settings import get_settings
+)  # noqa: E402
+from config.settings import get_settings  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 # 初始化
 app = FastAPI(title="vLLM Web UI", version="1.0.0")
@@ -696,7 +696,7 @@ async def chat_vision_stream(
             
             yield "data: [DONE]\n\n"
         
-        except Exception as e:
+        except Exception:
             logger.exception("視覺聊天流式處理失敗")
             yield 'data: [ERROR] 處理請求時發生內部錯誤\n\n'
 
@@ -812,7 +812,7 @@ async def chat_document_stream(
             
             yield "data: [DONE]\n\n"
         
-        except Exception as e:
+        except Exception:
             logger.exception("文件處理失敗")
             yield 'data: [ERROR] 處理請求時發生內部錯誤\n\n'
 
@@ -948,7 +948,7 @@ async def chat_video_stream(
 
             yield "data: [DONE]\n\n"
 
-        except Exception as e:
+        except Exception:
             logger.exception("影片處理失敗")
             yield 'data: [ERROR] 處理請求時發生內部錯誤\n\n'
         finally:

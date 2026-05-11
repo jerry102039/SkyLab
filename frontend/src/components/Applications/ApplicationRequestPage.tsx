@@ -1,7 +1,7 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
-import { ArrowLeft, LayoutTemplate, X } from "lucide-react"
+import { ArrowLeft, LayoutTemplate, RefreshCw, X } from "lucide-react"
 import {
   type CSSProperties,
   useCallback,
@@ -51,11 +51,13 @@ import { toVmRequestCreateRequestBody } from "@/lib/resourcePayloads"
 import { pickMatchingOsTemplate } from "@/lib/serviceTemplates"
 import { cn } from "@/lib/utils"
 import { type GPUSummary, GpuService } from "@/services/gpu"
-import { VmRequestsApi } from "@/services/vmRequests"
+import {
+  VmRequestsApi,
+  type VmRequestWindowAvailabilityResponse,
+} from "@/services/vmRequests"
 import { handleError } from "@/utils"
 import { AiChatPanel, type AiPlanResult } from "./AiChatPanel"
 import { type FastTemplate, FastTemplatesTab } from "./FastTemplatesTab"
-import { RequestAvailabilityPanel } from "./RequestAvailabilityPanel"
 
 function normalizeHostname(value: string) {
   return (
@@ -81,6 +83,76 @@ function formatScheduleSummary(startAt?: string, endAt?: string) {
   })
 
   return `${formatter.format(new Date(startAt))} - ${formatter.format(new Date(endAt))}`
+}
+
+function formatTaipeiDateInput(offsetDays = 0) {
+  const date = new Date()
+  date.setDate(date.getDate() + offsetDays)
+  return new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+  }).format(date)
+}
+
+function addDaysToDateInput(dateInput: string, days: number) {
+  const date = new Date(`${dateInput}T00:00:00+08:00`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+  }).format(date)
+}
+
+function toTaipeiDateTimeStart(dateInput: string) {
+  return `${dateInput}T00:00:00+08:00`
+}
+
+function addHoursIso(date: Date, hours: number) {
+  return new Date(date.getTime() + hours * 60 * 60 * 1000).toISOString()
+}
+
+function getOrderedEndDate(startDate: string, endDate: string) {
+  if (!endDate || endDate < startDate) return startDate
+  return endDate
+}
+
+function getAvailabilityTone(
+  availability: VmRequestWindowAvailabilityResponse | undefined,
+) {
+  if (!availability) {
+    return {
+      badge: "outline" as const,
+      label: "尚未評估",
+      panel: "border-border bg-muted/20",
+      text: "text-muted-foreground",
+    }
+  }
+  if (availability.status === "available") {
+    return {
+      badge: "secondary" as const,
+      label: "可安排",
+      panel: "border-emerald-300/70 bg-emerald-500/10",
+      text: "text-emerald-700",
+    }
+  }
+  if (availability.status === "limited") {
+    return {
+      badge: "outline" as const,
+      label: "容量緊張",
+      panel: "border-amber-300/70 bg-amber-500/10",
+      text: "text-amber-700",
+    }
+  }
+  return {
+    badge: "destructive" as const,
+    label: "容量不足",
+    panel: "border-destructive/40 bg-destructive/10",
+    text: "text-destructive",
+  }
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
@@ -148,12 +220,16 @@ export function ApplicationRequestPage({
   )
   const isQuickStartAiMode =
     Boolean(activeQuickStart) && quickStartMode === "ai"
+  const isStudentQuickTemplateUser =
+    user?.role === "student" && !user.is_superuser
 
   const formSchema = useMemo(
     () =>
       z.object({
         resource_type: z.enum(["lxc", "vm"]),
-        mode: z.enum(["scheduled", "immediate"]).default("scheduled"),
+        mode: z
+          .enum(["quick_template", "scheduled", "immediate"])
+          .default("scheduled"),
         reason: z
           .string()
           .min(1, { message: t("validation:reason.required") })
@@ -255,6 +331,14 @@ export function ApplicationRequestPage({
     control: form.control,
     name: "gpu_mapping_id",
   })
+  const [researchStartDate, setResearchStartDate] = useState(() =>
+    formatTaipeiDateInput(1),
+  )
+  const [researchEndDate, setResearchEndDate] = useState(() =>
+    formatTaipeiDateInput(90),
+  )
+  const [quickTemplateAvailabilityAnchor, setQuickTemplateAvailabilityAnchor] =
+    useState(() => new Date())
 
   function getSelectedTemplateLabel() {
     if (resourceType === "lxc") {
@@ -304,8 +388,9 @@ export function ApplicationRequestPage({
       reasonReady && watchedHostname?.trim() && watchedPassword,
     )
 
-    const isImmediate = watchedMode === "immediate"
-    const slotReady = isImmediate
+    const isFixedStartMode =
+      watchedMode === "immediate" || watchedMode === "quick_template"
+    const slotReady = isFixedStartMode
       ? true
       : Boolean(watchedStartAt && watchedEndAt)
 
@@ -343,7 +428,7 @@ export function ApplicationRequestPage({
     enabled: resourceType === "vm",
   })
 
-  const isScheduledMode = watchedMode !== "immediate"
+  const isScheduledMode = watchedMode === "scheduled"
   const hasSelectedWindow = Boolean(watchedStartAt && watchedEndAt)
   const canLoadGpuOptions =
     resourceType === "vm" && (!isScheduledMode || hasSelectedWindow)
@@ -364,6 +449,107 @@ export function ApplicationRequestPage({
     enabled: canLoadGpuOptions,
   })
 
+  const quickTemplateAvailabilityRequest = useMemo(
+    () => ({
+      resource_type: "lxc" as const,
+      cores: Number(watchedCores || 1),
+      memory: Number(watchedMemory || 512),
+      rootfs_size: Number(watchedRootfsSize || 8),
+      gpu_required: 0,
+      start_at: quickTemplateAvailabilityAnchor.toISOString(),
+      end_at: addHoursIso(quickTemplateAvailabilityAnchor, 3),
+      mode: "quick_template" as const,
+    }),
+    [
+      quickTemplateAvailabilityAnchor,
+      watchedCores,
+      watchedMemory,
+      watchedRootfsSize,
+    ],
+  )
+
+  const canCheckQuickTemplateAvailability =
+    watchedMode === "quick_template" &&
+    resourceType === "lxc" &&
+    Boolean(serviceTemplateSlug) &&
+    Boolean(watchedCores && watchedMemory && watchedRootfsSize)
+
+  const {
+    data: quickTemplateAvailability,
+    isFetching: quickTemplateAvailabilityLoading,
+  } = useQuery({
+    queryKey: queryKeys.vmRequests.availability.window(
+      quickTemplateAvailabilityRequest,
+    ),
+    queryFn: () =>
+      VmRequestsApi.windowAvailability({
+        requestBody: quickTemplateAvailabilityRequest,
+      }),
+    enabled: canCheckQuickTemplateAvailability,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  })
+
+  const researchAvailabilityRequest = useMemo(
+    () => ({
+      resource_type: resourceType,
+      cores: Number(watchedCores || 1),
+      memory: Number(watchedMemory || 512),
+      disk_size:
+        resourceType === "vm" ? Number(watchedDiskSize || 20) : undefined,
+      rootfs_size:
+        resourceType === "lxc" ? Number(watchedRootfsSize || 8) : undefined,
+      gpu_required: watchedGpuMappingId ? 1 : 0,
+      start_at: watchedStartAt || "",
+      end_at: watchedEndAt || "",
+      mode: "research" as const,
+    }),
+    [
+      resourceType,
+      watchedCores,
+      watchedDiskSize,
+      watchedEndAt,
+      watchedGpuMappingId,
+      watchedMemory,
+      watchedRootfsSize,
+      watchedStartAt,
+    ],
+  )
+
+  const canCheckResearchAvailability =
+    watchedMode === "scheduled" &&
+    Boolean(watchedStartAt && watchedEndAt) &&
+    Boolean(watchedCores && watchedMemory) &&
+    (resourceType === "vm"
+      ? Boolean(watchedDiskSize)
+      : Boolean(watchedRootfsSize))
+
+  const {
+    data: researchAvailability,
+    isFetching: researchAvailabilityLoading,
+  } = useQuery({
+    queryKey: queryKeys.vmRequests.availability.window(
+      researchAvailabilityRequest,
+    ),
+    queryFn: () =>
+      VmRequestsApi.windowAvailability({
+        requestBody: researchAvailabilityRequest,
+      }),
+    enabled: canCheckResearchAvailability,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  })
+
+  const quickTemplateAvailabilityTone = getAvailabilityTone(
+    quickTemplateAvailability,
+  )
+  const researchAvailabilityTone = getAvailabilityTone(researchAvailability)
+  const availabilityBlocksSubmit =
+    (watchedMode === "quick_template" &&
+      quickTemplateAvailability?.feasible === false) ||
+    (watchedMode === "scheduled" && researchAvailability?.feasible === false)
+  const canSubmitRequest = isSubmitReady && !availabilityBlocksSubmit
+
   const updateFormValue = useCallback(
     (field: keyof FormData, value: FormData[keyof FormData]) => {
       form.setValue(field, value as never, {
@@ -374,6 +560,18 @@ export function ApplicationRequestPage({
     },
     [form],
   )
+
+  useEffect(() => {
+    if (watchedMode !== "scheduled") return
+    const orderedEndDate = getOrderedEndDate(researchStartDate, researchEndDate)
+    if (orderedEndDate !== researchEndDate) {
+      setResearchEndDate(orderedEndDate)
+      return
+    }
+    const endDate = addDaysToDateInput(orderedEndDate, 1)
+    updateFormValue("start_at", toTaipeiDateTimeStart(researchStartDate))
+    updateFormValue("end_at", toTaipeiDateTimeStart(endDate))
+  }, [researchEndDate, researchStartDate, updateFormValue, watchedMode])
 
   useEffect(() => {
     if (!activeQuickStart) return
@@ -504,6 +702,11 @@ export function ApplicationRequestPage({
           setServiceTemplateSlug(prefill.service_template_slug)
           setServiceTemplateName(prefill.service_template_slug)
           setServiceTemplateScriptPath(`ct/${prefill.service_template_slug}.sh`)
+          if (isStudentQuickTemplateUser) {
+            updateFormValue("mode", "quick_template")
+            updateFormValue("start_at", "")
+            updateFormValue("end_at", "")
+          }
         }
       } else {
         if (prefill.disk_gb) updateFormValue("disk_size", prefill.disk_gb)
@@ -523,7 +726,7 @@ export function ApplicationRequestPage({
         updateFormValue("end_at", prefill.end_at)
       }
     },
-    [updateFormValue],
+    [isStudentQuickTemplateUser, updateFormValue],
   )
 
   const handleImportReason = useCallback(
@@ -548,11 +751,28 @@ export function ApplicationRequestPage({
       updateFormValue("resource_type", "lxc")
       // 帶入模板的預設資源值
       if (method?.resources) {
-        if (method.resources.cpu) updateFormValue("cores", method.resources.cpu)
+        if (method.resources.cpu) {
+          updateFormValue(
+            "cores",
+            isStudentQuickTemplateUser
+              ? Math.min(method.resources.cpu, 2)
+              : method.resources.cpu,
+          )
+        }
         if (method.resources.ram)
-          updateFormValue("memory", method.resources.ram)
+          updateFormValue(
+            "memory",
+            isStudentQuickTemplateUser
+              ? Math.min(method.resources.ram, 4096)
+              : method.resources.ram,
+          )
         if (method.resources.hdd)
-          updateFormValue("rootfs_size", Math.max(method.resources.hdd, 8))
+          updateFormValue(
+            "rootfs_size",
+            isStudentQuickTemplateUser
+              ? Math.min(Math.max(method.resources.hdd, 8), 32)
+              : Math.max(method.resources.hdd, 8),
+          )
       }
       // 自動挑選符合模板要求 OS / version 的 ostemplate volid
       const volids = (lxcTemplates ?? []).map((t) => t.volid)
@@ -560,9 +780,21 @@ export function ApplicationRequestPage({
       if (picked) {
         updateFormValue("ostemplate", picked)
       }
+      if (isStudentQuickTemplateUser) {
+        updateFormValue("mode", "quick_template")
+        updateFormValue("start_at", "")
+        updateFormValue("end_at", "")
+        updateFormValue("gpu_mapping_id", "")
+        if (!watchedReason?.trim()) {
+          updateFormValue(
+            "reason",
+            `Quick template lab environment for ${template.name || template.slug || "service testing"}.`,
+          )
+        }
+      }
       setShowTemplateSelector(false)
     },
-    [lxcTemplates, updateFormValue],
+    [isStudentQuickTemplateUser, lxcTemplates, updateFormValue, watchedReason],
   )
 
   const onSubmit = useCallback(
@@ -912,6 +1144,9 @@ export function ApplicationRequestPage({
                                 setServiceTemplateName("")
                                 setServiceTemplateSlug("")
                                 setServiceTemplateScriptPath("")
+                                if (watchedMode === "quick_template") {
+                                  updateFormValue("mode", "scheduled")
+                                }
                               }}
                             >
                               <X className="h-3.5 w-3.5" />
@@ -1488,32 +1723,138 @@ export function ApplicationRequestPage({
                     )}
                   />
                 </Tabs>
-                {watchedMode !== "immediate" ? (
-                  <RequestAvailabilityPanel
-                    mode="draft"
-                    onChange={(value) => {
-                      updateFormValue("start_at", value.start_at ?? "")
-                      updateFormValue("end_at", value.end_at ?? "")
-                    }}
-                    draft={{
-                      resource_type: resourceType,
-                      cores: Number(watchedCores || 0),
-                      memory: Number(watchedMemory || 0),
-                      disk_size:
-                        resourceType === "vm"
-                          ? Number(watchedDiskSize || 0)
-                          : null,
-                      rootfs_size:
-                        resourceType === "lxc"
-                          ? Number(watchedRootfsSize || 0)
-                          : null,
-                      instance_count: 1,
-                      gpu_required:
-                        resourceType === "vm" && watchedGpuMappingId ? 1 : 0,
-                      days: 7,
-                      timezone: "Asia/Taipei",
-                    }}
-                  />
+                {watchedMode === "scheduled" ? (
+                  <div className="rounded-2xl border bg-muted/20 p-5 space-y-4">
+                    <div>
+                      <h3 className="font-medium">研究申請期間</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        研究申請以天為單位，送出後會等待管理員審核。
+                      </p>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <FormLabel>開始日期</FormLabel>
+                        <Input
+                          type="date"
+                          value={researchStartDate}
+                          onChange={(event) =>
+                            setResearchStartDate(event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <FormLabel>結束日期</FormLabel>
+                        <Input
+                          type="date"
+                          min={researchStartDate}
+                          value={researchEndDate}
+                          onChange={(event) =>
+                            setResearchEndDate(event.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      系統會送出 {watchedStartAt || "-"} 到{" "}
+                      {watchedEndAt || "-"}{" "}
+                      的研究資源申請，結束日期會包含完整當日。
+                    </p>
+                    <div
+                      className={cn(
+                        "rounded-xl border px-4 py-3",
+                        researchAvailabilityTone.panel,
+                      )}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-medium">容量評估</div>
+                        <Badge variant={researchAvailabilityTone.badge}>
+                          {researchAvailabilityLoading
+                            ? "評估中"
+                            : researchAvailabilityTone.label}
+                        </Badge>
+                      </div>
+                      <p
+                        className={cn(
+                          "mt-2 text-sm leading-6",
+                          researchAvailabilityTone.text,
+                        )}
+                      >
+                        {researchAvailabilityLoading
+                          ? "正在檢查整段研究期間的保留容量。"
+                          : researchAvailability?.summary ||
+                            "選擇日期後會評估整段期間是否有足夠容量。"}
+                      </p>
+                      {researchAvailability && (
+                        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                          <div>
+                            評估期間：{researchAvailability.duration_days} 天，
+                            檢查 {researchAvailability.checked_checkpoint_count}{" "}
+                            個時間點
+                          </div>
+                          {researchAvailability.reason && (
+                            <div>{researchAvailability.reason}</div>
+                          )}
+                          {researchAvailability.warnings.map((warning) => (
+                            <div key={warning}>{warning}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : watchedMode === "quick_template" ? (
+                  <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-medium">快速模板</h3>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={quickTemplateAvailabilityTone.badge}>
+                          {quickTemplateAvailabilityLoading
+                            ? "檢查中"
+                            : quickTemplateAvailabilityTone.label}
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() =>
+                            setQuickTemplateAvailabilityAnchor(new Date())
+                          }
+                          title="重新檢查容量"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      有可用容量時會自動核准並立即建立，使用時間固定 3
+                      小時，到期後由系統自動關機。
+                    </p>
+                    <div
+                      className={cn(
+                        "rounded-xl border px-4 py-3",
+                        quickTemplateAvailabilityTone.panel,
+                      )}
+                    >
+                      <p
+                        className={cn(
+                          "text-sm leading-6",
+                          quickTemplateAvailabilityTone.text,
+                        )}
+                      >
+                        {quickTemplateAvailabilityLoading
+                          ? "正在檢查現在是否可立即建立。"
+                          : quickTemplateAvailability?.summary ||
+                            (serviceTemplateSlug
+                              ? "系統會檢查現在到 3 小時後是否有足夠容量。"
+                              : "選擇快速模板後會檢查現在是否可建立。")}
+                      </p>
+                      {quickTemplateAvailability?.reason && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {quickTemplateAvailability.reason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <div className="rounded-2xl border bg-muted/20 p-5 space-y-4">
                     <h3 className="font-medium">立即模式設定</h3>
@@ -1625,7 +1966,7 @@ export function ApplicationRequestPage({
                     <LoadingButton
                       type="submit"
                       loading={mutation.isPending}
-                      disabled={!isSubmitReady}
+                      disabled={!canSubmitRequest}
                     >
                       {t("applications:create.submitButton")}
                     </LoadingButton>
@@ -1655,7 +1996,10 @@ export function ApplicationRequestPage({
                 }
                 recommendationContext={{
                   resource_type: resourceType,
-                  mode: watchedMode,
+                  mode:
+                    watchedMode === "quick_template"
+                      ? "immediate"
+                      : watchedMode,
                   start_at: watchedStartAt || undefined,
                   end_at: watchedEndAt || undefined,
                   selected_gpu_mapping_id: watchedGpuMappingId || undefined,

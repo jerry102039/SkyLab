@@ -27,7 +27,7 @@ def demo_vision_simple():
         return
     
     print(f"\n模型: {client.settings.model_name}")
-    print(f"視覺模型: ✓")
+    print("視覺模型: ✓")
     
     # 範例圖片路徑（請替換為實際圖片）
     image_path = "test_image.jpg"
@@ -41,7 +41,7 @@ def demo_vision_simple():
     prompt = "請詳細描述這張圖片的內容，包括主要物體、顏色、場景等。"
     print(f"\n[提示] {prompt}")
     print(f"[圖片] {image_path}")
-    print(f"\n[回應]")
+    print("\n[回應]")
     
     try:
         answer = client.chat_with_image_simple(
@@ -81,7 +81,7 @@ def demo_vision_multiple_images():
     prompt = "請比較這些圖片的異同點。"
     print(f"\n[提示] {prompt}")
     print(f"[圖片] {', '.join(existing_images)}")
-    print(f"\n[回應]")
+    print("\n[回應]")
     
     try:
         answer = client.chat_with_image_simple(
@@ -115,7 +115,7 @@ def demo_vision_stream():
     prompt = "請用繁體中文簡要說明這張圖片的主題。"
     print(f"\n[提示] {prompt}")
     print(f"[圖片] {image_path}")
-    print(f"\n[回應] ", end="", flush=True)
+    print("\n[回應] ", end="", flush=True)
     
     try:
         for chunk in client.chat_with_image_stream(
@@ -199,9 +199,9 @@ def demo_mixed_usage():
     if Path(image_path).exists():
         print(f"[圖片] {image_path}")
     else:
-        print(f"[圖片] (不存在)")
+        print("[圖片] (不存在)")
     
-    print(f"\n[回應]")
+    print("\n[回應]")
     
     try:
         # 這個呼叫在視覺模型和文字模型都能工作
@@ -233,7 +233,7 @@ def show_model_info():
     print(f"支援圖片: {'✓' if client.is_vision_model else '✗'}")
     
     if client.is_vision_model:
-        print(f"\n視覺模型設定:")
+        print("\n視覺模型設定:")
         print(f"  最大圖片尺寸: {client.settings.max_image_size}px")
         print(f"  自動調整大小: {'✓' if client.settings.enable_image_resize else '✗'}")
     

@@ -209,7 +209,6 @@ def build_placement_recommendation(
     node_capacities: list[NodeCapacity],
 ) -> PlacementRecommendation:
     working_nodes = [item.model_copy(deep=True) for item in node_capacities]
-    configured_memory = request.memory_mb * MIB
     req_disk = request.disk_gb * GIB
     effective_cpu = _effective_cpu_cores(request)
     effective_memory = _effective_memory_bytes(request)
