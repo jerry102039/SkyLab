@@ -8,15 +8,15 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from app.ai.teacher_judge.config import settings
-from app.api.deps.auth import InstructorUser
-from app.schemas.rubric import RubricChatRequest, RubricExportRequest
-from app.services.rubric_parser import parse_document
-from app.services.rubric_service import (
+from app.ai.teacher_judge.export import export_to_excel
+from app.ai.teacher_judge.schemas import RubricChatRequest, RubricExportRequest
+from app.ai.teacher_judge.service import (
     analyze_rubric,
     chat_with_rubric,
-    export_to_excel,
     normalize_items_for_export,
 )
+from app.api.deps.auth import InstructorUser
+from app.services.rubric_parser import parse_document
 
 logger = logging.getLogger(__name__)
 

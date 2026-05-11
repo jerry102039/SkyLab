@@ -5,7 +5,6 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Any
 
 from proxmoxer import ProxmoxAPI
 
@@ -20,6 +19,7 @@ from app.ai.pve_log.schemas import (
     StorageInfo,
     SystemSnapshot,
 )
+from app.ai.utils import safe_bool, safe_float, safe_int
 
 logger = logging.getLogger(__name__)
 
@@ -54,23 +54,6 @@ def _get_proxmox() -> ProxmoxAPI:
         _proxmox_created_at = now
         return _proxmox_client
 
-
-def _safe_int(v: Any, default: int = 0) -> int:
-    try:
-        return int(v) if v is not None else default
-    except (TypeError, ValueError):
-        return default
-
-
-def _safe_float(v: Any, default: float = 0.0) -> float:
-    try:
-        return float(v) if v is not None else default
-    except (TypeError, ValueError):
-        return default
-
-
-def _safe_bool(v: Any) -> bool:
-    return v in (1, "1", True, "true", "yes")
 
 
 def _usage_pct(used: int, total: int) -> float:
@@ -113,9 +96,9 @@ def _collect_cluster_info(proxmox: ProxmoxAPI) -> ClusterInfo:
     for item in items:
         if item.get("type") == "cluster":
             cluster_name = item.get("name")
-            node_count = _safe_int(item.get("nodes"), 0)
-            quorate = _safe_bool(item.get("quorate"))
-            version = _safe_int(item.get("version")) or None
+            node_count = safe_int(item.get("nodes"), 0)
+            quorate = safe_bool(item.get("quorate"))
+            version = safe_int(item.get("version")) or None
         elif item.get("type") == "node":
             if node_count == 0:
                 node_count += 1
@@ -133,23 +116,23 @@ def _collect_nodes(proxmox: ProxmoxAPI) -> list[NodeInfo]:
     items = proxmox.nodes.get()
     result = []
     for item in items:
-        mem_used = _safe_int(item.get("mem"))
-        mem_total = _safe_int(item.get("maxmem"))
-        disk_used = _safe_int(item.get("disk"))
-        disk_total = _safe_int(item.get("maxdisk"))
+        mem_used = safe_int(item.get("mem"))
+        mem_total = safe_int(item.get("maxmem"))
+        disk_used = safe_int(item.get("disk"))
+        disk_total = safe_int(item.get("maxdisk"))
         result.append(
             NodeInfo(
                 node=str(item.get("node") or "unknown"),
                 status=str(item.get("status") or "unknown"),
-                cpu_usage=_safe_float(item.get("cpu")),
-                cpu_cores=_safe_int(item.get("maxcpu")),
+                cpu_usage=safe_float(item.get("cpu")),
+                cpu_cores=safe_int(item.get("maxcpu")),
                 mem_used_bytes=mem_used,
                 mem_total_bytes=mem_total,
                 mem_used_pct=_usage_pct(mem_used, mem_total),
                 disk_used_bytes=disk_used,
                 disk_total_bytes=disk_total,
                 disk_used_pct=_usage_pct(disk_used, disk_total),
-                uptime_seconds=_safe_int(item.get("uptime")) or None,
+                uptime_seconds=safe_int(item.get("uptime")) or None,
             )
         )
     return result
@@ -164,9 +147,9 @@ def _collect_storages_for_node(proxmox: ProxmoxAPI, node: str) -> list[StorageIn
 
     result = []
     for item in items:
-        avail = _safe_int(item.get("avail"))
-        used = _safe_int(item.get("used"))
-        total = _safe_int(item.get("total"))
+        avail = safe_int(item.get("avail"))
+        used = safe_int(item.get("used"))
+        total = safe_int(item.get("total"))
         result.append(
             StorageInfo(
                 node=node,
@@ -177,38 +160,38 @@ def _collect_storages_for_node(proxmox: ProxmoxAPI, node: str) -> list[StorageIn
                 used_bytes=used,
                 total_bytes=total,
                 used_pct=_usage_pct(used, total),
-                active=_safe_bool(item.get("active", 1)),
-                enabled=not _safe_bool(item.get("disable", 0)),
-                shared=_safe_bool(item.get("shared", 0)),
+                active=safe_bool(item.get("active", 1)),
+                enabled=not safe_bool(item.get("disable", 0)),
+                shared=safe_bool(item.get("shared", 0)),
             )
         )
     return result
 
 
 def _collect_resource_summary(item: dict) -> ResourceSummary:
-    mem_used = _safe_int(item.get("mem"))
-    mem_total = _safe_int(item.get("maxmem"))
-    disk_used = _safe_int(item.get("disk"))
-    disk_total = _safe_int(item.get("maxdisk"))
+    mem_used = safe_int(item.get("mem"))
+    mem_total = safe_int(item.get("maxmem"))
+    disk_used = safe_int(item.get("disk"))
+    disk_total = safe_int(item.get("maxdisk"))
     return ResourceSummary(
-        vmid=_safe_int(item.get("vmid")),
+        vmid=safe_int(item.get("vmid")),
         name=str(item.get("name") or ""),
         resource_type=str(item.get("type") or "unknown"),
         node=str(item.get("node") or "unknown"),
         status=str(item.get("status") or "unknown"),
         pool=item.get("pool") or None,
-        cpu_usage=_safe_float(item.get("cpu")),
-        cpu_cores=_safe_int(item.get("maxcpu")),
+        cpu_usage=safe_float(item.get("cpu")),
+        cpu_cores=safe_int(item.get("maxcpu")),
         mem_used_bytes=mem_used,
         mem_total_bytes=mem_total,
         mem_used_pct=_usage_pct(mem_used, mem_total),
         disk_used_bytes=disk_used,
         disk_total_bytes=disk_total,
         disk_used_pct=_usage_pct(disk_used, disk_total),
-        net_in_bytes=_safe_int(item.get("netin")),
-        net_out_bytes=_safe_int(item.get("netout")),
-        uptime_seconds=_safe_int(item.get("uptime")) or None,
-        is_template=_safe_bool(item.get("template", 0)),
+        net_in_bytes=safe_int(item.get("netin")),
+        net_out_bytes=safe_int(item.get("netout")),
+        uptime_seconds=safe_int(item.get("uptime")) or None,
+        is_template=safe_bool(item.get("template", 0)),
     )
 
 
@@ -219,25 +202,25 @@ def _collect_resource_status(proxmox: ProxmoxAPI, node: str, vmid: int, resource
         else:
             s = proxmox.nodes(node).lxc(vmid).status.current.get()
 
-        mem_used = _safe_int(s.get("mem"))
-        mem_total = _safe_int(s.get("maxmem"))
+        mem_used = safe_int(s.get("mem"))
+        mem_total = safe_int(s.get("maxmem"))
         return ResourceStatus(
             vmid=vmid,
             node=node,
             resource_type=resource_type,
             status=str(s.get("status") or "unknown"),
-            cpu_usage=_safe_float(s.get("cpu")),
-            cpu_cores=_safe_int(s.get("cpus") or s.get("maxcpu")),
+            cpu_usage=safe_float(s.get("cpu")),
+            cpu_cores=safe_int(s.get("cpus") or s.get("maxcpu")),
             mem_used_bytes=mem_used,
             mem_total_bytes=mem_total,
             mem_used_pct=_usage_pct(mem_used, mem_total),
-            disk_read_bytes=_safe_int(s.get("diskread")),
-            disk_write_bytes=_safe_int(s.get("diskwrite")),
-            disk_total_bytes=_safe_int(s.get("maxdisk")),
-            net_in_bytes=_safe_int(s.get("netin")),
-            net_out_bytes=_safe_int(s.get("netout")),
-            uptime_seconds=_safe_int(s.get("uptime")) or None,
-            pid=_safe_int(s.get("pid")) or None,
+            disk_read_bytes=safe_int(s.get("diskread")),
+            disk_write_bytes=safe_int(s.get("diskwrite")),
+            disk_total_bytes=safe_int(s.get("maxdisk")),
+            net_in_bytes=safe_int(s.get("netin")),
+            net_out_bytes=safe_int(s.get("netout")),
+            uptime_seconds=safe_int(s.get("uptime")) or None,
+            pid=safe_int(s.get("pid")) or None,
         )
     except Exception as exc:
         logger.debug("取得 %s %d 狀態失敗：%s", resource_type, vmid, exc)
@@ -268,17 +251,17 @@ def _collect_resource_config(proxmox: ProxmoxAPI, node: str, vmid: int, resource
             node=node,
             resource_type=resource_type,
             name=c.get(name_key) or None,
-            cpu_cores=_safe_int(c.get("cores") or c.get("cpus")) or None,
+            cpu_cores=safe_int(c.get("cores") or c.get("cpus")) or None,
             cpu_type=c.get("cpu") or None,
-            memory_mb=_safe_int(c.get("memory")) or None,
+            memory_mb=safe_int(c.get("memory")) or None,
             disk_info=disk_str or None,
             disk_size_gb=disk_size_gb,
             os_type=c.get("ostype") or None,
             net0=c.get("net0") or None,
             description=c.get("description") or None,
             tags=c.get("tags") or None,
-            onboot=_safe_bool(c.get("onboot", 0)),
-            protection=_safe_bool(c.get("protection", 0)),
+            onboot=safe_bool(c.get("onboot", 0)),
+            protection=safe_bool(c.get("protection", 0)),
             raw=dict(c),
         )
     except Exception as exc:
@@ -361,7 +344,7 @@ def collect_snapshot() -> SystemSnapshot:
     running_resources: list[tuple[str, int, str]] = []
 
     for item in raw_resources:
-        if _safe_bool(item.get("template", 0)):
+        if safe_bool(item.get("template", 0)):
             continue
         summary = _collect_resource_summary(item)
         all_resources.append(summary)

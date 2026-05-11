@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.ai.template_recommendation.config import settings
+from app.ai.pve_log.config import settings
 from app.infrastructure.ai.vllm_client import VLLMClient
 
 client = VLLMClient(

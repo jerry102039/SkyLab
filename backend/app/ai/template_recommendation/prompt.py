@@ -8,6 +8,7 @@ from app.ai.template_recommendation.catalog_service import (
     build_catalog_prompt_bundle,
 )
 from app.ai.template_recommendation.schemas import ChatMessage
+from app.ai.utils import safe_int
 
 
 def build_chat_catalog_context(
@@ -93,20 +94,14 @@ def build_chat_runtime_context(
 ) -> str:
     gpu_items = list(gpu_options or [])
 
-    def _safe_int(value: Any) -> int:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return 0
-
     gpu_lines: list[str] = []
     for option in gpu_items[:10]:
         mapping_id = str(option.get("mapping_id") or "").strip()
         model = str(option.get("model") or "").strip()
         vram = str(option.get("vram") or "").strip()
         node = str(option.get("node") or "").strip()
-        available = _safe_int(option.get("available_count"))
-        total = _safe_int(option.get("device_count"))
+        available = safe_int(option.get("available_count"))
+        total = safe_int(option.get("device_count"))
 
         label = model or str(option.get("description") or "").strip() or mapping_id or "GPU"
         parts = [f"{label}"]
