@@ -28,6 +28,7 @@ type Listener = {
 enum IpcRouterKeys {
   AUTH = "AUTH",
   RESOURCE = "RESOURCE",
+  SESSION = "SESSION",
   TUNNEL = "TUNNEL",
   SETTINGS = "SETTINGS",
   LOG = "LOG",
@@ -88,4 +89,23 @@ interface TunnelStatusInfo {
   lastStartTime: number;
   connectionError: string | null;
   tunnels: CampusCloudTunnelInfo[];
+}
+
+interface CampusCloudSessionStatus {
+  vmid: number;
+  running: boolean;
+  auto_stop_at: string | null;
+  auto_stop_reason: "window_grace" | "practice_quota" | null;
+  minutes_until_stop: number | null;
+  expiry_at: string | null;
+  hours_until_expiry: number | null;
+  should_warn: boolean;
+  warn_reason: "auto_stop" | "expiry" | null;
+  can_extend: boolean;
+}
+
+interface CampusCloudExtendResult {
+  vmid: number;
+  auto_stop_at: string;
+  extended_minutes: number;
 }

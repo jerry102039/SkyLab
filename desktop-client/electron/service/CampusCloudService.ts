@@ -114,6 +114,36 @@ class CampusCloudService {
     return JSON.parse(res.body) as CampusCloudResource[];
   }
 
+  async getSessionStatus(vmid: number): Promise<CampusCloudSessionStatus> {
+    const res = await this.request(
+      "GET",
+      `/api/v1/resources/${vmid}/session-status`,
+      { auth: true }
+    );
+    if (res.status === 401) {
+      throw new BusinessError(ResponseCode.NOT_LOGGED_IN);
+    }
+    if (res.status !== 200) {
+      throw new BusinessError(ResponseCode.BACKEND_ERROR, res.body);
+    }
+    return JSON.parse(res.body) as CampusCloudSessionStatus;
+  }
+
+  async extendSession(vmid: number): Promise<CampusCloudExtendResult> {
+    const res = await this.request(
+      "POST",
+      `/api/v1/resources/${vmid}/extend-session`,
+      { auth: true, body: {} }
+    );
+    if (res.status === 401) {
+      throw new BusinessError(ResponseCode.NOT_LOGGED_IN);
+    }
+    if (res.status !== 200) {
+      throw new BusinessError(ResponseCode.BACKEND_ERROR, res.body);
+    }
+    return JSON.parse(res.body) as CampusCloudExtendResult;
+  }
+
   async getTunnelConfig(): Promise<CampusCloudTunnelConfig> {
     const res = await this.request("GET", "/api/v1/tunnel/my-config", {
       auth: true

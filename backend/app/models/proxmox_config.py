@@ -64,6 +64,7 @@ class ProxmoxConfig(SQLModel, table=True):
     window_grace_period_minutes: int = Field(default=30, ge=0, le=240)
     practice_session_hours: int = Field(default=3, ge=1, le=24)
     practice_warning_minutes: int = Field(default=30, ge=1, le=120)
+    expiry_warning_hours: int = Field(default=24, ge=1, le=720)
     updated_at: datetime = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),

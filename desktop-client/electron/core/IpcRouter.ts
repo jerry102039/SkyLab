@@ -19,6 +19,16 @@ export const ipcRouters: IpcRouters = {
       controller: "resourceController.listMyResources"
     }
   },
+  SESSION: {
+    getSessionStatuses: {
+      path: "session/getSessionStatuses",
+      controller: "resourceController.getSessionStatuses"
+    },
+    extendSession: {
+      path: "session/extendSession",
+      controller: "resourceController.extendSession"
+    }
+  },
   TUNNEL: {
     start: {
       path: "tunnel/start",

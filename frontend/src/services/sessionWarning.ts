@@ -15,7 +15,10 @@ export type SessionStatus = {
   auto_stop_at: string | null
   auto_stop_reason: "window_grace" | "practice_quota" | null
   minutes_until_stop: number | null
+  expiry_at: string | null
+  hours_until_expiry: number | null
   should_warn: boolean
+  warn_reason: "auto_stop" | "expiry" | null
   can_extend: boolean
 }
 

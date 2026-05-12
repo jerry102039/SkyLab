@@ -9,6 +9,9 @@ interface AppState {
   autoStart: boolean;
   tunnelStatus: TunnelStatusInfo;
   resources: CampusCloudResource[];
+  sessionStatuses: CampusCloudSessionStatus[];
+  /** vmids the user already snoozed so we don't re-pop while still warning. */
+  dismissedWarnings: number[];
 }
 
 const DEFAULT_TUNNEL_STATUS: TunnelStatusInfo = {
@@ -18,6 +21,11 @@ const DEFAULT_TUNNEL_STATUS: TunnelStatusInfo = {
   tunnels: []
 };
 
+/** Poll cadence for the session-status warning system; matches the web hook
+ * (which is itself anchored to the backend's 30 min ``practice_warning_minutes``). */
+const SESSION_POLL_INTERVAL_MS = 30_000;
+let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
+
 export const useAppStore = defineStore("app", {
   state: (): AppState => ({
     loggedIn: false,
@@ -25,8 +33,20 @@ export const useAppStore = defineStore("app", {
     language: "zh-CN",
     autoStart: false,
     tunnelStatus: { ...DEFAULT_TUNNEL_STATUS },
-    resources: []
+    resources: [],
+    sessionStatuses: [],
+    dismissedWarnings: []
   }),
+  getters: {
+    /** First not-yet-dismissed warning, used to drive the global alert. */
+    activeWarning(state): CampusCloudSessionStatus | null {
+      return (
+        state.sessionStatuses.find(
+          s => s.should_warn && !state.dismissedWarnings.includes(s.vmid)
+        ) ?? null
+      );
+    }
+  },
   actions: {
     registerListeners() {
       on(ipcRouters.AUTH.getAuthState, data => {
@@ -48,6 +68,20 @@ export const useAppStore = defineStore("app", {
       on(ipcRouters.RESOURCE.listMyResources, data => {
         this.resources = Array.isArray(data) ? data : [];
       });
+      on(ipcRouters.SESSION.getSessionStatuses, data => {
+        const next: CampusCloudSessionStatus[] = Array.isArray(data) ? data : [];
+        this.sessionStatuses = next;
+        // Forget dismissals once the corresponding query says should_warn=false
+        // — otherwise the user can't see future warnings on the same VM.
+        this.dismissedWarnings = this.dismissedWarnings.filter(vmid => {
+          const status = next.find(s => s.vmid === vmid);
+          return status && status.should_warn;
+        });
+      });
+      on(ipcRouters.SESSION.extendSession, () => {
+        // Refresh statuses immediately so the dialog dismisses naturally.
+        this.refreshSessionStatuses();
+      });
       onListener(listeners.watchTunnel, (data: TunnelStatusInfo) => {
         this.tunnelStatus = data;
       });
@@ -61,9 +95,38 @@ export const useAppStore = defineStore("app", {
     refreshResources() {
       send(ipcRouters.RESOURCE.listMyResources);
     },
+    refreshSessionStatuses() {
+      if (!this.loggedIn) return;
+      send(ipcRouters.SESSION.getSessionStatuses);
+    },
+    extendSession(vmid: number) {
+      send(ipcRouters.SESSION.extendSession, { vmid });
+    },
+    dismissWarning(vmid: number) {
+      if (!this.dismissedWarnings.includes(vmid)) {
+        this.dismissedWarnings.push(vmid);
+      }
+    },
+    /** Begin / restart the polling timer. Idempotent. */
+    startSessionPolling() {
+      if (sessionPollTimer) return;
+      this.refreshSessionStatuses();
+      sessionPollTimer = setInterval(() => {
+        this.refreshSessionStatuses();
+      }, SESSION_POLL_INTERVAL_MS);
+    },
+    stopSessionPolling() {
+      if (sessionPollTimer) {
+        clearInterval(sessionPollTimer);
+        sessionPollTimer = null;
+      }
+      this.sessionStatuses = [];
+      this.dismissedWarnings = [];
+    },
     logout() {
       send(ipcRouters.AUTH.logout);
       this.loggedIn = false;
+      this.stopSessionPolling();
     }
   }
 });

@@ -38,6 +38,7 @@ class AuditAction(str, enum.Enum):
     resource_shutdown = "resource_shutdown"
     resource_reset = "resource_reset"
     resource_delete = "resource_delete"
+    resource_extend_session = "resource_extend_session"
 
     # VM 申請
     vm_request_submit = "vm_request_submit"

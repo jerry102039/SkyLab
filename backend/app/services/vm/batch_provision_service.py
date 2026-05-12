@@ -233,6 +233,7 @@ def _process_task(*, job_id: uuid.UUID, task_id: uuid.UUID) -> None:
         user_id = task.user_id
         resource_type = job.resource_type
         hostname = _build_hostname(job.hostname_prefix, member_index)
+        start_on_create = job.recurrence_rule is None
 
     with Session(engine) as session:
         bp_repo.update_task_running(session=session, task_id=task_id)
@@ -245,6 +246,8 @@ def _process_task(*, job_id: uuid.UUID, task_id: uuid.UUID) -> None:
                 hostname=hostname,
                 user_id=user_id,
                 params=params,
+                start=start_on_create,
+                batch_job_id=job_id,
             )
 
         with Session(engine) as session:
@@ -270,6 +273,8 @@ def _provision_one(
     hostname: str,
     user_id: uuid.UUID,
     params: dict,
+    start: bool = True,
+    batch_job_id: uuid.UUID | None = None,
 ) -> int:
     """呼叫 provisioning_service 建立單一資源，回傳 vmid。"""
     if resource_type == "lxc":
@@ -284,11 +289,11 @@ def _provision_one(
             environment_type=params.get("environment_type", "批量建立"),
             os_info=params.get("os_info"),
             expiry_date=_parse_date(params.get("expiry_date")),
-            start=True,
+            start=start,
             unprivileged=True,
         )
         result = provisioning_service.create_lxc(
-            session=session, lxc_data=req, user_id=user_id
+            session=session, lxc_data=req, user_id=user_id, batch_job_id=batch_job_id
         )
     else:
         req = VMCreateRequest(
@@ -303,10 +308,10 @@ def _provision_one(
             environment_type=params.get("environment_type", "批量建立"),
             os_info=params.get("os_info"),
             expiry_date=_parse_date(params.get("expiry_date")),
-            start=True,
+            start=start,
         )
         result = provisioning_service.create_vm(
-            session=session, vm_data=req, user_id=user_id
+            session=session, vm_data=req, user_id=user_id, batch_job_id=batch_job_id
         )
 
     return result.vmid

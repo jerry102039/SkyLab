@@ -202,14 +202,20 @@ class ResourcePublic(BaseModel):
 
 
 class SessionStatusResponse(BaseModel):
-    """Live status of a VM's auto-stop session, polled by the student UI."""
+    """Live status of a VM's auto-stop / expiry warnings, polled by the
+    student UI. ``warn_reason`` distinguishes the two cases so the dialog can
+    show appropriate copy and actions.
+    """
 
     vmid: int
     running: bool
     auto_stop_at: datetime | None = None
     auto_stop_reason: Literal["window_grace", "practice_quota"] | None = None
     minutes_until_stop: int | None = None
+    expiry_at: datetime | None = None
+    hours_until_expiry: int | None = None
     should_warn: bool = False
+    warn_reason: Literal["auto_stop", "expiry"] | None = None
     can_extend: bool = False
 
 

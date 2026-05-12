@@ -36,6 +36,7 @@ class SchedulePolicy:
     window_grace_minutes: int
     practice_session_hours: int
     practice_warning_minutes: int
+    expiry_warning_hours: int
 
 
 # Defaults match the model's server defaults — used only when no
@@ -47,6 +48,7 @@ _DEFAULT_POLICY = SchedulePolicy(
     window_grace_minutes=30,
     practice_session_hours=3,
     practice_warning_minutes=30,
+    expiry_warning_hours=24,
 )
 
 
@@ -65,6 +67,7 @@ def get_schedule_policy(*, session: Session) -> SchedulePolicy:
         window_grace_minutes=max(int(config.window_grace_period_minutes or 30), 0),
         practice_session_hours=max(int(config.practice_session_hours or 3), 1),
         practice_warning_minutes=max(int(config.practice_warning_minutes or 30), 1),
+        expiry_warning_hours=max(int(config.expiry_warning_hours or 24), 1),
     )
 
 

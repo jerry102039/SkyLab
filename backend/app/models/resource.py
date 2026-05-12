@@ -4,6 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
+import sqlalchemy as sa
 from sqlmodel import Column, DateTime, Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -44,6 +45,15 @@ class Resource(SQLModel, table=True):
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),
         description="創建時間",
+    )
+
+    batch_job_id: uuid.UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            sa.Uuid,
+            sa.ForeignKey("batch_provision_jobs.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
     )
 
     # Auto-stop fields populated by the scheduler / power-on flow.

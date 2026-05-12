@@ -230,7 +230,11 @@ def _dedupe_templates(templates: Iterable[dict]) -> list[dict]:
 
 
 def create_lxc(
-    *, session: Session, lxc_data: LXCCreateRequest, user_id: uuid.UUID
+    *,
+    session: Session,
+    lxc_data: LXCCreateRequest,
+    user_id: uuid.UUID,
+    batch_job_id: uuid.UUID | None = None,
 ) -> LXCCreateResponse:
     vmid = proxmox_service.next_vmid()
     target_node = _get_lxc_target_node()
@@ -290,6 +294,7 @@ def create_lxc(
             ssh_private_key_encrypted=encrypt_value(private_key_pem),
             ssh_public_key=public_key,
             service_template_slug=lxc_data.service_template_slug,
+            batch_job_id=batch_job_id,
             commit=False,
         )
 
@@ -357,7 +362,11 @@ def create_lxc(
 
 
 def create_vm(
-    *, session: Session, vm_data: VMCreateRequest, user_id: uuid.UUID
+    *,
+    session: Session,
+    vm_data: VMCreateRequest,
+    user_id: uuid.UUID,
+    batch_job_id: uuid.UUID | None = None,
 ) -> VMCreateResponse:
     new_vmid = proxmox_service.next_vmid()
     target_node = _get_vm_target_node(vm_data.template_id)
@@ -441,6 +450,7 @@ def create_vm(
             ssh_private_key_encrypted=encrypt_value(private_key_pem),
             ssh_public_key=public_key,
             service_template_slug=vm_data.service_template_slug,
+            batch_job_id=batch_job_id,
             commit=False,
         )
 

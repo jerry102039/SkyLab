@@ -142,6 +142,7 @@ interface ProxmoxConfigPublic {
   window_grace_period_minutes: number
   practice_session_hours: number
   practice_warning_minutes: number
+  expiry_warning_hours: number
   updated_at: string | null
   is_configured: boolean
   has_ca_cert: boolean
@@ -189,6 +190,7 @@ interface ProxmoxConfigUpdate {
   window_grace_period_minutes: number
   practice_session_hours: number
   practice_warning_minutes: number
+  expiry_warning_hours: number
 }
 
 interface ProxmoxNodePublic {
@@ -410,6 +412,7 @@ interface ConfigFormData {
   window_grace_period_minutes: number
   practice_session_hours: number
   practice_warning_minutes: number
+  expiry_warning_hours: number
 }
 
 interface NodeFormData {
@@ -1282,6 +1285,7 @@ function AdminConfigPage() {
       window_grace_period_minutes: 30,
       practice_session_hours: 3,
       practice_warning_minutes: 30,
+      expiry_warning_hours: 24,
     },
   })
 
@@ -1341,6 +1345,7 @@ function AdminConfigPage() {
         window_grace_period_minutes: config.window_grace_period_minutes ?? 30,
         practice_session_hours: config.practice_session_hours ?? 3,
         practice_warning_minutes: config.practice_warning_minutes ?? 30,
+        expiry_warning_hours: config.expiry_warning_hours ?? 24,
       })
     }
   }, [config, form])
@@ -1430,6 +1435,7 @@ function AdminConfigPage() {
       window_grace_period_minutes: data.window_grace_period_minutes,
       practice_session_hours: data.practice_session_hours,
       practice_warning_minutes: data.practice_warning_minutes,
+      expiry_warning_hours: data.expiry_warning_hours,
     }
   }
 
@@ -2723,6 +2729,30 @@ function AdminConfigPage() {
                               </FormControl>
                               <FormDescription>
                                 預設 30；學生提前多久看到延長提示。
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="expiry_warning_hours"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>到期前提示 (小時)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={720}
+                                  {...field}
+                                  onChange={(e) =>
+                                    field.onChange(Number(e.target.value))
+                                  }
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                預設 24；資源到期前多久顯示提醒。
                               </FormDescription>
                               <FormMessage />
                             </FormItem>

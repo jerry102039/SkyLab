@@ -2,6 +2,7 @@ import logging
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from sqlmodel import Session
 
@@ -150,36 +151,90 @@ def list_all(
         raise ProxmoxError(f"Failed to get resources: {e}")
 
 
+DELETED_TOMBSTONE_DAYS = 30
+"""How long after a user-initiated deletion to keep showing the tombstone on
+their resources page. Keep it short enough that the list doesn't grow
+forever; long enough that the user notices the change after returning from
+a few days off."""
+
+
 def list_by_user(
     *, session: Session, user_id: uuid.UUID
 ) -> list[ResourcePublic]:
     try:
+        result: list[ResourcePublic] = []
+
+        # 1. Live resources owned by the user (from Proxmox + DB join).
         user_resources = resource_repo.get_resources_by_user(
             session=session, user_id=user_id
         )
-        if not user_resources:
-            return []
-
-        owned_vmids = {r.vmid: r for r in user_resources}
-        resources = proxmox_service.list_all_resources()
-        result = []
-        for r in resources:
-            if r.get("template") == 1:
-                continue
-            vmid = r.get("vmid")
-            if vmid not in owned_vmids:
-                continue
-            vm_type = r.get("type")
-            vm_node = r.get("node")
-            result.append(
-                _build_resource_public(
-                    r, owned_vmids[vmid], vm_node, vm_type, session
+        if user_resources:
+            owned_vmids = {r.vmid: r for r in user_resources}
+            resources = proxmox_service.list_all_resources()
+            for r in resources:
+                if r.get("template") == 1:
+                    continue
+                vmid = r.get("vmid")
+                if vmid not in owned_vmids:
+                    continue
+                vm_type = r.get("type")
+                vm_node = r.get("node")
+                result.append(
+                    _build_resource_public(
+                        r, owned_vmids[vmid], vm_node, vm_type, session
+                    )
                 )
-            )
+
+        # 2. Tombstones for the user's own recent completed deletions, so the
+        # RequestsPage can show a "已刪除" badge. Admin-initiated deletions
+        # are intentionally excluded — the snapshot's user_id matches the
+        # owner, but ``user_id`` on DeletionRequest is whoever submitted the
+        # delete (could be admin); we only want the user-self case here.
+        result.extend(
+            _list_user_deletion_tombstones(session=session, user_id=user_id)
+        )
+
         return result
     except Exception as e:
         logger.error(f"Failed to get user resources: {e}")
         raise ProxmoxError(f"Failed to get user resources: {e}")
+
+
+def _list_user_deletion_tombstones(
+    *, session: Session, user_id: uuid.UUID
+) -> list[ResourcePublic]:
+    """Build ResourcePublic tombstones for the user's recent self-initiated
+    deletions, so the resources page can render a "已刪除" badge alongside
+    live resources."""
+    from sqlmodel import select
+
+    from app.models.deletion_request import (
+        DeletionRequest,
+        DeletionRequestStatus,
+    )
+
+    cutoff = _utc_now() - timedelta(days=DELETED_TOMBSTONE_DAYS)
+    rows = list(
+        session.exec(
+            select(DeletionRequest)
+            .where(
+                DeletionRequest.user_id == user_id,
+                DeletionRequest.status == DeletionRequestStatus.completed,
+                DeletionRequest.completed_at >= cutoff,  # type: ignore[arg-type]
+            )
+            .order_by(DeletionRequest.completed_at.desc())  # type: ignore[union-attr]
+        ).all()
+    )
+    return [
+        ResourcePublic(
+            vmid=req.vmid,
+            name=req.name or f"vm-{req.vmid}",
+            status="deleted",
+            node=req.node or "",
+            type=req.resource_type or "",
+        )
+        for req in rows
+    ]
 
 
 def get_config(*, vmid: int, resource_info: dict) -> dict:
@@ -544,19 +599,49 @@ def get_session_status(
     vmid: int,
     resource_info: dict,
 ) -> SessionStatusResponse:
-    """Live session info for the student UI (polled every ~30s)."""
+    """Live session info for the student UI (polled every ~30s).
+
+    Reports whichever warning is more urgent:
+    - ``warn_reason="auto_stop"``: VM has an ``auto_stop_at`` within the
+      configured warning window (group practice quota or course-window grace).
+    - ``warn_reason="expiry"``: VM's ``expiry_date`` is within
+      :data:`EXPIRY_WARNING_HOURS` (defaults to 24h).
+
+    auto_stop wins when both apply, since it's typically minutes away while
+    expiry is at least hours.
+    """
     resource = resource_repo.get_resource_by_vmid(session=session, vmid=vmid)
     running = resource_info.get("status") == "running"
     auto_stop_at = resource.auto_stop_at if resource else None
     auto_stop_reason = resource.auto_stop_reason if resource else None
 
+    policy = get_schedule_policy(session=session)
+
     minutes_until_stop: int | None = None
-    should_warn = False
+    auto_stop_warn = False
     if running and auto_stop_at:
         delta = auto_stop_at - _utc_now()
         minutes_until_stop = max(int(delta.total_seconds() // 60), 0)
-        policy = get_schedule_policy(session=session)
-        should_warn = minutes_until_stop <= policy.practice_warning_minutes
+        auto_stop_warn = minutes_until_stop <= policy.practice_warning_minutes
+
+    expiry_at: datetime | None = None
+    hours_until_expiry: int | None = None
+    expiry_warn = False
+    if running and resource and resource.expiry_date and resource.batch_job_id is None:
+        expiry_at = datetime.combine(
+            resource.expiry_date, datetime.min.time(), tzinfo=UTC
+        ) + timedelta(days=1)
+        delta_h = (expiry_at - _utc_now()).total_seconds() / 3600
+        hours_until_expiry = max(int(delta_h), 0)
+        expiry_warn = 0 < delta_h <= policy.expiry_warning_hours
+
+    # auto_stop is more urgent (minutes vs hours), so it takes priority.
+    if auto_stop_warn:
+        warn_reason: Literal["auto_stop", "expiry"] | None = "auto_stop"
+    elif expiry_warn:
+        warn_reason = "expiry"
+    else:
+        warn_reason = None
 
     return SessionStatusResponse(
         vmid=vmid,
@@ -564,8 +649,12 @@ def get_session_status(
         auto_stop_at=auto_stop_at,
         auto_stop_reason=auto_stop_reason,
         minutes_until_stop=minutes_until_stop,
-        should_warn=should_warn,
+        expiry_at=expiry_at,
+        hours_until_expiry=hours_until_expiry,
+        should_warn=warn_reason is not None,
+        warn_reason=warn_reason,
         # Only practice-quota sessions can be extended via the button.
+        # Expiry extensions go through spec_change_requests, not this endpoint.
         can_extend=running and auto_stop_reason == "practice_quota",
     )
 

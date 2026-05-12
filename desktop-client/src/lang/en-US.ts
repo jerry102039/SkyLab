@@ -22,6 +22,17 @@ export default {
     yes: "Yes",
     no: "No"
   },
+  sessionWarning: {
+    autoStopTitle: "VM will auto-stop soon",
+    autoStopBody:
+      "VM #{vmid} will be powered off in about {minutes} minutes. Keep it running?",
+    expiryTitle: "Resource expiring soon",
+    expiryBody:
+      "VM #{vmid} will expire and be deactivated in about {hours} hours. Please back up your data; contact an admin if you need to extend the lease.",
+    extend: "Extend session",
+    later: "Remind me later",
+    gotIt: "Got it"
+  },
   login: {
     title: "Sign in to Campus Cloud",
     description:

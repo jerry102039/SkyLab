@@ -22,6 +22,16 @@ export default {
     yes: "是",
     no: "否"
   },
+  sessionWarning: {
+    autoStopTitle: "VM 即將自動關機",
+    autoStopBody: "VM #{vmid} 將在約 {minutes} 分鐘後自動關機。需要繼續使用嗎？",
+    expiryTitle: "資源即將到期",
+    expiryBody:
+      "VM #{vmid} 將在約 {hours} 小時後到期並停用。請及早備份資料；如需延長使用期限，請向管理員申請。",
+    extend: "延長使用時間",
+    later: "稍後再說",
+    gotIt: "知道了"
+  },
   login: {
     title: "登入 Campus Cloud",
     description:

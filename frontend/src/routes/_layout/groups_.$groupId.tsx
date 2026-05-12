@@ -587,25 +587,28 @@ function BatchProvisionDialog({
     }
   }
 
+  const resetAndClose = () => {
+    setOpen(false)
+    setJobId(null)
+    setHostnamePrefix("")
+    setPassword("")
+    setCores(2)
+    setMemory(2048)
+    setOstemplate("")
+    setTemplateId(null)
+    setUsername("")
+    setExpiryDate("")
+    setSchedule({
+      recurrence_rule: null,
+      recurrence_duration_minutes: null,
+      schedule_timezone: null,
+    })
+  }
+
   const handleOpenChange = (v: boolean) => {
-    if (isRunning) return // 執行中不允許關閉
-    setOpen(v)
-    if (!v) {
-      setJobId(null)
-      setHostnamePrefix("")
-      setPassword("")
-      setCores(2)
-      setMemory(2048)
-      setOstemplate("")
-      setTemplateId(null)
-      setUsername("")
-      setExpiryDate("")
-      setSchedule({
-        recurrence_rule: null,
-        recurrence_duration_minutes: null,
-        schedule_timezone: null,
-      })
-    }
+    if (!v && jobStatus?.status === "running") return
+    if (!v) resetAndClose()
+    else setOpen(true)
   }
 
   return (
@@ -1028,7 +1031,7 @@ function BatchProvisionDialog({
             )}
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => handleOpenChange(false)}>
+              <Button variant="outline" onClick={resetAndClose}>
                 {jobStatus?.status === "pending_review" ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4" />
