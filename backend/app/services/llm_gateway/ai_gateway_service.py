@@ -993,7 +993,17 @@ def list_users_usage(
     # 合併：所有有 proxy 或 template 呼叫的使用者
     # 先取得所有相關 user_id
     all_user_ids_q = select(proxy_sub.c.user_id).union(select(tmpl_sub.c.user_id))
-    all_user_ids = list(session.exec(all_user_ids_q).all())
+    raw_rows = session.exec(all_user_ids_q).all()
+    # UNION of single-column selects returns Row objects (Sequence-like); unwrap
+    # to scalar UUIDs so downstream `WHERE user_id == uid` binds a UUID, not a Row.
+    def _scalar(r):
+        if isinstance(r, uuid.UUID):
+            return r
+        try:
+            return r[0]
+        except (TypeError, IndexError):
+            return r
+    all_user_ids = [_scalar(row) for row in raw_rows]
     total_count = len(all_user_ids)
 
     # 分頁取使用者明細
