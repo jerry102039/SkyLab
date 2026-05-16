@@ -556,7 +556,10 @@ export function ResourceCreatePage({
           {isQuickStartMode ? (
             <article className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
               {/* Accent strip */}
-              <div aria-hidden="true" className="h-[3px] bg-gradient-to-r from-primary to-primary/50" />
+              <div
+                aria-hidden="true"
+                className="h-[3px] bg-gradient-to-r from-primary to-primary/50"
+              />
 
               <div className="p-5">
                 {/* Header row */}
@@ -572,7 +575,10 @@ export function ResourceCreatePage({
                         loading="lazy"
                       />
                     ) : (
-                      <LayoutTemplate className="h-6 w-6 text-primary" aria-hidden="true" />
+                      <LayoutTemplate
+                        className="h-6 w-6 text-primary"
+                        aria-hidden="true"
+                      />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -585,7 +591,12 @@ export function ResourceCreatePage({
                         "使用模板預設配置一鍵部署。"}
                     </p>
                   </div>
-                  <Button asChild variant="ghost" size="sm" className="shrink-0 text-xs text-muted-foreground">
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-xs text-muted-foreground"
+                  >
                     <Link to="/resources-create">完整設定</Link>
                   </Button>
                 </div>
@@ -603,7 +614,8 @@ export function ResourceCreatePage({
                       <MemoryStick className="h-3 w-3" aria-hidden="true" />
                       {activeQuickStartTemplate.memory >= 1024
                         ? `${(activeQuickStartTemplate.memory / 1024).toFixed(activeQuickStartTemplate.memory % 1024 === 0 ? 0 : 1)} GB`
-                        : `${activeQuickStartTemplate.memory} MB`} RAM
+                        : `${activeQuickStartTemplate.memory} MB`}{" "}
+                      RAM
                     </span>
                   ) : null}
                   {activeQuickStartTemplate?.rootfs_size ? (
@@ -644,24 +656,46 @@ export function ResourceCreatePage({
                   </p>
                 </div>
                 {showAdvancedSettings ? (
-                  <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <ChevronUp
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
                 ) : (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <ChevronDown
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
                 )}
               </button>
 
               {showAdvancedSettings ? (
                 <div className="border-t border-border/60 px-5 pb-5 pt-4 space-y-5">
-
                   {/* Access mode button group */}
                   <fieldset>
-                    <legend className="mb-2 text-sm font-medium">公開存取</legend>
-                    <div className="grid grid-cols-3 gap-2" role="group" aria-label="公開存取模式">
+                    <legend className="mb-2 text-sm font-medium">
+                      公開存取
+                    </legend>
+                    <div className="grid grid-cols-3 gap-2">
                       {(
                         [
-                          { value: "private", label: "不公開", Icon: Lock, disabled: false },
-                          { value: "public-website", label: "公開網站", Icon: Globe, disabled: !canAutoCreateWebsite },
-                          { value: "public-port", label: "公開 Port", Icon: Plug, disabled: !quickStartInterfacePort },
+                          {
+                            value: "private",
+                            label: "不公開",
+                            Icon: Lock,
+                            disabled: false,
+                          },
+                          {
+                            value: "public-website",
+                            label: "公開網站",
+                            Icon: Globe,
+                            disabled: !canAutoCreateWebsite,
+                          },
+                          {
+                            value: "public-port",
+                            label: "公開 Port",
+                            Icon: Plug,
+                            disabled: !quickStartInterfacePort,
+                          },
                         ] as const
                       ).map(({ value, label, Icon, disabled }) => (
                         <button
@@ -685,13 +719,30 @@ export function ResourceCreatePage({
 
                   {/* Firewall preset button group */}
                   <fieldset>
-                    <legend className="mb-2 text-sm font-medium">防火牆預設</legend>
-                    <div className="grid grid-cols-3 gap-2" role="group" aria-label="防火牆預設模式">
+                    <legend className="mb-2 text-sm font-medium">
+                      防火牆預設
+                    </legend>
+                    <div className="grid grid-cols-3 gap-2">
                       {(
                         [
-                          { value: "safe", label: "安全", Icon: Shield, disabled: false },
-                          { value: "website", label: "網站", Icon: Globe, disabled: !quickStartInterfacePort },
-                          { value: "internal", label: "內部", Icon: Network, disabled: false },
+                          {
+                            value: "safe",
+                            label: "安全",
+                            Icon: Shield,
+                            disabled: false,
+                          },
+                          {
+                            value: "website",
+                            label: "網站",
+                            Icon: Globe,
+                            disabled: !quickStartInterfacePort,
+                          },
+                          {
+                            value: "internal",
+                            label: "內部",
+                            Icon: Network,
+                            disabled: false,
+                          },
                         ] as const
                       ).map(({ value, label, Icon, disabled }) => (
                         <button
@@ -717,7 +768,9 @@ export function ResourceCreatePage({
                   {accessMode === "public-website" ? (
                     <div className="grid grid-cols-2 gap-3">
                       <fieldset>
-                        <legend className="mb-2 text-sm font-medium">HTTPS</legend>
+                        <legend className="mb-2 text-sm font-medium">
+                          HTTPS
+                        </legend>
                         <div className="flex gap-2">
                           {(["on", "off"] as const).map((val) => (
                             <button
@@ -737,7 +790,9 @@ export function ResourceCreatePage({
                         </div>
                       </fieldset>
                       <fieldset>
-                        <legend className="mb-2 text-sm font-medium">自動網域</legend>
+                        <legend className="mb-2 text-sm font-medium">
+                          自動網域
+                        </legend>
                         <div className="flex gap-2">
                           {(["on", "off"] as const).map((val) => (
                             <button
@@ -762,7 +817,12 @@ export function ResourceCreatePage({
                   {/* External port input */}
                   {accessMode === "public-port" ? (
                     <div className="space-y-2">
-                      <label htmlFor="external-port" className="text-sm font-medium">外部 Port</label>
+                      <label
+                        htmlFor="external-port"
+                        className="text-sm font-medium"
+                      >
+                        外部 Port
+                      </label>
                       <Input
                         id="external-port"
                         aria-label="外部 Port"
@@ -770,7 +830,9 @@ export function ResourceCreatePage({
                         min={1}
                         max={65535}
                         value={externalPort}
-                        onChange={(event) => setExternalPort(event.target.value)}
+                        onChange={(event) =>
+                          setExternalPort(event.target.value)
+                        }
                         placeholder={
                           quickStartInterfacePort
                             ? String(quickStartInterfacePort)
@@ -785,15 +847,22 @@ export function ResourceCreatePage({
                     {quickStartInterfacePort ? (
                       <p>模板預設服務 Port：{quickStartInterfacePort}</p>
                     ) : (
-                      <p>此模板沒有預設服務 Port，公開網站與公開 Port 會停用。</p>
+                      <p>
+                        此模板沒有預設服務 Port，公開網站與公開 Port 會停用。
+                      </p>
                     )}
                     {accessMode === "public-website" && canAutoCreateWebsite ? (
                       <p>
-                        會使用「{normalizeDomainLabel(watchedHostname) || "app"}」作為子網域前綴。
+                        會使用「{normalizeDomainLabel(watchedHostname) || "app"}
+                        」作為子網域前綴。
                       </p>
                     ) : null}
-                    {accessMode === "public-website" && !canAutoCreateWebsite ? (
-                      <p>目前反向代理或 DNS 尚未完成設定，暫時不能自動建立公開網站。</p>
+                    {accessMode === "public-website" &&
+                    !canAutoCreateWebsite ? (
+                      <p>
+                        目前反向代理或 DNS
+                        尚未完成設定，暫時不能自動建立公開網站。
+                      </p>
                     ) : null}
                     {firewallPreset === "internal" ? (
                       <p>內部模式不會自動建立對外公開規則。</p>
@@ -836,8 +905,19 @@ export function ResourceCreatePage({
                     </TabsList>
                   )}
 
-                  <TabsContent value="lxc" className={isQuickStartMode ? "space-y-6" : "mt-6 space-y-6"}>
-                    <div className={isQuickStartMode ? "rounded-xl border border-border/60 bg-card p-5 space-y-5" : "space-y-5"}>
+                  <TabsContent
+                    value="lxc"
+                    className={
+                      isQuickStartMode ? "space-y-6" : "mt-6 space-y-6"
+                    }
+                  >
+                    <div
+                      className={
+                        isQuickStartMode
+                          ? "rounded-xl border border-border/60 bg-card p-5 space-y-5"
+                          : "space-y-5"
+                      }
+                    >
                       {isQuickStartMode && (
                         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                           基本設定

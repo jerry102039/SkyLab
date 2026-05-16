@@ -6,10 +6,10 @@ import {
   Globe,
   GraduationCap,
   LayoutTemplate,
+  type LucideIcon,
   Plus,
   Terminal,
   Zap,
-  type LucideIcon,
 } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -29,11 +29,15 @@ import {
 // Tailwind full-string classes required for v4 scanner
 type CourseIconConfig = { Icon: LucideIcon; wrap: string; color: string }
 const COURSE_ICON: Record<string, CourseIconConfig> = {
-  database: { Icon: Database,     wrap: "bg-blue-500/15",   color: "text-blue-400" },
-  terminal: { Icon: Terminal,     wrap: "bg-zinc-500/15",   color: "text-zinc-400" },
-  flask:    { Icon: FlaskConical, wrap: "bg-orange-500/15", color: "text-orange-400" },
-  globe:    { Icon: Globe,        wrap: "bg-emerald-500/15",color: "text-emerald-400" },
-  monitor:  { Icon: Activity,     wrap: "bg-amber-500/15",  color: "text-amber-400" },
+  database: { Icon: Database, wrap: "bg-blue-500/15", color: "text-blue-400" },
+  terminal: { Icon: Terminal, wrap: "bg-zinc-500/15", color: "text-zinc-400" },
+  flask: {
+    Icon: FlaskConical,
+    wrap: "bg-orange-500/15",
+    color: "text-orange-400",
+  },
+  globe: { Icon: Globe, wrap: "bg-emerald-500/15", color: "text-emerald-400" },
+  monitor: { Icon: Activity, wrap: "bg-amber-500/15", color: "text-amber-400" },
 }
 
 export const Route = createFileRoute("/_layout/")({
@@ -185,7 +189,9 @@ function Dashboard() {
 
   const isAdmin = currentUser?.is_superuser || currentUser?.role === "admin"
   const canApply =
-    isAdmin || currentUser?.role === "teacher" || currentUser?.role === "student"
+    isAdmin ||
+    currentUser?.role === "teacher" ||
+    currentUser?.role === "student"
 
   const filteredTemplates =
     activeCategory === "all"
@@ -235,7 +241,10 @@ function Dashboard() {
       {isAdmin && (
         <section aria-labelledby="courses-heading">
           <div className="mb-4 flex items-center gap-2">
-            <GraduationCap className="h-4 w-4 text-primary" aria-hidden="true" />
+            <GraduationCap
+              className="h-4 w-4 text-primary"
+              aria-hidden="true"
+            />
             <h2
               id="courses-heading"
               className="text-sm font-semibold tracking-tight text-foreground"
@@ -246,7 +255,7 @@ function Dashboard() {
               {QUICK_START_COURSES.length}
             </span>
           </div>
-          <ul className="grid gap-3 sm:grid-cols-2" role="list" aria-label="課程推薦">
+          <ul className="grid gap-3 sm:grid-cols-2" aria-label="課程推薦">
             {QUICK_START_COURSES.map((course) => (
               <CourseCard key={course.id} course={course} />
             ))}
@@ -276,34 +285,32 @@ function Dashboard() {
             role="tablist"
             aria-label="篩選類別"
           >
-            {[{ id: "all", title: "全部" }, ...QUICK_START_TEMPLATE_CATEGORIES].map(
-              (cat) => {
-                const isActive = activeCategory === cat.id
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`inline-flex h-8 items-center rounded-full px-3.5 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "border border-border/60 bg-transparent text-muted-foreground hover:border-primary/30 hover:text-foreground"
-                    }`}
-                  >
-                    {cat.title}
-                  </button>
-                )
-              },
-            )}
+            {[
+              { id: "all", title: "全部" },
+              ...QUICK_START_TEMPLATE_CATEGORIES,
+            ].map((cat) => {
+              const isActive = activeCategory === cat.id
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`inline-flex h-8 items-center rounded-full px-3.5 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "border border-border/60 bg-transparent text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                  }`}
+                >
+                  {cat.title}
+                </button>
+              )
+            })}
           </div>
 
           {/* Template grid */}
-          <ul
-            className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
-            role="list"
-          >
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {filteredTemplates.map((template) => (
               <TemplateCard
                 key={template.slug}
@@ -331,7 +338,7 @@ function Dashboard() {
             </p>
           </div>
 
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" role="list">
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {QUICK_START_TEMPLATE_CATEGORIES.map((category) => (
               <li key={category.id}>
                 <Link
