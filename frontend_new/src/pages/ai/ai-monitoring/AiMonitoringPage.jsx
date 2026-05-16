@@ -45,6 +45,15 @@ function formatDuration(ms) {
   return `${ms}ms`;
 }
 
+function isOkStatus(status) {
+  return (
+    status === "success" ||
+    status === 200 ||
+    status === "200" ||
+    status === "ok"
+  );
+}
+
 function EmptyState({ icon, title, desc }) {
   return (
     <div className={styles.empty}>
@@ -58,7 +67,7 @@ function EmptyState({ icon, title, desc }) {
 }
 
 function StatusBadge({ status }) {
-  const ok = status === "success" || status === 200 || status === "ok";
+  const ok = isOkStatus(status);
   return (
     <span className={`${styles.badge} ${ok ? styles.badge_ok : styles.badge_err}`}>
       <span className={styles.dot} />
@@ -111,16 +120,10 @@ export default function AiMonitoringPage() {
       (statsData.proxy_total_output_tokens ?? 0) +
       (statsData.template_total_input_tokens ?? 0) +
       (statsData.template_total_output_tokens ?? 0);
-    const allCalls = [...proxyCalls, ...templateCalls];
-    const failed = allCalls.filter((c) => c.status && c.status !== "success").length;
-    const successRate = allCalls.length === 0 ? 100 : Math.round(((allCalls.length - failed) / allCalls.length) * 100);
-    const withDur = allCalls.filter((c) => c.request_duration_ms != null);
-    const avgLatency =
-      withDur.length === 0
-        ? 0
-        : Math.round(withDur.reduce((s, c) => s + c.request_duration_ms, 0) / withDur.length);
+    const successRate = statsData.success_rate ?? 100;
+    const avgLatency = statsData.avg_latency_ms ?? 0;
     return { totalCalls, totalTokens, successRate, avgLatency };
-  }, [statsData, proxyCalls, templateCalls]);
+  }, [statsData]);
 
   const visibleCalls = useMemo(() => {
     const source = tab === "proxy" ? proxyCalls : templateCalls;

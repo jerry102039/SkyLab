@@ -9,13 +9,22 @@ const COLUMNS = ["Mapping", "描述", "節點 / PCI", "可用 / 總數", "使用
 /* 將 backend GPUMappingDetail 攤平為前端列 */
 function flattenMappings(mappings) {
   return mappings.map((m) => {
-    const firstMap = m.maps?.[0];
+    const mapEntries = (m.maps ?? []).map((entry, index) => ({
+      key: `${entry.node ?? "node"}-${entry.path ?? "path"}-${entry.id ?? index}`,
+      node: entry.node ?? "—",
+      pci: entry.path ?? "—",
+    }));
+    const nodes = [
+      ...new Set(mapEntries.map((entry) => entry.node).filter((node) => node !== "—")),
+    ];
+    const pciPaths = mapEntries.map((entry) => entry.pci).filter((path) => path !== "—");
     return {
       id: m.id,
       mapping: m.id,
       description: m.description,
-      node: firstMap?.node ?? "—",
-      pci: firstMap?.path ?? "—",
+      node: nodes.join(", ") || "—",
+      pci: pciPaths.join(", ") || "—",
+      mapEntries,
       device_count: m.device_count,
       used_count: m.used_count,
       available_count: m.available_count,
@@ -127,7 +136,12 @@ export default function GpuMgmtPage() {
         (n.mapping ?? "").toLowerCase().includes(q) ||
         (n.description ?? "").toLowerCase().includes(q) ||
         (n.node ?? "").toLowerCase().includes(q) ||
-        (n.pci ?? "").toLowerCase().includes(q),
+        (n.pci ?? "").toLowerCase().includes(q) ||
+        n.mapEntries.some(
+          (entry) =>
+            entry.node.toLowerCase().includes(q) ||
+            entry.pci.toLowerCase().includes(q),
+        ),
     );
   }, [rows, filter]);
 
@@ -220,8 +234,18 @@ export default function GpuMgmtPage() {
                     </td>
                     <td className={styles.td}>{n.description || "—"}</td>
                     <td className={styles.td}>
-                      <div>{n.node}</div>
-                      <code className={styles.code}>{n.pci}</code>
+                      {n.mapEntries.length === 0 ? (
+                        <span className={styles.muted}>—</span>
+                      ) : (
+                        <div className={styles.mapList}>
+                          {n.mapEntries.map((entry) => (
+                            <div key={entry.key} className={styles.mapEntry}>
+                              <span className={styles.mapNode}>{entry.node}</span>
+                              <code className={styles.code}>{entry.pci}</code>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className={styles.td}>
                       {n.available_count} / {n.device_count}

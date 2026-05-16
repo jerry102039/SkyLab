@@ -31,14 +31,21 @@ let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
 
 function loadPermanentDismissals(): Record<number, string> {
   try {
-    return JSON.parse(localStorage.getItem(LS_KEY) ?? "{}") as Record<number, string>;
+    return JSON.parse(localStorage.getItem(LS_KEY) ?? "{}") as Record<
+      number,
+      string
+    >;
   } catch {
     return {};
   }
 }
 
 function savePermanentDismissals(store: Record<number, string>) {
-  localStorage.setItem(LS_KEY, JSON.stringify(store));
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(store));
+  } catch {
+    // Keep warning processing alive even when localStorage is unavailable.
+  }
 }
 
 function warningKey(status: CampusCloudSessionStatus): string {
@@ -93,7 +100,9 @@ export const useAppStore = defineStore("app", {
         this.resources = Array.isArray(data) ? data : [];
       });
       on(ipcRouters.SESSION.getSessionStatuses, data => {
-        const next: CampusCloudSessionStatus[] = Array.isArray(data) ? data : [];
+        const next: CampusCloudSessionStatus[] = Array.isArray(data)
+          ? data
+          : [];
         this.sessionStatuses = next;
         // Forget in-memory dismissals once should_warn goes false.
         this.dismissedWarnings = this.dismissedWarnings.filter(vmid => {
