@@ -321,7 +321,7 @@ def create_lxc(
                 vm_type="lxc",
             )
         except Exception:
-            logger.warning("Failed to register tunnel proxies for LXC %d", vmid, exc_info=True)
+            logger.warning("Failed to register tunnel proxies for LXC %s", vmid, exc_info=True)
 
         logger.info(f"Created LXC container {vmid}: {lxc_data.hostname}")
         return LXCCreateResponse(

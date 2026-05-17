@@ -51,6 +51,7 @@ def register_vm(
     Creates SSH proxy for all VMs; adds RDP proxy for qemu VMs.
     Then syncs the Gateway frpc.toml.
     """
+    vmid = int(vmid)
     existing = tp_repo.get_proxies_by_vmid(session=session, vmid=vmid)
     if existing:
         logger.info("VM %d already has %d tunnel proxies, skipping", vmid, len(existing))
@@ -89,6 +90,7 @@ def register_vm(
 
 def unregister_vm(*, session: Session, vmid: int) -> int:
     """Remove all tunnel proxies for a VM and sync Gateway."""
+    vmid = int(vmid)
     count = tp_repo.delete_proxies_by_vmid(session=session, vmid=vmid)
     if count:
         try:
