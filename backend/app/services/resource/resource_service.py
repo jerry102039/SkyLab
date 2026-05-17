@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -605,7 +606,7 @@ def get_session_status(
     - ``warn_reason="auto_stop"``: VM has an ``auto_stop_at`` within the
       configured warning window (group practice quota or course-window grace).
     - ``warn_reason="expiry"``: VM's ``expiry_date`` is within
-      :data:`EXPIRY_WARNING_HOURS` (defaults to 24h).
+      ``policy.expiry_warning_hours`` (admin-configurable, defaults to 24 h).
 
     auto_stop wins when both apply, since it's typically minutes away while
     expiry is at least hours.
@@ -632,7 +633,7 @@ def get_session_status(
             resource.expiry_date, datetime.min.time(), tzinfo=UTC
         ) + timedelta(days=1)
         delta_h = (expiry_at - _utc_now()).total_seconds() / 3600
-        hours_until_expiry = max(int(delta_h), 0)
+        hours_until_expiry = max(math.ceil(delta_h), 0)
         expiry_warn = 0 < delta_h <= policy.expiry_warning_hours
 
     # auto_stop is more urgent (minutes vs hours), so it takes priority.
