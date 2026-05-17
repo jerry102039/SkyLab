@@ -32,6 +32,7 @@ from .proxmox_config import ProxmoxConfig
 from .proxmox_node import ProxmoxNode
 from .proxmox_storage import ProxmoxStorage
 from .resource import Resource
+from .resource_network import ResourceNetwork
 from .reverse_proxy_rule import ReverseProxyRule
 from .script_deploy_log import ScriptDeployLog
 from .spec_change_request import (
@@ -62,6 +63,7 @@ __all__ = [
     "AITemplateCallLog",
     # Resource
     "Resource",
+    "ResourceNetwork",
     "VMMigrationJob",
     "VMMigrationJobStatus",
     # VM Request

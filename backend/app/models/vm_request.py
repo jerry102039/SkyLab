@@ -36,6 +36,12 @@ class VMRequest(SQLModel, table=True):
     __table_args__ = (
         sa.Index("ix_vm_requests_next_window_end", "next_window_end"),
         sa.Index("ix_vm_requests_next_window_start", "next_window_start"),
+        sa.Index("ix_vm_requests_user_id", "user_id"),
+        sa.Index("ix_vm_requests_vmid", "vmid"),
+        sa.Index("ix_vm_requests_user_status_created", "user_id", "status", "created_at"),
+        sa.Index("ix_vm_requests_status_created", "status", "created_at"),
+        sa.Index("ix_vm_requests_schedule", "status", "start_at", "end_at"),
+        sa.Index("ix_vm_requests_gpu_window", "gpu_mapping_id", "start_at", "end_at"),
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

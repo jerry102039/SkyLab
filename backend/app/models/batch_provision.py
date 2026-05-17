@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 
 import sqlalchemy as sa
-from sqlmodel import Column, DateTime, Enum, Field, SQLModel
+from sqlmodel import Column, DateTime, Enum, Field, SQLModel, UniqueConstraint
 
 
 class BatchProvisionJobStatus(str, enum.Enum):
@@ -91,6 +91,9 @@ class BatchProvisionTask(SQLModel, table=True):
     """批量工作中的單一成員建立任務"""
 
     __tablename__ = "batch_provision_tasks"
+    __table_args__ = (
+        UniqueConstraint("job_id", "user_id", name="uq_batch_tasks_job_user"),
+    )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     job_id: uuid.UUID = Field(

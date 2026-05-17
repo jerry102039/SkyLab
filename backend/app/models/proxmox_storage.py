@@ -1,12 +1,15 @@
 """Proxmox Storage 設定模型"""
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, UniqueConstraint
 
 
 class ProxmoxStorage(SQLModel, table=True):
     """每個節點的 Storage pool 設定（含 simulator 用的速度分級與優先級）"""
 
     __tablename__ = "proxmox_storages"
+    __table_args__ = (
+        UniqueConstraint("node_name", "storage", name="uq_proxmox_storages_node_storage"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     node_name: str = Field(max_length=255)       # 所屬節點名稱（如 "pve"）

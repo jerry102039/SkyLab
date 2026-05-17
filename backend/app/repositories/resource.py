@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlmodel import Session, select
 
-from app.models import Resource
+from app.models import Resource, ResourceNetwork
 
 
 def create_resource(
@@ -20,10 +20,12 @@ def create_resource(
     ssh_public_key: str | None = None,
     service_template_slug: str | None = None,
     batch_job_id: uuid.UUID | None = None,
+    request_id: uuid.UUID | None = None,
     commit: bool = True,
 ) -> Resource:
     db_resource = Resource(
         vmid=vmid,
+        request_id=request_id,
         user_id=user_id,
         environment_type=environment_type,
         os_info=os_info,
@@ -70,21 +72,39 @@ def update_resource(
 
 
 def update_ip_address(*, session: Session, vmid: int, ip_address: str) -> None:
-    """更新 VM 的快取 IP 位址（不存在則忽略）"""
-    from datetime import datetime, timezone
-
+    """Update the resource IP cache and mirror it into resource_networks."""
     resource = get_resource_by_vmid(session=session, vmid=vmid)
-    if resource and resource.ip_address != ip_address:
+    if resource is None:
+        return
+
+    now = datetime.now(timezone.utc)
+    if resource.ip_address != ip_address:
         resource.ip_address = ip_address
-        resource.ip_address_cached_at = datetime.now(timezone.utc)
+        resource.ip_address_cached_at = now
         session.add(resource)
-        session.flush()
+
+    network = session.exec(
+        select(ResourceNetwork).where(ResourceNetwork.resource_vmid == vmid)
+    ).first()
+    if network is None:
+        network = ResourceNetwork(
+            resource_vmid=vmid,
+            ip_address=ip_address,
+            source="proxmox",
+            cached_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+    else:
+        network.ip_address = ip_address
+        network.source = "proxmox"
+        network.cached_at = now
+        network.updated_at = now
+    session.add(network)
+    session.flush()
 
 
 def is_ip_address_fresh(*, session: Session, vmid: int, ttl_seconds: int = 3600) -> bool:
-    """檢查快取的 IP 位址是否仍在有效期內"""
-    from datetime import datetime, timezone
-
     resource = get_resource_by_vmid(session=session, vmid=vmid)
     if not resource or not resource.ip_address or not resource.ip_address_cached_at:
         return False
@@ -110,11 +130,7 @@ def set_auto_stop(
     auto_stop_reason: str | None,
     commit: bool = True,
 ) -> Resource | None:
-    """Update or clear the auto-stop schedule for a resource.
-
-    Pass ``auto_stop_at=None`` to clear the schedule (e.g. when the student
-    manually stops the VM).
-    """
+    """Update or clear the auto-stop schedule for a resource."""
     resource = get_resource_by_vmid(session=session, vmid=vmid)
     if resource is None:
         return None
@@ -130,8 +146,6 @@ def set_auto_stop(
 
 
 def list_due_auto_stops(*, session: Session, now: datetime) -> list[Resource]:
-    """Resources whose ``auto_stop_at`` has elapsed; the scheduler shuts these
-    down on the next tick."""
     stmt = select(Resource).where(
         Resource.auto_stop_at.isnot(None),  # type: ignore[union-attr]
         Resource.auto_stop_at <= now,

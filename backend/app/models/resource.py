@@ -9,14 +9,31 @@ from sqlmodel import Column, DateTime, Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from .user import User
+    from .vm_request import VMRequest
 
 
 class Resource(SQLModel, table=True):
     """資源額外信息表，儲存VM/Container的環境類型、到期日等資訊."""
 
     __tablename__ = "resources"
+    __table_args__ = (
+        sa.Index("ix_resources_user_id", "user_id"),
+        sa.Index("ix_resources_user_created", "user_id", "created_at"),
+        sa.Index("ix_resources_auto_stop_at", "auto_stop_at"),
+    )
 
     vmid: int = Field(primary_key=True, description="VM/Container ID")
+    request_id: uuid.UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            sa.Uuid,
+            sa.ForeignKey("vm_requests.id", ondelete="SET NULL"),
+            nullable=True,
+            unique=True,
+            index=True,
+        ),
+        description="VM request that provisioned this resource",
+    )
     user_id: uuid.UUID = Field(foreign_key="user.id", description="擁有者ID")
     environment_type: str = Field(
         description="環境類型，例如：Web開發標準版、LLM微調環境等"
@@ -67,6 +84,7 @@ class Resource(SQLModel, table=True):
 
     # Relationship
     user: Optional["User"] = Relationship(back_populates="resources")
+    request: Optional["VMRequest"] = Relationship()
 
 
 __all__ = [
