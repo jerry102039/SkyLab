@@ -43,6 +43,11 @@ class Resource(SQLModel, table=True):
         default=None,
         description="Service template slug",
     )
+    ip_address: str | None = Field(default=None, max_length=64)
+    ip_address_cached_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
     ssh_private_key_encrypted: str | None = Field(
         default=None,
         description="Encrypted private SSH key",

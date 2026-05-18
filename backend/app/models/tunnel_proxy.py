@@ -23,7 +23,15 @@ class TunnelProxy(SQLModel, table=True):
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    vmid: int = Field(index=True, description="PVE VMID")
+    vmid: int = Field(
+        sa_column=Column(
+            sa.Integer,
+            sa.ForeignKey("resources.vmid", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+        description="PVE VMID",
+    )
     resource_vmid: int | None = Field(
         default=None,
         sa_column=Column(

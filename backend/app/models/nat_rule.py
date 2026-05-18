@@ -25,8 +25,15 @@ class NatRule(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     ssh_host: str = Field(max_length=255, description="PVE host where the rule is applied")
 
-    # vmid is kept for API compatibility and historical snapshots.
-    vmid: int = Field(index=True, description="Target VM ID")
+    vmid: int = Field(
+        sa_column=sa.Column(
+            sa.Integer,
+            sa.ForeignKey("resources.vmid", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+        description="Target VM ID",
+    )
     resource_vmid: int | None = Field(
         default=None,
         sa_column=sa.Column(
