@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     disable_custom_all_reduce: bool = Field(default=False, description="停用自定義 all-reduce (提高穩定性)")
     quantization: str = Field(default="", description="量化方法 (awq, gptq, fp8 等)")
     kv_cache_dtype: str = Field(default="", description="KV Cache 資料類型 (auto, fp8 等)；空值表示交由 vLLM 自動選擇")
+    speculative_config: str = Field(
+        default="",
+        description="Speculative decoding 設定 (JSON 字串)，對應 --speculative-config",
+    )
     vllm_nvfp4_gemm_backend: str = Field(default="", description="NVFP4 GEMM backend (如 marlin)；空值表示交由 vLLM 自動選擇")
     enable_auto_tool_choice: bool = Field(default=False, description="啟用自動工具呼叫 (Function Calling / Tool Use)")
     tool_call_parser: str = Field(default="", description="工具呼叫解析器 (openai, mistral, hermes, llama3_json 等)")
@@ -177,7 +181,7 @@ class Settings(BaseSettings):
     _cached_model_path: str | None = None
 
     @field_validator(
-        "quantization", "tool_call_parser", "kv_cache_dtype",
+        "quantization", "tool_call_parser", "kv_cache_dtype", "speculative_config",
         "vllm_nvfp4_gemm_backend", "reasoning_parser",
         "chat_template", "limit_mm_per_prompt", "moe_backend",
         mode="before",
@@ -283,6 +287,8 @@ class Settings(BaseSettings):
             args.extend(["--quantization", self.quantization])
         if self.kv_cache_dtype:
             args.extend(["--kv-cache-dtype", self.kv_cache_dtype])
+        if self.speculative_config:
+            args.extend(["--speculative-config", self.speculative_config])
         if self.allowed_local_media_path:
             args.extend(["--allowed-local-media-path", self.allowed_local_media_path])
         if self.enable_auto_tool_choice:
@@ -309,7 +315,11 @@ class Settings(BaseSettings):
         os.environ.setdefault("HF_HUB_CACHE", self.hf_cache_dir)
         os.environ.setdefault("HUGGING_FACE_HUB_TOKEN", "")
         os.environ.setdefault("HF_HUB_OFFLINE", str(self.hf_hub_offline))
-        os.environ.setdefault("VLLM_USAGE_STATS_ENABLED", str(self.vllm_usage_stats_enabled))
+        os.environ.pop("VLLM_USAGE_STATS_ENABLED", None)
+        os.environ.setdefault(
+            "VLLM_NO_USAGE_STATS",
+            "0" if self.vllm_usage_stats_enabled else "1",
+        )
         os.environ.setdefault("TOKENIZERS_PARALLELISM", str(self.tokenizers_parallelism).lower())
         
         # Triton/CUDA 設定 - 對 Blackwell 等新 GPU 至關重要
