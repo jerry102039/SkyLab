@@ -73,7 +73,21 @@ python main.py --no-wait       # 不等待 health 直接啟動
 python main.py --skip-check    # 跳過 pre-flight 檢查
 ```
 
-### 4. 呼叫模型
+### 4. Linux 背景啟動 / 停止
+
+```bash
+chmod +x start_main_bg.sh stop_main_bg.sh
+
+./start_main_bg.sh
+tail -f main.log
+
+./stop_main_bg.sh
+```
+
+- 啟動後會在專案根目錄建立 `.main.pid`（記錄背景程序 PID）
+- 日誌輸出至 `main.log`
+
+### 5. 呼叫模型
 
 ```bash
 python tools/call_model.py
@@ -111,7 +125,7 @@ curl http://localhost:8000/v1/chat/completions \
   }'
 ```
 
-### 5. 執行 Benchmark
+### 6. 執行 Benchmark
 
 #### 簡易 async benchmark
 
