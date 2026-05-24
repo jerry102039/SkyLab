@@ -325,11 +325,10 @@ def apply_reverse_proxy_rule(
     enable_https: bool = True,
 ) -> None:
     """建立反向代理規則：寫入 DB + 同步 Traefik。"""
+    from app.models import Resource  # noqa: PLC0415
     from app.models.reverse_proxy_rule import ReverseProxyRule  # noqa: PLC0415
     from app.repositories import reverse_proxy as rp_repo  # noqa: PLC0415
     from app.services.network import cloudflare_service  # noqa: PLC0415
-
-    from app.models import Resource  # noqa: PLC0415
 
     ensure_reverse_proxy_ready(session)
 
