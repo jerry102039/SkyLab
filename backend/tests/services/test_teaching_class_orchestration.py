@@ -552,6 +552,48 @@ def test_sync_scope_rules_skips_machines_that_no_longer_exist(monkeypatch):
     ) == []
 
 
+def test_ensure_firewall_enabled_restores_a_weakened_inbound_policy(monkeypatch):
+    """防火牆開著但 policy_in 被改成 ACCEPT，隔離就整個失效。"""
+    from app.services.network import firewall_service
+
+    applied: list[dict] = []
+    monkeypatch.setattr(
+        firewall_service,
+        "get_firewall_options",
+        lambda _node, _vmid, _type: {"enable": 1, "policy_in": "ACCEPT"},
+    )
+    monkeypatch.setattr(
+        firewall_service,
+        "_set_firewall_options",
+        lambda _node, _vmid, _type, **kwargs: applied.append(kwargs),
+    )
+
+    firewall_service.ensure_firewall_enabled("pve1", 101, "qemu")
+
+    assert applied == [{"policy_in": "DROP"}]
+
+
+def test_ensure_firewall_enabled_leaves_a_healthy_machine_alone(monkeypatch):
+    """policy_in 沒有值代表沿用 PVE 預設的 DROP，不必動它。"""
+    from app.services.network import firewall_service
+
+    applied: list[dict] = []
+    monkeypatch.setattr(
+        firewall_service,
+        "get_firewall_options",
+        lambda _node, _vmid, _type: {"enable": 1},
+    )
+    monkeypatch.setattr(
+        firewall_service,
+        "_set_firewall_options",
+        lambda _node, _vmid, _type, **kwargs: applied.append(kwargs),
+    )
+
+    firewall_service.ensure_firewall_enabled("pve1", 101, "qemu")
+
+    assert applied == []
+
+
 def test_course_environment_accepts_template_and_custom_nodes_with_three_node_limit():
     template_id = uuid.uuid4()
     body = EnvironmentCreate(
