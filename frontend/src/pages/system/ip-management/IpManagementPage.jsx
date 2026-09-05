@@ -266,6 +266,9 @@ export default function IpManagementPage() {
                   <tr key={a.ip_address} className={styles.tr}>
                     <td className={styles.td}>
                       <div className={styles.nameCell}>
+                        <div className={styles.nameIcon}>
+                          <MIcon name="device_hub" size={18} />
+                        </div>
                         <div>
                           <div className={styles.namePrimary}>{a.ip_address}</div>
                         </div>

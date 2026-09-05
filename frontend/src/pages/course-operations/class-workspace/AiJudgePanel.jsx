@@ -8,6 +8,7 @@ import { useToast } from "../../../hooks/useToast";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import { downloadBlob } from "../../../services/api";
+import { focusInvalidField } from "../../../utils/focusField";
 import { createRubricAnalysisAutosave } from "./rubricAnalysisAutosave";
 import {
   AiJudgeService,
@@ -818,6 +819,12 @@ function CreateCheckForm({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [conflictFile, setConflictFile] = useState(null);
+  const [invalid, setInvalid] = useState({});
+  const weekSelectRef = useRef(null);
+  const modeGroupRef = useRef(null);
+  const rubricNameRef = useRef(null);
+  const envGroupRef = useRef(null);
+  const existingListRef = useRef(null);
 
   useEffect(() => {
     if (mode !== "existing") {
@@ -847,10 +854,12 @@ function CreateCheckForm({
     setEnvironmentKeys((current) => current.includes(key)
       ? current.filter((item) => item !== key)
       : [...current, key]);
+    setInvalid((v) => ({ ...v, envKeys: false }));
   }
 
   function handleModeChange(nextMode) {
     setMode(nextMode);
+    setInvalid((v) => ({ ...v, mode: false }));
     setError("");
     if (nextMode === "existing") {
       setEnvironmentKeys((current) => current.length ? current : ["linux"]);
@@ -861,6 +870,8 @@ function CreateCheckForm({
     if (!file) return;
     if (!selectedWeekId) {
       setError("請先選擇這份檢查要放入的週任務。");
+      setInvalid((v) => ({ ...v, week: true }));
+      focusInvalidField(weekSelectRef.current);
       return;
     }
     const requestVersion = requestVersionRef.current;
@@ -915,13 +926,25 @@ function CreateCheckForm({
 
   async function submit(event) {
     event.preventDefault();
-    if (!mode) return;
-    if (!selectedWeekId) {
-      setError("請先選擇這份檢查要放入的週任務。");
+    const missing = {
+      week: !selectedWeekId,
+      mode: !mode,
+      rubricName: mode === "blank" && !rubricName.trim(),
+      envKeys: mode === "blank" && !environmentKeys.length,
+      file: mode === "existing" && !selectedFileId,
+    };
+    if (Object.values(missing).some(Boolean)) {
+      setInvalid(missing);
+      if (missing.week) {
+        setError("請先選擇這份檢查要放入的週任務。");
+        focusInvalidField(weekSelectRef.current);
+      }
+      else if (missing.mode) focusInvalidField(modeGroupRef.current?.querySelector("input"));
+      else if (missing.rubricName) focusInvalidField(rubricNameRef.current);
+      else if (missing.envKeys) focusInvalidField(envGroupRef.current?.querySelector("input"));
+      else focusInvalidField(existingListRef.current?.querySelector("input"));
       return;
     }
-    if (mode === "blank" && (!rubricName.trim() || !environmentKeys.length)) return;
-    if (mode === "existing" && !selectedFileId) return;
     setCreating(true);
     setError("");
     try {
@@ -962,7 +985,7 @@ function CreateCheckForm({
       <form onSubmit={submit}>
         <label className={styles.dialogField}>
           <span>放到哪一週任務？</span>
-          <select value={selectedWeekId} onChange={(event) => setSelectedWeekId(event.target.value)} required>
+          <select ref={weekSelectRef} className={invalid.week ? styles.fieldInvalid : undefined} value={selectedWeekId} onChange={(event) => { setSelectedWeekId(event.target.value); setInvalid((v) => ({ ...v, week: false })); }}>
             <option value="" disabled>{availableWeeks.length ? "請選擇週任務" : "請先建立有名稱的週任務"}</option>
             {availableWeeks.map((week) => <option key={week.id} value={week.id}>第 {week.week ?? week.week_number} 週 · {week.title}{["published", "completed"].includes(week.status) ? "" : "（草稿）"}</option>)}
           </select>
@@ -971,7 +994,7 @@ function CreateCheckForm({
 
         {!embedded && <fieldset className={styles.modeFieldset}>
           <legend>如何建立評分表？</legend>
-          <div className={styles.modeChoices}>
+          <div ref={modeGroupRef} className={`${styles.modeChoices} ${invalid.mode ? styles.groupInvalid : ""}`}>
             <label className={mode === "blank" ? styles.modeChoiceActive : styles.modeChoice}>
               <input type="radio" name="creation-mode" checked={mode === "blank"} onChange={() => handleModeChange("blank")} />
               <span><b>從零開始建立</b><small>建立空白評分表，接著手動新增項目或請 AI 產生初稿。</small></span>
@@ -986,11 +1009,11 @@ function CreateCheckForm({
         {mode === "blank" && <div className={styles.modeFields}>
           <label className={styles.dialogField}>
             <span>評分表名稱</span>
-            <input autoFocus value={rubricName} maxLength={255} placeholder="例如：期中 Python 評分表" onChange={(event) => setRubricName(event.target.value)} />
+            <input ref={rubricNameRef} className={invalid.rubricName ? styles.fieldInvalid : undefined} autoFocus value={rubricName} maxLength={255} placeholder="例如：期中 Python 評分表" onChange={(event) => { setRubricName(event.target.value); setInvalid((v) => ({ ...v, rubricName: false })); }} />
           </label>
           <fieldset className={styles.modeFieldset}>
             <legend>評分環境（可複選）</legend>
-            <div className={styles.dialogChips}>{TEMPLATE_OPTIONS.map((option) => <label key={option.key} className={environmentKeys.includes(option.key) ? styles.dialogChipActive : styles.dialogChip}><input type="checkbox" checked={environmentKeys.includes(option.key)} onChange={() => toggleEnvironment(option.key)} disabled={creating} />{option.label}</label>)}</div>
+            <div ref={envGroupRef} className={`${styles.dialogChips} ${invalid.envKeys ? styles.groupInvalid : ""}`}>{TEMPLATE_OPTIONS.map((option) => <label key={option.key} className={environmentKeys.includes(option.key) ? styles.dialogChipActive : styles.dialogChip}><input type="checkbox" checked={environmentKeys.includes(option.key)} onChange={() => toggleEnvironment(option.key)} disabled={creating} />{option.label}</label>)}</div>
           </fieldset>
         </div>}
 
@@ -1006,7 +1029,7 @@ function CreateCheckForm({
           </div>
           <div className={styles.savedRubricBlock}>
             <div className={styles.existingPickerHead}><div><span>或選擇已保存評分表</span><small>每份來源只能綁定一個檢查；若要重構，請使用「重構」。</small></div></div>
-            {files.length ? <div className={styles.existingList}>{files.map((file) => <label key={file.id} className={selectedFileId === file.id ? styles.existingRowActive : styles.existingRow}><input type="radio" name="saved-rubric" checked={selectedFileId === file.id} onChange={() => setSelectedFileId(file.id)} /><span><b>{getRubricDisplayName(file, "未命名評分表")}</b><small>{(file.environment_keys?.length ? file.environment_keys : [file.template_key]).map(getTemplateLabel).join("、")} · {file.analysis_json?.items?.length ?? 0} 項 · {formatDateTime(file.updated_at)}</small></span></label>)}</div> : <p className={styles.mutedText}>尚未有可用的評分表。</p>}
+            {files.length ? <div ref={existingListRef} className={`${styles.existingList} ${invalid.file ? styles.groupInvalid : ""}`}>{files.map((file) => <label key={file.id} className={selectedFileId === file.id ? styles.existingRowActive : styles.existingRow}><input type="radio" name="saved-rubric" checked={selectedFileId === file.id} onChange={() => { setSelectedFileId(file.id); setInvalid((v) => ({ ...v, file: false })); }} /><span><b>{getRubricDisplayName(file, "未命名評分表")}</b><small>{(file.environment_keys?.length ? file.environment_keys : [file.template_key]).map(getTemplateLabel).join("、")} · {file.analysis_json?.items?.length ?? 0} 項 · {formatDateTime(file.updated_at)}</small></span></label>)}</div> : <p className={styles.mutedText}>尚未有可用的評分表。</p>}
           </div>
           {conflictFile && <div className={styles.conflictActions} role="alert"><span>「{conflictFile.name}」已存在：</span><button type="button" className={styles.btnSecondary} disabled={uploading || creating} onClick={() => uploadFile(conflictFile, "copy")}>建立副本</button><button type="button" className={styles.btnDanger} disabled={uploading || creating} onClick={() => uploadFile(conflictFile, "overwrite")}>覆蓋原本</button><button type="button" className={styles.iconBtn} aria-label="取消同名處理" onClick={() => setConflictFile(null)}><MIcon name="close" size={16} /></button></div>}
         </div>}
@@ -1014,7 +1037,7 @@ function CreateCheckForm({
         {error && <p className={styles.dialogError} role="alert">{error}</p>}
         <div className={styles.modalActions}>
           {!embedded && <button type="button" className={styles.btnSecondary} disabled={creating || uploading} onClick={onClose}>取消</button>}
-          {(mode === "blank" || (mode === "existing" && selectedFileId)) && <button type="submit" className={styles.btnPrimary} disabled={!mode || !selectedWeekId || (mode === "blank" ? !rubricName.trim() || !environmentKeys.length : !selectedFileId) || creating || uploading}>{creating ? <><Spinner size={15} />建立中…</> : mode === "blank" ? "建立檢查" : "使用這份評分表"}</button>}
+          {(mode === "blank" || (mode === "existing" && selectedFileId)) && <button type="submit" className={styles.btnPrimary} disabled={creating || uploading}>{creating ? <><Spinner size={15} />建立中…</> : mode === "blank" ? "建立檢查" : "使用這份評分表"}</button>}
           {mode === "existing" && !selectedFileId && <p className={styles.uploadAutoHint}>選擇已保存的評分表後按「使用這份評分表」；上傳文件後會自動分析並建立檢查。</p>}
         </div>
       </form>
@@ -2652,6 +2675,8 @@ function TeacherWorkspacePanel({ classId, members, weeks = [] }) {
   const [busySessionIds, setBusySessionIds] = useState(() => new Set());
   const [renameTarget, setRenameTarget] = useState(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const [renameInvalid, setRenameInvalid] = useState(false);
+  const renameInputRef = useRef(null);
   const requestVersionRef = useRef(0);
   const classIdRef = useRef(classId);
   const closeSessionMenu = useCallback(() => {
@@ -2838,7 +2863,12 @@ function TeacherWorkspacePanel({ classId, members, weeks = [] }) {
   async function renameSession(event) {
     event.preventDefault();
     const nextTitle = renameTitle.trim();
-    if (!renameTarget || !nextTitle || busySessionIds.has(renameTarget.id)) return;
+    if (!renameTarget || busySessionIds.has(renameTarget.id)) return;
+    if (!nextTitle) {
+      setRenameInvalid(true);
+      focusInvalidField(renameInputRef.current);
+      return;
+    }
     const target = renameTarget;
     if (String(target.title ?? "").trim() === nextTitle) {
       setRenameTarget(null);
@@ -2865,6 +2895,7 @@ function TeacherWorkspacePanel({ classId, members, weeks = [] }) {
   function cancelRename() {
     setRenameTarget(null);
     setRenameTitle("");
+    setRenameInvalid(false);
   }
 
   function toggleSessionMenu(event, sessionId) {
@@ -2890,7 +2921,7 @@ function TeacherWorkspacePanel({ classId, members, weeks = [] }) {
         style={{ top: `${menuPos.top}px`, left: `${menuPos.left}px` }}
       >
         {item.status === "active" && <>
-          <button type="button" role="menuitem" disabled={busy} onClick={() => { setRenameTarget(item); setRenameTitle(item.title); closeSessionMenu(); }}><MIcon name="edit" size={16} />重新命名</button>
+          <button type="button" role="menuitem" disabled={busy} onClick={() => { setRenameTarget(item); setRenameTitle(item.title); setRenameInvalid(false); closeSessionMenu(); }}><MIcon name="edit" size={16} />重新命名</button>
           <button type="button" role="menuitem" disabled={busy} onClick={() => pinSession(item)}><MIcon name="push_pin" filled={Boolean(item.pinned_at)} size={16} />{item.pinned_at ? "取消釘選" : "釘選"}</button>
         </>}
         <button type="button" role="menuitem" disabled={busy} onClick={() => forkSession(item)}><MIcon name="fork_right" size={16} />重構</button>
@@ -2924,13 +2955,14 @@ function TeacherWorkspacePanel({ classId, members, weeks = [] }) {
                    {renaming ? (
                      <form className={styles.sessionRenameForm} onSubmit={renameSession} onClick={(event) => event.stopPropagation()}>
                        <input
-                         className={styles.sessionRenameInput}
+                         ref={renameInputRef}
+                         className={`${styles.sessionRenameInput} ${renameInvalid ? styles.fieldInvalid : ""}`}
                          autoFocus
                          value={renameTitle}
                          maxLength={255}
                          aria-label={`重新命名「${item.title}」`}
                          title="按 Enter 儲存，Esc 取消"
-                         onChange={(event) => setRenameTitle(event.target.value)}
+                         onChange={(event) => { setRenameTitle(event.target.value); setRenameInvalid(false); }}
                          onKeyDown={(event) => {
                            if (event.key === "Escape") {
                              event.preventDefault();

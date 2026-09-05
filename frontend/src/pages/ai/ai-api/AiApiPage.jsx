@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./AiApiPage.module.scss";
 import MIcon from "../../../components/MIcon";
@@ -7,6 +7,7 @@ import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import { AiApiService } from "../../../services/aiApi";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { useToast } from "../../../hooks/useToast";
+import { focusInvalidField } from "../../../utils/focusField";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
 /* ── helpers ── */
@@ -463,6 +464,8 @@ export default function AiApiPage() {
   const [purpose, setPurpose] = useState("");
   const [duration, setDuration] = useState("never");
   const [submitting, setSubmitting] = useState(false);
+  const [purposeInvalid, setPurposeInvalid] = useState(false);
+  const purposeInputRef = useRef(null);
 
   /* ── Data ── */
   const [credentials, setCredentials] = useState([]);
@@ -493,6 +496,11 @@ export default function AiApiPage() {
 
   /* ── Submit request ── */
   const handleSubmit = async () => {
+    if (purpose.trim().length < 10) {
+      setPurposeInvalid(true);
+      focusInvalidField(purposeInputRef.current);
+      return;
+    }
     setSubmitting(true);
     try {
       await AiApiService.createRequest({
@@ -575,9 +583,10 @@ export default function AiApiPage() {
               <label className={styles.formLabel} htmlFor="ai-purpose">{t("AiApiPage.formLabelPurpose")}</label>
               <textarea
                 id="ai-purpose"
-                className={styles.formTextarea}
+                ref={purposeInputRef}
+                className={`${styles.formTextarea} ${purposeInvalid ? styles.fieldInvalid : ""}`}
                 value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
+                onChange={(e) => { setPurpose(e.target.value); setPurposeInvalid(false); }}
                 placeholder={t("AiApiPage.formPlaceholderPurpose")}
                 rows={5}
                 data-guide="ai-apply-purpose"
@@ -605,7 +614,7 @@ export default function AiApiPage() {
                 type="button"
                 className={styles.btnPrimary}
                 onClick={handleSubmit}
-                disabled={purpose.trim().length < 10 || submitting}
+                disabled={submitting}
                 data-guide="ai-submit"
               >
                 <MIcon name="send" size={16} />

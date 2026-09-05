@@ -73,12 +73,12 @@
 }
 
 /* ── 標準列表表格 ──
-   全站列表頁的表格一律用這組 mixin（詳見 STYLE_GUIDE「表格」段）：
+   全站列表頁的表格一律用這組 mixin（詳見 docs/2026-09-05-frontend-style-guide.md「表格」段）：
    .tableWrap { @include table-wrap; }   外層玻璃容器＋橫向卷動
    .table     { @include table-base; }   可加 min-width 撐出卷動
    .th        { @include table-th; }
    .tr        { @include table-tr; }     整列可點時再疊 table-tr-clickable
-                                         列數會變的表格要 table-layout: fixed（見 STYLE_GUIDE 規則二）
+                                         列數會變的表格要 table-layout: fixed（見樣式規範文件規則二）
    .td        { @include table-td; }
    欄寬、對齊、特殊儲存格等頁面差異寫在 @include 之後。 */
 @mixin table-wrap {

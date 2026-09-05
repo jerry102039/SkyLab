@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import MIcon from "../../../components/MIcon";
 import { TeachingClassesService } from "../../../services/teachingClasses";
+import { focusInvalidField } from "../../../utils/focusField";
 import {
   CLASS_TIMEZONES,
   classSchedulePayload,
@@ -31,6 +32,8 @@ export default function ClassCreateDialog({
   const [form, setForm] = useState(() => createClassScheduleForm(item));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [nameInvalid, setNameInvalid] = useState(false);
+  const nameInputRef = useRef(null);
 
   useEffect(() => {
     function closeOnEscape(event) {
@@ -46,7 +49,11 @@ export default function ClassCreateDialog({
 
   async function submit(event) {
     event.preventDefault();
-    if (!form.name.trim()) return;
+    if (!form.name.trim()) {
+      setNameInvalid(true);
+      focusInvalidField(nameInputRef.current);
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
@@ -104,8 +111,10 @@ export default function ClassCreateDialog({
                 <label className={`${styles.field} ${styles.createNameField}`}>
                   <span>{t("ClassCreateDialog.fieldClassName")}</span>
                   <input
+                    ref={nameInputRef}
+                    className={nameInvalid ? styles.fieldInvalid : undefined}
                     value={form.name}
-                    onChange={(event) => update("name", event.target.value)}
+                    onChange={(event) => { update("name", event.target.value); setNameInvalid(false); }}
                     placeholder={t("ClassCreateDialog.classNamePlaceholder")}
                     autoFocus
                   />
@@ -233,7 +242,7 @@ export default function ClassCreateDialog({
             <button
               type="submit"
               className={styles.btnPrimary}
-              disabled={!form.name.trim() || submitting}
+              disabled={submitting}
             >
               {submitting ? t("ClassCreateDialog.savingBtn") : isEdit ? t("ClassCreateDialog.saveChangesBtn") : t("ClassCreateDialog.createClassBtn")}
             </button>

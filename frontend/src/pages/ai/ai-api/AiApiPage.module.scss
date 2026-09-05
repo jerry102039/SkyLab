@@ -163,6 +163,16 @@
   max-width: 200px;
 }
 
+/* 送出時未填的欄位：紅框標示並被聚焦 */
+.fieldInvalid.fieldInvalid {
+  border-color: var(--color-danger);
+
+  &:focus {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 15%, transparent);
+  }
+}
+
 .formFooter {
   display: flex;
   align-items: center;

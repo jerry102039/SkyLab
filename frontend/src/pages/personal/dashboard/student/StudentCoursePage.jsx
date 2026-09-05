@@ -260,7 +260,11 @@ export default function StudentCoursePage() {
         <div className={styles.coursePageTitle}>
           <p className={styles.eyebrow}>{t("StudentCoursePage.eyebrowCourseOverview")}</p>
           <h1>{view.activePath?.title ?? t("StudentCoursePage.defaultCourseTitle")}</h1>
-          <p>{view.activePath?.description ?? t("StudentCoursePage.defaultCourseDesc")}</p>
+          <p>
+            {/* UserGuide 導覽入口的 portal slot，比照 PageHeader 副標前的位置 */}
+            <span data-user-guide-slot="" />
+            {view.activePath?.description ?? t("StudentCoursePage.defaultCourseDesc")}
+          </p>
         </div>
       </header>
 

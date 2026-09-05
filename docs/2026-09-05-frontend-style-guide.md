@@ -1,5 +1,9 @@
 ﻿# SkyLab Frontend — 樣式規範
 
+- 日期：2026-09-05（Asia/Taipei；原 `frontend/src/assets/styles/STYLE_GUIDE.md` 移入 docs）
+- 狀態：現行規範，持續維護
+- 適用範圍：前端所有頁面與元件
+
 > 本文件說明前端樣式架構與撰寫規範，所有新頁面、元件都應遵循此指南，確保視覺與程式碼風格一致。若想自行變更_variables.scss、_themes.scss兩檔案，請事先與前端討論。
 
 ---
@@ -396,28 +400,10 @@ import MIcon from "../components/MIcon";
   它們只會讓內容溢出欄位
 - 不指定寬度的那一欄會吸收剩餘空間（通常留給名稱欄）
 
-#### 規則三：列表表格的名稱欄不放圖示
+#### 規則三：儲存格圖示要帶文字沒有的資訊
 
-`MIcon` 一律 `aria-hidden`，螢幕閱讀器讀不到，所以名稱欄的圖示至多只能是給
-視覺使用者的輔助。實際盤點全站後，這些圖示分成兩種，**兩種都不該留**：
-
-| 型態 | 例子 | 問題 |
-|------|------|------|
-| 隨資料變化 | `terminal` / `computer` 對應 LXC / VM | 型別文字（「容器 (LXC)」）就寫在名稱正下方，圖示只是重複一次 |
-| 每列都相同 | `task`、`memory`、`device_hub`、`library_add` | 不編碼任何列資訊，純粹是版面慣性 |
-
-拿掉後名稱欄整欄對齊，掃視更快。**這條只管列表表格的名稱／資料儲存格**——
-狀態徽章、按鈕、頁首、空狀態插圖的圖示不受影響，它們本來就承擔語意。
-
-名稱欄的版面一併統一：
-
-```scss
-.nameCell { display: flex; align-items: center; gap: $spacing-16; }
-
-/* 巢狀列（群組 → 機器）的階層靠 └ 表達，不靠縮排圖示。
-   顏色要用文字系的 muted，--color-border 是邊框用色，淡到看不見。 */
-.machineBranch { color: var(--color-text-muted); }
-```
+`MIcon` 一律 `aria-hidden`，螢幕閱讀器讀不到。若圖示編碼的資訊
+就寫在緊鄰的文字裡（型別、分類），它只是版面慣性，拿掉讓文字說話即可。
 
 ### Dropdown 選單
 

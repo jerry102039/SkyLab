@@ -76,6 +76,11 @@
   padding-inline: 12px;
 }
 
+/* 表頭文字對齊列內圖示的左緣：欄位 padding 12 + 展開鈕 26 + gap 8 */
+.thName {
+  padding-left: 12px + 26px + 8px;
+}
+
 .tr {
   @include table-tr;
 }
@@ -101,8 +106,18 @@
 .nameCell {
   display: flex;
   align-items: center;
-  gap: $spacing-16;
+  gap: $spacing-8;
   min-width: 160px;
+}
+
+.nameIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: $radius-8;
+  background: var(--color-hover);
+  color: var(--color-primary);
+  @include flex-center;
+  flex-shrink: 0;
 }
 
 .nameMeta {

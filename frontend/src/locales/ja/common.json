@@ -46,7 +46,6 @@
 
   "UserGuide.openGuideAriaLabel": "{{title}}ガイドを開く",
   "UserGuide.guideTitleAttr": "{{title}}ガイド",
-  "UserGuide.useGuideLabel": "ガイド",
   "UserGuide.nextStepAriaLabel": "次のガイドステップ",
   "UserGuide.tourSubtitle": "{{title}} · コンポーネントツアー",
   "UserGuide.closeGuideAriaLabel": "ガイドを閉じる",

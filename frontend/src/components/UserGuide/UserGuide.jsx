@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../contexts/AuthContext";
@@ -337,7 +338,23 @@ export default function UserGuide() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [targetRect, setTargetRect] = useState(null);
+  const [slot, setSlot] = useState(null);
   const originalAiTab = useRef(null);
+
+  useEffect(() => {
+    if (!guide) {
+      setSlot(null);
+      return undefined;
+    }
+    const sync = () => {
+      setSlot((prev) => (prev?.isConnected ? prev : document.querySelector("[data-user-guide-slot]")));
+    };
+    sync();
+    // 頁面經 lazy 載入，slot 可能晚於本元件掛載才進 DOM，需持續觀察
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [guide?.id]);
 
   const availableSteps = useMemo(() => {
     if (!guide || typeof document === "undefined") return [];
@@ -371,10 +388,22 @@ export default function UserGuide() {
       // 儲存空間不可用時，仍保留學生首次進入頁面的主動導覽。
     }
 
-    const timer = window.setTimeout(() => {
-      setStep(0);
-      setOpen(true);
-    }, 500);
+    // 頁面資料可能還在載入，等到至少一個導覽目標進 DOM 再開啟，
+    // 否則 availableSteps 會以空陣列被 memo 住，之後手動點擊也打不開
+    let timer = null;
+    let attempts = 0;
+    const tryOpen = () => {
+      if (guide.steps.some((item) => document.querySelector(item.selector))) {
+        setStep(0);
+        setOpen(true);
+        return;
+      }
+      if (attempts < 20) {
+        attempts += 1;
+        timer = window.setTimeout(tryOpen, 500);
+      }
+    };
+    timer = window.setTimeout(tryOpen, 500);
 
     return () => window.clearTimeout(timer);
   }, [guide?.id, isStudent, storageKey]);
@@ -461,6 +490,9 @@ export default function UserGuide() {
     if (guide.id === "ai-api") {
       originalAiTab.current = document.querySelector('[data-guide-tab][aria-selected="true"]')?.dataset.guideTab ?? null;
     }
+    // 先關再開：availableSteps 以 open 為 memo 依賴，重開才會用當下 DOM 重算，
+    // 也讓 auto-start 搶跑失敗後（open 已為 true）的點擊仍能生效
+    setOpen(false);
     setStep(0);
     window.setTimeout(() => setOpen(true), 80);
   };
@@ -474,16 +506,18 @@ export default function UserGuide() {
 
   return (
     <>
-      <button
-        type="button"
-        className={styles.helpButton}
-        onClick={start}
-        aria-label={t("UserGuide.openGuideAriaLabel", { title: t(guide.titleKey) })}
-        title={t("UserGuide.guideTitleAttr", { title: t(guide.titleKey) })}
-      >
-        <MIcon name="help_outline" size={21} />
-        <span>{t("UserGuide.useGuideLabel")}</span>
-      </button>
+      {slot && createPortal(
+        <button
+          type="button"
+          className={styles.helpButton}
+          onClick={start}
+          aria-label={t("UserGuide.openGuideAriaLabel", { title: t(guide.titleKey) })}
+          title={t("UserGuide.guideTitleAttr", { title: t(guide.titleKey) })}
+        >
+          <MIcon name="help_outline" size={16} />
+        </button>,
+        slot
+      )}
 
       {open && current && targetRect && panelPosition && (
         <div className={styles.layer}>

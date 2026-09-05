@@ -1195,14 +1195,12 @@ export default function StudentHomePage({ courseView = false }) {
       <section className={styles.otherNeeds} aria-labelledby="other-needs-title" data-guide="home-other-needs">
         <div className={styles.sectionHeading}>
           <div>
-            <p className={styles.eyebrow}>{t("StudentHomePage.notAttendingNow")}</p>
             <h2 id="other-needs-title">{t("StudentHomePage.otherUseCases")}</h2>
           </div>
         </div>
 
         <div className={styles.needGrid}>
           <article className={styles.needCard} data-student-tour="practice">
-            <span className={`${styles.needIcon} ${styles.needIcon_primary}`}><MIcon name="history" size={22} /></span>
             <div>
               <span className={styles.needBadge}>{t("StudentHomePage.afterClassBadge")}</span>
               <h3>{t("StudentHomePage.continueLastProgress")}</h3>
@@ -1215,7 +1213,6 @@ export default function StudentHomePage({ courseView = false }) {
           </article>
 
           <article className={`${styles.needCard} ${styles.researchCard}`} data-student-tour="research">
-            <span className={`${styles.needIcon} ${styles.needIcon_info}`}><MIcon name="science" size={22} /></span>
             <div>
               <span className={`${styles.needBadge} ${styles.needBadge_info}`}>{t("StudentHomePage.researchBadge")}</span>
               <h3>{t("StudentHomePage.buildResearchEnv")}</h3>
@@ -1231,7 +1228,6 @@ export default function StudentHomePage({ courseView = false }) {
         <section className={styles.quickTemplateSection} aria-labelledby="quick-template-title" data-guide="home-quick-templates">
           <div className={styles.sectionHeading}>
             <div>
-              <p className={styles.eyebrow}>{t("StudentHomePage.noManualReviewWait")}</p>
               <h2 id="quick-template-title">{t("StudentHomePage.quickPracticeEnv")}</h2>
             </div>
             <span>{t("StudentHomePage.quickPracticeEnvDesc")}</span>

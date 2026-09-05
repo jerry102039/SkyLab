@@ -46,7 +46,6 @@
 
   "UserGuide.openGuideAriaLabel": "Open the {{title}} guide",
   "UserGuide.guideTitleAttr": "{{title}} guide",
-  "UserGuide.useGuideLabel": "Guide",
   "UserGuide.nextStepAriaLabel": "Next guide step",
   "UserGuide.tourSubtitle": "{{title}} · Component tour",
   "UserGuide.closeGuideAriaLabel": "Close guide",

@@ -1784,3 +1784,20 @@
     }
   }
 }
+
+/* 送出時未填的欄位：紅框標示並被聚焦（雙類名壓過 .dialogField input 這類巢狀選擇器） */
+.fieldInvalid.fieldInvalid {
+  border-color: var(--color-danger);
+
+  &:focus {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 12%, transparent);
+  }
+}
+
+/* 群組型欄位（模式選擇、環境 chips、既有檔案清單）沒有自己的邊框，用外框標紅 */
+.groupInvalid.groupInvalid {
+  outline: 1px solid var(--color-danger);
+  outline-offset: 4px;
+  border-radius: $radius-8;
+}

@@ -14,6 +14,7 @@ import { courseNodeHasUsableSource, CourseEnvironmentsService } from "../../../s
 import { TeachingClassesService } from "../../../services/teachingClasses";
 import ClassCreateDialog from "./ClassCreateDialog";
 import useDialogPresence from "../../../hooks/useDialogPresence";
+import { focusInvalidField } from "../../../utils/focusField";
 import {
   machineRuntimeState,
   mergeResourceUsageByVmid,
@@ -240,11 +241,17 @@ function Students({ item, onRefresh }) {
   const [showAdd, setShowAdd] = useState(false);
   const addDialog = useDialogPresence(showAdd);
   const fileRef = useRef(null);
+  const [emailsInvalid, setEmailsInvalid] = useState(false);
+  const emailsInputRef = useRef(null);
   const locked = item.status !== "planning";
   async function add(event) {
     event.preventDefault();
     const values = emails.split(/[\n,;]/).map((value) => value.trim()).filter(Boolean);
-    if (!values.length) return;
+    if (!values.length) {
+      setEmailsInvalid(true);
+      focusInvalidField(emailsInputRef.current);
+      return;
+    }
     setBusy(true);
     try {
       const result = await TeachingClassesService.addStudents(item.id, values);
@@ -309,7 +316,7 @@ function Students({ item, onRefresh }) {
       })}</div> : <EmptyState icon="group_add" title={t("ClassWorkspacePage.emptyStudentsTitle")} />}
     </section>
 
-    {addDialog.open && <div className={`${styles.createDialogOverlay} ${addDialog.closing ? styles.createDialogOverlayOut : ""}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setShowAdd(false); }}><section className={`${styles.createDialog} ${styles.studentDialog}`} role="dialog" aria-modal="true" aria-labelledby="add-student-title"><header className={styles.createDialogHeader}><h2 id="add-student-title">{t("ClassWorkspacePage.addStudentsBtn")}</h2><button type="button" className={styles.iconBtn} aria-label={t("ClassWorkspacePage.closeAriaLabel")} onClick={() => setShowAdd(false)}><MIcon name="close" size={19} /></button></header><form onSubmit={add}><div className={styles.studentDialogBody}><label className={styles.field}><span>{t("ClassWorkspacePage.emailFieldLabel")}</span><textarea rows={6} value={emails} onChange={(event) => setEmails(event.target.value)} placeholder="student01@example.edu&#10;student02@example.edu" autoFocus /></label></div><footer className={styles.createDialogFooter}><button type="button" className={styles.btnSecondary} onClick={() => setShowAdd(false)}>{t("ClassWorkspacePage.cancelBtn")}</button><button type="submit" className={styles.btnPrimary} disabled={!emails.trim() || busy}>{busy ? t("ClassWorkspacePage.addingLabel") : t("ClassWorkspacePage.addStudentsBtn")}</button></footer></form></section></div>}
+    {addDialog.open && <div className={`${styles.createDialogOverlay} ${addDialog.closing ? styles.createDialogOverlayOut : ""}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setShowAdd(false); }}><section className={`${styles.createDialog} ${styles.studentDialog}`} role="dialog" aria-modal="true" aria-labelledby="add-student-title"><header className={styles.createDialogHeader}><h2 id="add-student-title">{t("ClassWorkspacePage.addStudentsBtn")}</h2><button type="button" className={styles.iconBtn} aria-label={t("ClassWorkspacePage.closeAriaLabel")} onClick={() => setShowAdd(false)}><MIcon name="close" size={19} /></button></header><form onSubmit={add}><div className={styles.studentDialogBody}><label className={styles.field}><span>{t("ClassWorkspacePage.emailFieldLabel")}</span><textarea ref={emailsInputRef} className={emailsInvalid ? styles.fieldInvalid : undefined} rows={6} value={emails} onChange={(event) => { setEmails(event.target.value); setEmailsInvalid(false); }} placeholder="student01@example.edu&#10;student02@example.edu" autoFocus /></label></div><footer className={styles.createDialogFooter}><button type="button" className={styles.btnSecondary} onClick={() => setShowAdd(false)}>{t("ClassWorkspacePage.cancelBtn")}</button><button type="submit" className={styles.btnPrimary} disabled={busy}>{busy ? t("ClassWorkspacePage.addingLabel") : t("ClassWorkspacePage.addStudentsBtn")}</button></footer></form></section></div>}
   </div>;
 }
 

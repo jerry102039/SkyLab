@@ -340,6 +340,9 @@ function RequestRow({ req, onUpdated }) {
             ) : (
               <span className={styles.expandPlaceholder} aria-hidden="true" />
             )}
+            <div className={styles.nameIcon}>
+              <MIcon name={type.icon} size={18} />
+            </div>
             <div className={styles.nameMeta}>
               <span className={styles.namePrimary} title={req.hostname}>{req.hostname}</span>
               <span className={styles.nameSub}>
@@ -460,6 +463,7 @@ function SkeletonRow() {
       <td className={styles.td}>
         <div className={styles.nameCell}>
           <span className={styles.expandPlaceholder} aria-hidden="true" />
+          <div className={`${styles.nameIcon} ${styles.skeleton}`} />
           <div className={styles.nameMeta}>
             <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 110, height: 13 }} />
             <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 70, height: 10 }} />
@@ -608,8 +612,8 @@ export default function RequestsPage() {
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    {LIST_COLUMN_KEYS.map((columnKey) => (
-                      <th key={columnKey} className={styles.th}>{t(columnKey)}</th>
+                    {LIST_COLUMN_KEYS.map((columnKey, idx) => (
+                      <th key={columnKey} className={idx === 0 ? `${styles.th} ${styles.thName}` : styles.th}>{t(columnKey)}</th>
                     ))}
                   </tr>
                 </thead>

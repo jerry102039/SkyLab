@@ -178,6 +178,7 @@ function CreatingRow({ request, onCancelled }) {
     <tr className={`${styles.tr} ${styles.pendingRow}`}>
       <td className={styles.td}>
         <div className={styles.nameCell}>
+          <span className={styles.nameIcon}><MIcon name={type.icon} size={18} /></span>
           <div><strong>{request.hostname}</strong><small>{t(type.labelKey)} · {specs || t("CreatingRow.specsPending")}</small></div>
         </div>
       </td>
@@ -272,6 +273,7 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
     <tr className={styles.tr} data-guide="resource-card">
       <td className={styles.td}>
         <div className={styles.nameCell}>
+          <span className={styles.nameIcon}><MIcon name={type.icon} size={18} /></span>
           <div>
             {resource.vmid > 0
               ? <button type="button" className={styles.nameLink} onClick={() => navigate(`/my-resources/${resource.vmid}`)}>{resource.name}</button>

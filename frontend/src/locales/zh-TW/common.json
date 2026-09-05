@@ -46,7 +46,6 @@
 
   "UserGuide.openGuideAriaLabel": "開啟{{title}}導覽",
   "UserGuide.guideTitleAttr": "{{title}}導覽",
-  "UserGuide.useGuideLabel": "使用導覽",
   "UserGuide.nextStepAriaLabel": "下一個導覽步驟",
   "UserGuide.tourSubtitle": "{{title}} · 元件導覽",
   "UserGuide.closeGuideAriaLabel": "關閉導覽",
