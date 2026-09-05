@@ -321,6 +321,7 @@ function machineSpecLabel(machine) {
 function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
   const { t } = useTranslation("personal");
   const toast = useToast();
+  const navigate = useNavigate();
   const type = TYPE_MAP[machine.type] ?? { label: machine.type, icon: "computer" };
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
@@ -358,7 +359,9 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
 
   return <>
     <tr className={`${styles.tr} ${styles.environmentMachineRow}`}>
-    <td className={styles.td}><div className={`${styles.nameCell} ${styles.environmentMachineName}`}><span className={styles.machineBranch}>└</span><div><strong>{machine.name}</strong><small>{machine.role} · {t(type.labelKey ?? type.label)}{specLabel ? ` · ${specLabel}` : ""}</small></div></div></td>
+    <td className={styles.td}><div className={`${styles.nameCell} ${styles.environmentMachineName}`}><span className={styles.machineBranch}>└</span><div>{resource?.vmid > 0
+      ? <button type="button" className={styles.nameLink} onClick={() => navigate(`/my-resources/${resource.vmid}`)}>{machine.name}</button>
+      : <strong>{machine.name}</strong>}<small>{machine.role} · {t(type.labelKey ?? type.label)}{specLabel ? ` · ${specLabel}` : ""}</small></div></div></td>
     <td className={styles.td}><div className={styles.envPrimary}>{machine.os}</div><div className={styles.envSub}>{machine.resource ? t("EnvironmentMachineRow.resourceConnected") : t("EnvironmentMachineRow.creating")}</div></td>
     <td className={styles.td}><StatusBadge status={machine.status} /></td>
     <td className={styles.td}><span className={styles.mono}>{machine.ip}</span></td>
@@ -383,8 +386,27 @@ function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
   const [expanded, setExpanded] = useState(true);
   const [ending, setEnding] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
+  const [groupAction, setGroupAction] = useState(null);
   const toast = useToast();
   const canEnd = group.kind === "quick_practice" && !["reclaiming", "reclaimed"].includes(group.status);
+  const controllableVmids = group.machines
+    .filter((machine) => machine.resource?.vmid && machine.resource.can_control !== false)
+    .map((machine) => machine.resource.vmid);
+  const runningCount = group.machines.filter((machine) => machine.status === "running").length;
+
+  async function runGroupAction(action) {
+    if (!controllableVmids.length || groupAction) return;
+    setGroupAction(action);
+    try {
+      await ResourcesService.batchAction(controllableVmids, action);
+      toast.success(t("EnvironmentGroupRows.groupCommandSent"));
+      onEnded?.();
+    } catch (error) {
+      toast.error(error?.message ?? t("EnvironmentGroupRows.groupCommandFailed"));
+    } finally {
+      setGroupAction(null);
+    }
+  }
 
   async function endPractice() {
     setEnding(true);
@@ -412,13 +434,15 @@ function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
       <td className={styles.td}><button type="button" className={styles.environmentToggle} aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}><MIcon name={expanded ? "expand_more" : "chevron_right"} size={20} /><span><strong>{group.kindLabel}｜{group.title}</strong><small>{t("EnvironmentGroupRows.machineCount", { count: group.machines.length })}</small></span></button></td>
       <td className={styles.td}><div className={styles.envPrimary}>{group.kind === "course" ? t("EnvironmentGroupRows.courseEnv") : t("EnvironmentGroupRows.quickPracticeEnv")}</div><div className={styles.envSub}>{t("EnvironmentGroupRows.groupOverview")}</div></td>
       <td className={styles.td}><StatusBadge status={group.status} /></td>
-      <td className={styles.td}><span className={styles.muted}>{t("EnvironmentGroupRows.expandToView")}</span></td>
+      <td className={styles.td}><span className={styles.muted}>{t("EnvironmentGroupRows.runningCount", { running: runningCount, total: group.machines.length })}</span></td>
       <td className={styles.td}><strong className={styles.environmentTiming}>{group.timingLabel}</strong></td>
       <td className={styles.td}>{group.nodeLabel}</td>
       <td className={styles.td}><div className={styles.groupActions}>
-        {canEnd
-          ? <button type="button" className={styles.terminalBtn} disabled={ending} onClick={() => setEndConfirm(true)}><MIcon name="stop_circle" size={14} />{ending ? t("EnvironmentGroupRows.ending") : t("EnvironmentGroupRows.endPractice")}</button>
-          : <span className={styles.muted}>{t("EnvironmentGroupRows.expandToView")}</span>}
+        {controllableVmids.length > 0 && <>
+          <button type="button" className={styles.terminalBtn} disabled={Boolean(groupAction) || runningCount === group.machines.length} onClick={() => runGroupAction("start")}><MIcon name={groupAction === "start" ? "hourglass_empty" : "play_arrow"} size={14} />{t("EnvironmentGroupRows.startAll")}</button>
+          <button type="button" className={styles.terminalBtn} disabled={Boolean(groupAction) || runningCount === 0} onClick={() => runGroupAction("shutdown")}><MIcon name={groupAction === "shutdown" ? "hourglass_empty" : "power_settings_new"} size={14} />{t("EnvironmentGroupRows.shutdownAll")}</button>
+        </>}
+        {canEnd && <button type="button" className={styles.terminalBtn} disabled={ending} onClick={() => setEndConfirm(true)}><MIcon name="stop_circle" size={14} />{ending ? t("EnvironmentGroupRows.ending") : t("EnvironmentGroupRows.endPractice")}</button>}
       </div></td>
     </tr>
     {expanded && group.machines.map((machine) => <EnvironmentMachineRow key={machine.id} machine={machine} groupStatus={group.status} onUpdated={onUpdated} />)}

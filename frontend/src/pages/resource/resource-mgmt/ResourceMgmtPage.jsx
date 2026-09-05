@@ -119,6 +119,7 @@ function StatusBadge({ status }) {
 function EnvironmentMachineRow({ machine, onUpdated }) {
   const { t } = useTranslation("resource");
   const toast = useToast();
+  const navigate = useNavigate();
   const typeMap = useTypeMap();
   const type = typeMap[machine.type] ?? { label: machine.type, icon: "computer" };
   const [consoleOpen, setConsoleOpen] = useState(false);
@@ -159,7 +160,9 @@ function EnvironmentMachineRow({ machine, onUpdated }) {
         <div className={`${styles.nameCell} ${styles.environmentMachineName}`}>
           <span className={styles.machineBranch} aria-hidden="true">└</span>
           <div>
-            <div className={styles.namePrimary}>{machine.name}</div>
+            {resource?.vmid > 0
+              ? <button type="button" className={`${styles.namePrimary} ${styles.nameLink}`} title={t("ResourceMgmtPage.viewDetailTitle")} onClick={() => navigate(`/resource-mgmt/${resource.vmid}`)}>{machine.name}</button>
+              : <div className={styles.namePrimary}>{machine.name}</div>}
             <div className={styles.nameSub}>{machine.role} · {type.label}{specLabel ? ` · ${specLabel}` : ""}</div>
           </div>
         </div>
@@ -189,11 +192,30 @@ function EnvironmentMachineRow({ machine, onUpdated }) {
   </>;
 }
 
-function EnvironmentGroupRows({ group, onUpdated }) {
+function EnvironmentGroupRows({ group, onUpdated, onRefresh }) {
   const { t } = useTranslation("resource");
+  const toast = useToast();
   const [expanded, setExpanded] = useState(true);
+  const [groupAction, setGroupAction] = useState(null);
   const running = group.machines.filter((machine) => machine.status === "running").length;
   const allRunning = running === group.machines.length;
+  const controllableVmids = group.machines
+    .filter((machine) => machine.resource?.vmid && machine.resource.can_control !== false)
+    .map((machine) => machine.resource.vmid);
+
+  async function runGroupAction(action) {
+    if (!controllableVmids.length || groupAction) return;
+    setGroupAction(action);
+    try {
+      await ResourcesService.batchAction(controllableVmids, action);
+      toast.success(t("ResourceMgmtPage.groupCommandSent"));
+      onRefresh?.();
+    } catch (error) {
+      toast.error(error?.message ?? t("ResourceMgmtPage.groupCommandFailed"));
+    } finally {
+      setGroupAction(null);
+    }
+  }
   return (
     <>
       <tr
@@ -223,10 +245,15 @@ function EnvironmentGroupRows({ group, onUpdated }) {
         <td className={styles.td}>
           <span className={`${styles.badge} ${styles[`badge_${allRunning ? "success" : "info"}`]}`}>{t("ResourceMgmtPage.runningCount", { running, total: group.machines.length })}</span>
         </td>
-        <td className={styles.td}><span className={styles.noAction}>{t("ResourceMgmtPage.expandToView")}</span></td>
+        <td className={styles.td}><span className={styles.noAction}>—</span></td>
         <td className={styles.td}><strong className={styles.environmentTiming}>{group.timingLabel}</strong></td>
         <td className={styles.td}>{group.nodeLabel}</td>
-        <td className={styles.td}><span className={styles.noAction}>{t("ResourceMgmtPage.expandForActions")}</span></td>
+        <td className={styles.td}>{controllableVmids.length > 0
+          ? <div className={styles.actions}>
+              <button type="button" className={styles.consoleBtn} disabled={Boolean(groupAction) || allRunning} onClick={() => runGroupAction("start")}><MIcon name={groupAction === "start" ? "hourglass_empty" : "play_arrow"} size={14} />{t("ResourceMgmtPage.startAll")}</button>
+              <button type="button" className={styles.consoleBtn} disabled={Boolean(groupAction) || running === 0} onClick={() => runGroupAction("shutdown")}><MIcon name={groupAction === "shutdown" ? "hourglass_empty" : "power_settings_new"} size={14} />{t("ResourceMgmtPage.shutdownAll")}</button>
+            </div>
+          : <span className={styles.noAction}>—</span>}</td>
       </tr>
       {expanded && group.machines.map((machine) => (
         <EnvironmentMachineRow key={machine.id} machine={machine} onUpdated={onUpdated} />
@@ -709,7 +736,7 @@ export default function ResourceMgmtPage() {
                 </tr>
               </thead>
               <tbody>
-                {environmentGroups.map((group) => <EnvironmentGroupRows key={group.id} group={group} onUpdated={handleUpdated} />)}
+                {environmentGroups.map((group) => <EnvironmentGroupRows key={group.id} group={group} onUpdated={handleUpdated} onRefresh={() => fetchResources(true)} />)}
                 {visibleResources.map((r, index) => (
                   <ResourceRow
                     key={resourceRowKey(r, index)}
