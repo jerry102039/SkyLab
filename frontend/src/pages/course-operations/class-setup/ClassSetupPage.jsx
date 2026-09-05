@@ -48,19 +48,32 @@ export function parseStudentEmails(value) {
   return [...new Set(String(value).split(/[\s,;]+/).map((email) => email.trim().toLowerCase()).filter(Boolean))];
 }
 
-export function weekPayload(weeks) {
-  return weeks.map((week, index) => ({
-    week_number: Number(week.week_number ?? week.week ?? index + 1),
-    session_date: week.session_date ?? week.date,
-    title: String(week.title ?? "").trim(),
-    target_node_key: week.target_node_key ?? week.target ?? null,
-    status: week.status ?? "draft",
-    files: (week.files ?? []).map((file) => ({
-      filename: file.filename,
-      storage_key: file.storage_key ?? null,
-      target_path: file.target_path ?? null,
-    })),
-  }));
+// 後端只把這兩種狀態的週次送到學生端（weekly_task_service.VISIBLE_WEEK_STATUSES）。
+const VISIBLE_WEEK_STATUSES = ["published", "completed"];
+
+export function weekPayload(weeks, { publish = false } = {}) {
+  return weeks.map((week, index) => {
+    const title = String(week.title ?? "").trim();
+    const status = week.status ?? "draft";
+    return {
+      week_number: Number(week.week_number ?? week.week ?? index + 1),
+      session_date: week.session_date ?? week.date,
+      title,
+      target_node_key: week.target_node_key ?? week.target ?? null,
+      // 精靈沒有班級頁那種逐週發布鈕；少了這個開關，老師填好的主題會全部停在
+      // 草稿，班級建好、狀態變成可上課，學生端卻一週內容都看不到。
+      status: publish && title && !VISIBLE_WEEK_STATUSES.includes(status) ? "published" : status,
+      files: (week.files ?? []).map((file) => ({
+        filename: file.filename,
+        storage_key: file.storage_key ?? null,
+        target_path: file.target_path ?? null,
+      })),
+    };
+  });
+}
+
+export function visibleWeekCount(weeks) {
+  return weeks.filter((week) => VISIBLE_WEEK_STATUSES.includes(week.status)).length;
 }
 
 export function templateBuilderPath(classId) {
@@ -98,6 +111,7 @@ export default function ClassSetupPage() {
   const [templateId, setTemplateId] = useState("");
   const [emails, setEmails] = useState("");
   const [weeks, setWeeks] = useState([]);
+  const [publishWeeks, setPublishWeeks] = useState(true);
   const [capacity, setCapacity] = useState(null);
   const [loading, setLoading] = useState(Boolean(classId));
   const [busy, setBusy] = useState(false);
@@ -198,7 +212,7 @@ export default function ClassSetupPage() {
   }
 
   async function saveTasks() {
-    applyClass(await TeachingClassesService.replaceWeeks(classId, weekPayload(weeks)));
+    applyClass(await TeachingClassesService.replaceWeeks(classId, weekPayload(weeks, { publish: publishWeeks })));
     return true;
   }
 
@@ -222,6 +236,7 @@ export default function ClassSetupPage() {
   }
 
   const taskCount = useMemo(() => weeks.filter((week) => String(week.title ?? "").trim()).length, [weeks]);
+  const visibleCount = useMemo(() => visibleWeekCount(weeks), [weeks]);
   if (loading) return <LoadingState fullPage text={t("ClassSetupPage.restoringText")} />;
 
   return <div className={styles.page}>
@@ -319,9 +334,9 @@ export default function ClassSetupPage() {
         </section>
       )}
 
-      {step === 4 && <section className={styles.card}><div className={styles.sectionHeader}><span>4</span><div><h2>{t("ClassSetupPage.step4Title")}</h2><p>{t("ClassSetupPage.step4Desc")}</p></div><em>{t("ClassSetupPage.weeksConfiguredCount", { done: taskCount, total: weeks.length })}</em></div><div className={styles.weekList}>{weeks.map((week, index) => <label key={week.id ?? week.session_date}><span><strong>{t("ClassSetupPage.weekNumberLabel", { week: week.week_number ?? index + 1 })}</strong><small>{week.session_date}</small></span><input value={week.title ?? ""} onChange={(event) => setWeeks((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, title: event.target.value } : row))} placeholder={t("ClassSetupPage.weekTitlePlaceholder")} /></label>)}</div></section>}
+      {step === 4 && <section className={styles.card}><div className={styles.sectionHeader}><span>4</span><div><h2>{t("ClassSetupPage.step4Title")}</h2><p>{t("ClassSetupPage.step4Desc")}</p></div><em>{t("ClassSetupPage.weeksConfiguredCount", { done: taskCount, total: weeks.length })}</em></div><label className={styles.publishToggle}><input type="checkbox" checked={publishWeeks} onChange={(event) => setPublishWeeks(event.target.checked)} /><div><strong>{t("ClassSetupPage.publishWeeksLabel")}</strong><small>{t("ClassSetupPage.publishWeeksHint")}</small></div></label><div className={styles.weekList}>{weeks.map((week, index) => <label key={week.id ?? week.session_date}><span><strong>{t("ClassSetupPage.weekNumberLabel", { week: week.week_number ?? index + 1 })}</strong><small>{week.session_date}</small></span><input value={week.title ?? ""} onChange={(event) => setWeeks((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, title: event.target.value } : row))} placeholder={t("ClassSetupPage.weekTitlePlaceholder")} /></label>)}</div></section>}
 
-      {step === 5 && <section className={styles.reviewLayout}><div className={styles.card}><div className={styles.sectionHeader}><span>5</span><div><h2>{t("ClassSetupPage.step5Title")}</h2><p>{t("ClassSetupPage.step5Desc")}</p></div></div><div className={styles.summaryList}><SummaryLine done={Boolean(item)} label={t("ClassSetupPage.summaryLabelSchedule")} value={item ? `${item.start_date} ${t("ClassSetupPage.scheduleDateTo")} ${item.end_date} · ${t("ClassSetupPage.weeklyPrefix")}${t(WEEKDAY_SHORT_KEYS[item.weekday])} ${String(item.start_time).slice(0, 5)}` : t("ClassSetupPage.notCreatedYet")} /><SummaryLine done={Boolean(item?.students.length)} label={t("ClassSetupPage.summaryLabelStudents")} value={t("ClassSetupPage.studentsCountLabel", { count: item?.students.length ?? 0 })} /><SummaryLine done={Boolean(item?.course_environment && item?.nodes.length)} label={t("ClassSetupPage.summaryLabelEnvironment")} value={item?.course_environment ? t("ClassSetupPage.envSummaryValue", { name: item.course_environment.name, count: item.nodes.length }) : t("ClassSetupPage.notSelectedYet")} /><SummaryLine done={taskCount > 0} label={t("ClassSetupPage.summaryLabelTasks")} value={t("ClassSetupPage.weeksSetSummary", { done: taskCount, total: weeks.length })} /></div></div><aside className={styles.capacityCard}><span className={styles.capacityIcon}><MIcon name={capacity?.ready ? "check" : "hourglass_top"} size={24} /></span><h2>{capacity ? capacity.ready ? t("ClassSetupPage.capacityReady") : t("ClassSetupPage.capacityNotReady") : t("ClassSetupPage.capacityChecking")}</h2>{capacity?.ready ? <><p>{t("ClassSetupPage.capacitySummary", { machines: capacity.machine_count, ips: capacity.ip_count })}</p><dl><div><dt>CPU</dt><dd>{capacity.cpu_cores}</dd></div><div><dt>RAM</dt><dd>{Math.round(capacity.memory_mb / 1024)} GB</dd></div><div><dt>Disk</dt><dd>{capacity.disk_gb} GB</dd></div></dl></> : <p>{capacity?.issues?.join("；") ?? t("ClassSetupPage.capacityCheckingDetail")}</p>}<button type="button" className={styles.btnPrimary} disabled={!capacity?.ready || busy} onClick={provision}><MIcon name="rocket_launch" size={17} />{busy ? t("ClassSetupPage.submittingBtn") : t("ClassSetupPage.finishAndSubmitBtn")}</button><button type="button" className={styles.btnSecondary} onClick={() => navigate(`/class-management/${classId}`)}>{t("ClassSetupPage.saveDraftLaterBtn")}</button></aside></section>}
+      {step === 5 && <section className={styles.reviewLayout}><div className={styles.card}><div className={styles.sectionHeader}><span>5</span><div><h2>{t("ClassSetupPage.step5Title")}</h2><p>{t("ClassSetupPage.step5Desc")}</p></div></div><div className={styles.summaryList}><SummaryLine done={Boolean(item)} label={t("ClassSetupPage.summaryLabelSchedule")} value={item ? `${item.start_date} ${t("ClassSetupPage.scheduleDateTo")} ${item.end_date} · ${t("ClassSetupPage.weeklyPrefix")}${t(WEEKDAY_SHORT_KEYS[item.weekday])} ${String(item.start_time).slice(0, 5)}` : t("ClassSetupPage.notCreatedYet")} /><SummaryLine done={Boolean(item?.students.length)} label={t("ClassSetupPage.summaryLabelStudents")} value={t("ClassSetupPage.studentsCountLabel", { count: item?.students.length ?? 0 })} /><SummaryLine done={Boolean(item?.course_environment && item?.nodes.length)} label={t("ClassSetupPage.summaryLabelEnvironment")} value={item?.course_environment ? t("ClassSetupPage.envSummaryValue", { name: item.course_environment.name, count: item.nodes.length }) : t("ClassSetupPage.notSelectedYet")} /><SummaryLine done={taskCount > 0} label={t("ClassSetupPage.summaryLabelTasks")} value={t("ClassSetupPage.weeksSetSummary", { done: taskCount, total: weeks.length, visible: visibleCount })} /></div></div><aside className={styles.capacityCard}><span className={styles.capacityIcon}><MIcon name={capacity?.ready ? "check" : "hourglass_top"} size={24} /></span><h2>{capacity ? capacity.ready ? t("ClassSetupPage.capacityReady") : t("ClassSetupPage.capacityNotReady") : t("ClassSetupPage.capacityChecking")}</h2>{capacity?.ready ? <><p>{t("ClassSetupPage.capacitySummary", { machines: capacity.machine_count, ips: capacity.ip_count })}</p><dl><div><dt>CPU</dt><dd>{capacity.cpu_cores}</dd></div><div><dt>RAM</dt><dd>{Math.round(capacity.memory_mb / 1024)} GB</dd></div><div><dt>Disk</dt><dd>{capacity.disk_gb} GB</dd></div></dl></> : <p>{capacity?.issues?.join("；") ?? t("ClassSetupPage.capacityCheckingDetail")}</p>}<button type="button" className={styles.btnPrimary} disabled={!capacity?.ready || busy} onClick={provision}><MIcon name="rocket_launch" size={17} />{busy ? t("ClassSetupPage.submittingBtn") : t("ClassSetupPage.finishAndSubmitBtn")}</button><button type="button" className={styles.btnSecondary} onClick={() => navigate(`/class-management/${classId}`)}>{t("ClassSetupPage.saveDraftLaterBtn")}</button></aside></section>}
     </main>
 
     {step < 5 && <footer className={styles.footer}><button type="button" className={styles.btnSecondary} disabled={step === 1 || busy} onClick={() => go(step - 1)}>{t("ClassSetupPage.prevStepBtn")}</button><span>{t("ClassSetupPage.stepProgressLabel", { step })}</span>{step === 3 && !templateId ? <em className={styles.footerHint}><MIcon name="info" size={16} />{templates.length === 0 ? t("ClassSetupPage.needCreateTemplateHint") : t("ClassSetupPage.selectTemplateHint")}</em> : <button type="button" className={styles.btnPrimary} disabled={busy} onClick={next}>{busy ? t("ClassSetupPage.savingBtn") : t("ClassSetupPage.saveAndNextBtn")}<MIcon name="arrow_forward" size={16} /></button>}</footer>}

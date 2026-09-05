@@ -9,16 +9,17 @@ from app.api.routes.course_environments import (
     EnvironmentEdgeIn,
     EnvironmentNodeIn,
 )
-from app.api.routes.teaching_classes import _recurrence
+from app.api.routes.teaching_classes import _generate_weeks, _recurrence
 from app.exceptions import BadRequestError
-from app.models import BatchProvisionJobStatus
+from app.models import BatchProvisionJobStatus, TeachingClassWeek
 from app.services.teaching import class_capacity_service, class_network_service
 from app.services.vm import batch_provision_service
 
 
 def test_recurrence_uses_boot_day_when_lead_crosses_midnight():
     teaching_class = SimpleNamespace(
-        start_date=date(2026, 9, 1),
+        start_date=date(2026, 9, 1),  # 週二
+        weekday=1,
         start_time=time(0, 5),
         end_time=time(2, 0),
         boot_lead_minutes=10,
@@ -28,6 +29,154 @@ def test_recurrence_uses_boot_day_when_lead_crosses_midnight():
 
     assert rule == "FREQ=WEEKLY;BYDAY=MO;BYHOUR=23;BYMINUTE=55"
     assert duration == 125
+
+
+def test_recurrence_follows_the_class_weekday_not_the_start_date():
+    """學期從週一開始、但每週三上課時，機器不能在週一開機。"""
+    teaching_class = SimpleNamespace(
+        start_date=date(2026, 9, 7),  # 週一
+        weekday=2,  # 每週三上課
+        start_time=time(13, 10),
+        end_time=time(16, 0),
+        boot_lead_minutes=10,
+    )
+
+    rule, duration = _recurrence(teaching_class)
+
+    assert rule == "FREQ=WEEKLY;BYDAY=WE;BYHOUR=13;BYMINUTE=0"
+    assert duration == 180
+
+
+def test_recurrence_includes_the_shutdown_grace_in_the_window():
+    teaching_class = SimpleNamespace(
+        start_date=date(2026, 9, 9),
+        weekday=2,
+        start_time=time(13, 10),
+        end_time=time(16, 0),
+        boot_lead_minutes=10,
+        shutdown_grace_minutes=30,
+    )
+
+    _rule, duration = _recurrence(teaching_class)
+
+    assert duration == 170 + 10 + 30
+
+
+class _FakeWeekResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+
+class _FakeWeekSession:
+    def __init__(self, weeks):
+        self.weeks = weeks
+        self.deleted = []
+
+    def exec(self, _statement):
+        return _FakeWeekResult(self.weeks)
+
+    def add(self, row):
+        if row not in self.weeks:
+            self.weeks.append(row)
+
+    def delete(self, row):
+        self.deleted.append(row)
+        self.weeks.remove(row)
+
+    def commit(self):
+        return None
+
+
+def _class_with_weeks(*, weekday, end_date):
+    class_id = uuid.uuid4()
+    item = SimpleNamespace(
+        id=class_id,
+        start_date=date(2026, 9, 7),  # 週一開學
+        end_date=end_date,
+        weekday=weekday,
+    )
+    return item
+
+
+def test_changing_the_class_weekday_keeps_every_week_topic():
+    """改「每週上課日」只該搬動日期，不該把老師填好的主題與教材清光。"""
+    item = _class_with_weeks(weekday=2, end_date=date(2026, 9, 24))
+    weeks = [
+        TeachingClassWeek(
+            class_id=item.id,
+            week_number=number,
+            session_date=session_date,
+            title=title,
+        )
+        for number, session_date, title in [
+            (1, date(2026, 9, 9), "Linux 權限"),
+            (2, date(2026, 9, 16), "SSH 金鑰"),
+            (3, date(2026, 9, 23), "systemd"),
+        ]
+    ]
+    session = _FakeWeekSession(weeks)
+
+    item.weekday = 3  # 週三改到週四
+    _generate_weeks(session, item, preserve=True)
+
+    assert session.deleted == []
+    assert [(row.week_number, row.session_date, row.title) for row in session.weeks] == [
+        (1, date(2026, 9, 10), "Linux 權限"),
+        (2, date(2026, 9, 17), "SSH 金鑰"),
+        (3, date(2026, 9, 24), "systemd"),
+    ]
+
+
+def test_extending_the_course_appends_weeks_without_touching_the_old_ones():
+    item = _class_with_weeks(weekday=2, end_date=date(2026, 9, 16))
+    weeks = [
+        TeachingClassWeek(
+            class_id=item.id, week_number=1, session_date=date(2026, 9, 9), title="Linux 權限"
+        ),
+        TeachingClassWeek(
+            class_id=item.id, week_number=2, session_date=date(2026, 9, 16), title="SSH 金鑰"
+        ),
+    ]
+    session = _FakeWeekSession(weeks)
+
+    item.end_date = date(2026, 9, 30)
+    _generate_weeks(session, item, preserve=True)
+
+    assert session.deleted == []
+    assert [(row.week_number, row.session_date, row.title) for row in session.weeks] == [
+        (1, date(2026, 9, 9), "Linux 權限"),
+        (2, date(2026, 9, 16), "SSH 金鑰"),
+        (3, date(2026, 9, 23), ""),
+        (4, date(2026, 9, 30), ""),
+    ]
+
+
+def test_shortening_the_course_drops_only_the_trailing_weeks():
+    item = _class_with_weeks(weekday=2, end_date=date(2026, 9, 23))
+    weeks = [
+        TeachingClassWeek(
+            class_id=item.id, week_number=1, session_date=date(2026, 9, 9), title="Linux 權限"
+        ),
+        TeachingClassWeek(
+            class_id=item.id, week_number=2, session_date=date(2026, 9, 16), title="SSH 金鑰"
+        ),
+        TeachingClassWeek(
+            class_id=item.id, week_number=3, session_date=date(2026, 9, 23), title="systemd"
+        ),
+    ]
+    session = _FakeWeekSession(weeks)
+
+    item.end_date = date(2026, 9, 16)
+    _generate_weeks(session, item, preserve=True)
+
+    assert [row.week_number for row in session.deleted] == [3]
+    assert [(row.week_number, row.title) for row in session.weeks] == [
+        (1, "Linux 權限"),
+        (2, "SSH 金鑰"),
+    ]
 
 
 def test_submit_batch_for_class_students_uses_formal_class(monkeypatch):

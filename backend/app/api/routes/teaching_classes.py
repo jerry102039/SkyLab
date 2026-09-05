@@ -603,10 +603,27 @@ async def import_students(
     return add_students(class_id, StudentAdd(emails=emails), session, current_user)
 
 
+def _first_session_date(item: TeachingClass) -> date:
+    """課程期間內第一個落在「每週上課日」的日期。
+
+    ``start_date`` 只是課程期間的起點，它的星期未必等於 ``weekday``（例如學期
+    從週一開始、但每週三上課），所以課次與排程都必須從這裡推算。
+    """
+    return item.start_date + timedelta(
+        days=(item.weekday - item.start_date.weekday()) % 7
+    )
+
+
 def _generate_weeks(session, item: TeachingClass, preserve=False):
+    """重建課次；``preserve`` 時沿用既有週次的主題與教材。
+
+    對應的鍵是「第幾週」而不是上課日期：改動每週上課日或開始日期會讓所有日期
+    整批位移，用日期比對會一筆都對不上，等於把老師填好的主題與上傳的教材全部
+    刪掉。改用 week_number 之後，第 N 週的內容仍然留在第 N 週，只是日期跟著搬。
+    """
     existing = (
         {
-            row.session_date: row
+            row.week_number: row
             for row in session.exec(
                 select(TeachingClassWeek).where(TeachingClassWeek.class_id == item.id)
             ).all()
@@ -618,15 +635,13 @@ def _generate_weeks(session, item: TeachingClass, preserve=False):
         session.exec(
             delete(TeachingClassWeek).where(TeachingClassWeek.class_id == item.id)
         )
-    current = item.start_date + timedelta(
-        days=(item.weekday - item.start_date.weekday()) % 7
-    )
+    current = _first_session_date(item)
     number, keep = 1, set()
     while current <= item.end_date:
-        keep.add(current)
-        row = existing.get(current)
+        keep.add(number)
+        row = existing.get(number)
         if row:
-            row.week_number = number
+            row.session_date = current
             session.add(row)
         else:
             session.add(
@@ -637,8 +652,8 @@ def _generate_weeks(session, item: TeachingClass, preserve=False):
         current += timedelta(days=7)
         number += 1
     if preserve:
-        for day, row in existing.items():
-            if day not in keep:
+        for week_number, row in existing.items():
+            if week_number not in keep:
                 session.delete(row)
     session.commit()
 
@@ -841,14 +856,15 @@ def delete_week_file(
 
 
 def _recurrence(item: TeachingClass):
-    start = datetime.combine(item.start_date, item.start_time) - timedelta(
+    first_session = _first_session_date(item)
+    start = datetime.combine(first_session, item.start_time) - timedelta(
         minutes=item.boot_lead_minutes
     )
     duration = (
         int(
             (
-                datetime.combine(item.start_date, item.end_time)
-                - datetime.combine(item.start_date, item.start_time)
+                datetime.combine(first_session, item.end_time)
+                - datetime.combine(first_session, item.start_time)
             ).total_seconds()
             / 60
         )
