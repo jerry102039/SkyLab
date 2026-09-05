@@ -457,6 +457,101 @@ def test_course_connection_creates_matching_source_out_and_target_in(monkeypatch
     }
 
 
+def test_sync_scope_rules_removes_stale_rules_from_a_previous_vmid(monkeypatch):
+    """重試會換掉 vmid 與 IP；舊機器上指向舊 IP 的白名單必須跟著消失。
+
+    留著的話，那個 IP 回到池子後被分配給別的學生，就是一條意外的跨學生連通。
+    """
+    prefix = class_network_service.COMMENT_PREFIX
+    existing = {
+        101: [
+            {"pos": 0, "comment": f"{prefix}abc12345:101>102:any"},
+            {"pos": 1, "comment": f"{prefix}abc12345:101>999:any"},  # 舊 vmid 的殘留
+            {"pos": 2, "comment": "SkyLab:block-extra:10.0.0.0/8"},  # 別人的規則
+        ],
+    }
+    created: list[dict] = []
+    deleted: list[tuple[int, int]] = []
+
+    monkeypatch.setattr(
+        class_network_service.proxmox_service,
+        "find_resource",
+        lambda vmid: {"node": "pve1", "type": "qemu", "vmid": vmid},
+    )
+    monkeypatch.setattr(
+        class_network_service.firewall_service,
+        "get_vm_firewall_rules",
+        lambda _node, vmid, _type: existing.get(vmid, []),
+    )
+    monkeypatch.setattr(
+        class_network_service.firewall_service,
+        "create_rule",
+        lambda _node, vmid, _type, rule: created.append({"vmid": vmid, **rule}),
+    )
+    monkeypatch.setattr(
+        class_network_service.firewall_service,
+        "delete_rule_by_pos",
+        lambda _node, vmid, _type, pos: deleted.append((vmid, pos)),
+    )
+
+    errors = class_network_service.sync_scope_rules(
+        comment_prefix=prefix,
+        scope_vmids={101},
+        planned=[
+            class_network_service.PlannedRule(
+                vmid=101,
+                node="pve1",
+                resource_type="qemu",
+                comment=f"{prefix}abc12345:101>102:any",
+                rule={"type": "out", "action": "ACCEPT"},
+            )
+        ],
+    )
+
+    assert errors == []
+    assert created == []  # 已經存在的不重複建立
+    assert deleted == [(101, 1)]  # 只刪自家前綴的孤兒，block-extra 不動
+
+
+def test_sync_scope_rules_cleans_machines_that_lost_every_edge(monkeypatch):
+    prefix = class_network_service.COMMENT_PREFIX
+    deleted: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        class_network_service.proxmox_service,
+        "find_resource",
+        lambda vmid: {"node": "pve1", "type": "qemu", "vmid": vmid},
+    )
+    monkeypatch.setattr(
+        class_network_service.firewall_service,
+        "get_vm_firewall_rules",
+        lambda _node, _vmid, _type: [{"pos": 3, "comment": f"{prefix}abc12345:101>102:any"}],
+    )
+    monkeypatch.setattr(
+        class_network_service.firewall_service,
+        "delete_rule_by_pos",
+        lambda _node, vmid, _type, pos: deleted.append((vmid, pos)),
+    )
+
+    class_network_service.sync_scope_rules(
+        comment_prefix=prefix, scope_vmids={101}, planned=[]
+    )
+
+    assert deleted == [(101, 3)]
+
+
+def test_sync_scope_rules_skips_machines_that_no_longer_exist(monkeypatch):
+    def gone(_vmid):
+        raise RuntimeError("not found")
+
+    monkeypatch.setattr(class_network_service.proxmox_service, "find_resource", gone)
+
+    assert class_network_service.sync_scope_rules(
+        comment_prefix=class_network_service.COMMENT_PREFIX,
+        scope_vmids={404},
+        planned=[],
+    ) == []
+
+
 def test_course_environment_accepts_template_and_custom_nodes_with_three_node_limit():
     template_id = uuid.uuid4()
     body = EnvironmentCreate(

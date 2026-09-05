@@ -231,18 +231,24 @@ def _apply_session_topology(
                 directions.append((source, target, "any", None))
 
     errors: list[str] = []
+    planned = []
+    scope_vmids = {
+        request.vmid for request in machines_by_key.values() if request.vmid is not None
+    }
     for source, target, protocol, port in directions:
         if source.vmid is None or target.vmid is None:
             continue
         try:
-            class_network_service.allow_one_way(
-                session,
-                scope_id=practice.id,
-                comment_prefix=QUICK_NETWORK_COMMENT_PREFIX,
-                source_vmid=source.vmid,
-                target_vmid=target.vmid,
-                protocol=protocol,
-                port=port,
+            planned.extend(
+                class_network_service.plan_one_way(
+                    session,
+                    scope_id=practice.id,
+                    comment_prefix=QUICK_NETWORK_COMMENT_PREFIX,
+                    source_vmid=source.vmid,
+                    target_vmid=target.vmid,
+                    protocol=protocol,
+                    port=port,
+                )
             )
         except Exception:
             logger.exception(
@@ -252,6 +258,14 @@ def _apply_session_topology(
                 target.vmid,
             )
             errors.append(f"{source.vmid} → {target.vmid}: topology failed")
+    # 同步而非只建立：重試換過 vmid 的機器會留下指向舊 IP 的白名單
+    errors.extend(
+        class_network_service.sync_scope_rules(
+            comment_prefix=QUICK_NETWORK_COMMENT_PREFIX,
+            scope_vmids=scope_vmids,
+            planned=planned,
+        )
+    )
     return errors
 
 
