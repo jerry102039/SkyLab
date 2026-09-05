@@ -340,11 +340,11 @@
 .summaryRow:hover { background: color-mix(in srgb, var(--color-hover) 45%, transparent); }
 
 /* 班級資訊預設收起：大部分時候不必看，收起時仍露出最常用的課表、地點、開機。 */
-.classInfoFold > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 14px 18px; list-style: none; cursor: pointer; }
+.classInfoFold > summary { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 14px 18px; list-style: none; cursor: pointer; }
+.classInfoFold > summary > b { flex: 0 0 auto; color: var(--color-text-muted); font-size: $font-size-10; font-weight: $font-weight-700; letter-spacing: .04em; }
 .classInfoFold > summary::-webkit-details-marker { display: none; }
 .classInfoFold > summary:hover { background: color-mix(in srgb, var(--color-hover) 45%, transparent); }
-.classInfoFold > summary > span:first-child { display: flex; min-width: 0; align-items: center; gap: 9px; overflow: hidden; color: var(--color-text-primary); font-size: $font-size-12; font-weight: $font-weight-500; text-overflow: ellipsis; white-space: nowrap; }
-.classInfoFold > summary > span:first-child > span:first-child { flex: 0 0 auto; color: var(--color-text-muted); }
+.classInfoFold > summary > span { flex: 1; min-width: 0; overflow: hidden; color: var(--color-text-primary); font-size: $font-size-12; font-weight: $font-weight-500; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .classInfoFold > summary > span:last-child { flex: 0 0 auto; color: var(--color-primary); transition: transform $transition-base; }
 .classInfoFold[open] > summary { border-bottom: 1px solid var(--color-border); }
 .classInfoFold[open] > summary > span:last-child { transform: rotate(180deg); }

@@ -496,6 +496,7 @@
   "ClassWorkspacePage.editScheduleBtn": "Edit class & schedule",
   "ClassWorkspacePage.termLabel": "Term",
   "ClassWorkspacePage.locationLabel": "Location",
+  "ClassWorkspacePage.classInfoTitle": "Class info",
   "ClassWorkspacePage.locationUnset": "Not set",
   "ClassWorkspacePage.fixedScheduleLabel": "Fixed class time",
   "ClassWorkspacePage.bootLeadFieldLabel": "Boot lead time",

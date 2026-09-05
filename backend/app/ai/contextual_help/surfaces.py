@@ -788,19 +788,14 @@ _CLASS_MGMT_ELEMENTS: tuple[ElementSpec, ...] = (
     ElementSpec(
         id="classmgmt.class_info_fold", role="button", label="班級資訊",
         section="班級總覽",
-        help="概覽右側那一行課表摘要，點開會展開學期、上課地點、課程期間、"
-             "提前開機與下課後關機。",
-    ),
-    ElementSpec(
-        id="classmgmt.machine_summary", role="button", label="機器就緒摘要",
-        section="班級總覽",
-        help="概覽右側顯示幾台機器已就緒，點進去是「機器」分頁的完整設定。",
+        help="班級總覽上一行收合的課表摘要，點開會展開學期、上課地點、"
+             "課程期間、提前開機與下課後關機。",
     ),
     ElementSpec(
         id="classmgmt.more_menu", role="button", label="更多班級操作",
         section="班級總覽",
-        help="頁首右上的 ⋯ 按鈕。編輯班級與課表、延長課程日期、"
-             "封存並回收資源都收在這裡。",
+        help="頁首的 ⋯ 按鈕。編輯班級與課表、延長課程日期、封存並回收"
+             "都收在這裡。",
     ),
     ElementSpec(
         id="classmgmt.extend_class", role="button", label="延長課程日期",
@@ -808,10 +803,10 @@ _CLASS_MGMT_ELEMENTS: tuple[ElementSpec, ...] = (
         help="在 ⋯ 選單裡。延長後會自動補上新的課次，機器到期日一併順延。",
     ),
     ElementSpec(
-        id="classmgmt.archive_class", role="button", label="封存並回收資源",
+        id="classmgmt.archive_class", role="button", label="封存並回收",
         section="班級總覽",
         help="在 ⋯ 選單裡，動作不可逆：班級會結束，班上的機器會被刪除。"
-             "回收失敗時可以從概覽的狀態面板重試。",
+             "回收失敗時可以從班級總覽的狀態面板重試。",
     ),
 )
 

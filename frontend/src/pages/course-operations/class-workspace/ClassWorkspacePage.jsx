@@ -225,7 +225,8 @@ function Overview({
         </section>
         <details className={`${styles.overviewInfoCard} ${styles.classInfoFold}`}>
           <summary>
-            <span><MIcon name="schedule" size={17} />{weekday} {item.startTime}–{item.endTime}{item.location ? ` · ${item.location}` : ""} · {t("ClassWorkspacePage.bootLeadShort", { minutes: item.bootLeadMinutes })}</span>
+            <b>{t("ClassWorkspacePage.classInfoTitle")}</b>
+            <span>{weekday} {item.startTime}–{item.endTime}{item.location ? ` · ${item.location}` : ""} · {t("ClassWorkspacePage.bootLeadShort", { minutes: item.bootLeadMinutes })}</span>
             <MIcon name="expand_more" size={19} />
           </summary>
           <div className={styles.classFacts}>

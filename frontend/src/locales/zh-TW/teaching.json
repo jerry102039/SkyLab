@@ -496,6 +496,7 @@
   "ClassWorkspacePage.editScheduleBtn": "編輯班級與課表",
   "ClassWorkspacePage.termLabel": "學期",
   "ClassWorkspacePage.locationLabel": "上課地點",
+  "ClassWorkspacePage.classInfoTitle": "班級資訊",
   "ClassWorkspacePage.locationUnset": "未填寫",
   "ClassWorkspacePage.fixedScheduleLabel": "固定上課",
   "ClassWorkspacePage.bootLeadFieldLabel": "提前開機",

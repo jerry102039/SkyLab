@@ -496,6 +496,7 @@
   "ClassWorkspacePage.editScheduleBtn": "クラスと時間割を編集",
   "ClassWorkspacePage.termLabel": "学期",
   "ClassWorkspacePage.locationLabel": "教室",
+  "ClassWorkspacePage.classInfoTitle": "クラス情報",
   "ClassWorkspacePage.locationUnset": "未設定",
   "ClassWorkspacePage.fixedScheduleLabel": "固定の授業時間",
   "ClassWorkspacePage.bootLeadFieldLabel": "起動リードタイム",
