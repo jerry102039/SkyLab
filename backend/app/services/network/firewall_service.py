@@ -10,6 +10,7 @@
 
 import logging
 import re
+from typing import Any
 
 from sqlmodel import Session
 
@@ -232,12 +233,26 @@ def _set_firewall_options(
 
 
 def ensure_firewall_enabled(node: str, vmid: int, resource_type: ResourceType) -> None:
-    """確保防火牆已啟用（VM 啟動時呼叫）"""
+    """確保防火牆已啟用且入站仍為 DROP（VM 啟動時呼叫）。
+
+    學生之間的隔離完全靠這兩件事：機器都在同一個 bridge、同一個 IP 子網，
+    沒有 VLAN 隔離，擋下來的是每台自己的 policy_in=DROP。只檢查 enable
+    不夠 —— 防火牆開著但 policy_in 被改成 ACCEPT 的話，這台就對整個實驗室
+    子網敞開，拓樸的白名單也失去意義。
+
+    policy_in 沒有值時代表沿用 PVE 預設（DROP），不需要處理。
+    """
     try:
         opts = get_firewall_options(node, vmid, resource_type)
+        fixes: dict[str, Any] = {}
         if not opts.get("enable"):
-            _set_firewall_options(node, vmid, resource_type, enable=1)
-            logger.info(f"VM {vmid}: 已強制啟用防火牆")
+            fixes["enable"] = 1
+        policy_in = opts.get("policy_in")
+        if policy_in and str(policy_in).upper() != "DROP":
+            fixes["policy_in"] = "DROP"
+        if fixes:
+            _set_firewall_options(node, vmid, resource_type, **fixes)
+            logger.warning(f"VM {vmid}: 已回復防火牆設定 {fixes}")
     except Exception as e:
         logger.error(f"VM {vmid}: 確認防火牆啟用失敗: {e}")
 

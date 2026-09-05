@@ -5,7 +5,6 @@
   "availability.no_node_for_window": "No node is available for the requested time window.",
   "availability.window_required_short": "A request window is required.",
   "availability.invalid_timezone": "Invalid timezone",
-
   "vm_request.no_node_for_window": "No node is available for the requested time window.",
   "vm_request.provisioned_request_no_node": "Provisioned request {request_id} has no known node.",
   "vm_request.no_node_after_reservations": "No node is available for the requested time window after applying reservations.",
@@ -38,8 +37,9 @@
   "vm_request.retry_requires_approved": "Only approved VM requests can be retried (current={status})",
   "vm_request.retry_already_provisioned": "This request has already been provisioned; control or delete the resource instead.",
   "vm_request.retry_requires_failed": "Only failed provisioning attempts can be retried.",
-
   "spec_change.cpu_value_required": "requested_cpu is required for CPU change",
+  "spec_change.class_machine_spec_fixed": "Class machine specs are fixed by the course environment version and cannot be changed individually.",
+  "spec_change.practice_machine_spec_fixed": "Quick-practice machine specs are fixed by the environment version and cannot be changed individually.",
   "spec_change.memory_value_required": "requested_memory is required for memory change",
   "spec_change.disk_value_required": "requested_disk is required for disk change",
   "spec_change.disk_increase_only": "Disk size can only be increased. Current: {current}GB",
@@ -49,7 +49,6 @@
   "spec_change.disk_current_unknown": "Cannot apply disk change for VMID {vmid}: current disk size is unknown",
   "spec_change.disk_increase_only_detail": "Disk size can only be increased (current={current}GB, requested={requested}GB)",
   "spec_change.apply_failed": "Failed to apply requested changes before approval persistence: {error}",
-
   "batch_provision.no_students": "This class has no students, so batch creation cannot proceed.",
   "batch_provision.template_not_ready": "The specified template does not exist or is not ready yet.",
   "batch_provision.insufficient_ip": "Not enough available IPs: {needed} needed, but only {available} remain available",

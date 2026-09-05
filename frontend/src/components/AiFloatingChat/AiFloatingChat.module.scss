@@ -571,12 +571,21 @@
   gap: $spacing-8;
   padding: 0 $spacing-16;
   border-radius: $radius-pill;
-  background: var(--color-primary);
+  /* 常駐在畫面右下角，稍微透一點才不會一直搶走底下內容的注意力；
+     hover 時回到不透明，表示它是活的 */
+  background: color-mix(in srgb, var(--color-primary) 88%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   color: var(--color-text-on-primary);
-  box-shadow: 0 6px 22px color-mix(in srgb, var(--color-primary) 34%, transparent);
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--color-primary) 26%, transparent);
   cursor: pointer;
+  transition: background $transition-base, box-shadow $transition-base, transform $transition-base;
 
-  &:hover { transform: translateY(-1px); }
+  &:hover {
+    transform: translateY(-1px);
+    background: var(--color-primary);
+    box-shadow: 0 6px 22px color-mix(in srgb, var(--color-primary) 34%, transparent);
+  }
 }
 
 .backdrop { display: none; }

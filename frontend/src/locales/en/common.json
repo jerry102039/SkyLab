@@ -2,29 +2,23 @@
   "AuthContext.sessionExpired": "Your session has expired. Please log in again.",
   "AuthContext.connectionInterrupted": "Connection temporarily interrupted. The system will automatically retry login verification.",
   "AuthContext.loginVerificationFailed": "Login verification failed. Please log in again.",
-
   "DashboardLayout.openMenuAriaLabel": "Open menu",
   "DashboardLayout.pageLoading": "Loading page…",
-
   "App.connectionUnavailable": "Temporarily unable to connect",
   "App.verifyingLogin": "Verifying login status",
   "App.connectionUnavailableDesc": "If the problem persists, please contact your system administrator.",
   "App.verifyingLoginDesc": "Please wait while the system confirms your login information.",
   "App.retrying": "Retrying…",
   "App.retryConnect": "Reconnect",
-
   "ErrorBoundary.title": "A page error occurred",
   "ErrorBoundary.desc": "Something went wrong with this section. You can retry or reload the page.",
   "ErrorBoundary.details": "Error details",
   "ErrorBoundary.retry": "Retry",
   "ErrorBoundary.reload": "Reload page",
-
   "LoadingState.default": "Loading…",
-
   "ConfirmProvider.defaultTitle": "Confirm action",
   "ConfirmProvider.cancel": "Cancel",
   "ConfirmProvider.confirm": "Confirm",
-
   "SessionWarningDialog.extended": "Extended by {{hours}} hours",
   "SessionWarningDialog.extendFailed": "Failed to extend",
   "SessionWarningDialog.expiryTitle": "Resource is about to expire",
@@ -39,11 +33,9 @@
   "SessionWarningDialog.gotIt": "Got it",
   "SessionWarningDialog.later": "Later",
   "SessionWarningDialog.extendUsageTime": "Extend usage time",
-
   "SubnetBanner.adminMessage": "The subnet has not been configured yet, so VM/LXC creation is disabled.",
   "SubnetBanner.userMessage": "You can't create a VM or container right now. Please contact your system administrator to complete the network setup.",
   "SubnetBanner.goToSettings": "Go to settings",
-
   "UserGuide.openGuideAriaLabel": "Open the {{title}} guide",
   "UserGuide.guideTitleAttr": "{{title}} guide",
   "UserGuide.nextStepAriaLabel": "Next guide step",
@@ -54,9 +46,7 @@
   "UserGuide.backButton": "Back",
   "UserGuide.finishButton": "Done",
   "UserGuide.nextButton": "Next",
-
   "UserGuide.studentCourse.title": "Course page",
-
   "UserGuide.studentHome.title": "Home",
   "UserGuide.studentHome.step1.title": "Start with your ongoing courses",
   "UserGuide.studentHome.step1.text": "Courses appear here for their entire duration, not just on class day. Green means the class is currently in session; you can still click into other courses to use machines, check assignments, or practice after class.",
@@ -76,13 +66,11 @@
   "UserGuide.studentHome.step8.text": "Each task has its own completion checkbox. Tick it when you're done, and untick it any time if it isn't finished yet.",
   "UserGuide.studentHome.step9.title": "These are the grading items your teacher has assigned to AI",
   "UserGuide.studentHome.step9.text": "Only checks your teacher has approved are shown here. This only records your completion status; it doesn't start an AI check or judge whether you're right or wrong.",
-
   "UserGuide.myRequests.title": "My Requests",
   "UserGuide.myRequests.step1.title": "Only apply here for independent research",
   "UserGuide.myRequests.step1.text": "When you need to set up your own project or research machine, click \"Request Resource\" and fill in your requirements. Classroom machines assigned by your teacher don't need to be requested again.",
   "UserGuide.myRequests.step2.title": "The status shows what stage the request is at",
   "UserGuide.myRequests.step2.text": "\"Under review\" means it's waiting for your teacher to process; \"Provisioned\" means the machine has been created; \"Provisioning failed\" lets you click retry. Click a row to expand the request reason and detailed timestamps.",
-
   "UserGuide.myResources.title": "My Resources",
   "UserGuide.myResources.step1.title": "These numbers are your usage quota",
   "UserGuide.myResources.step1.text": "The number on the left is your current usage; the one on the right is your available limit. For example, \"2 / 4 units\" means you've used 2 and can have up to 4. When you're close to the limit, you'll need to release a resource first.",
@@ -90,7 +78,6 @@
   "UserGuide.myResources.step2.text": "The IP is the machine's connection address; the status in the top-right corner shows whether it's usable. Click the machine name to see its full details.",
   "UserGuide.myResources.step3.title": "Use this button to enter the machine",
   "UserGuide.myResources.step3.text": "When the machine shows \"Running\", you can click \"Terminal\" or \"Console\" to start working. The three-dot button next to it lets you power on, shut down, or restart.",
-
   "UserGuide.firewall.title": "Firewall",
   "UserGuide.firewall.step1.title": "Add a rule to allow a connection",
   "UserGuide.firewall.step1.text": "When two machines need to communicate, click \"Add Connection\" and choose the source, destination, and allowed port. There's no need to add one without a clear requirement.",
@@ -98,7 +85,6 @@
   "UserGuide.firewall.step2.text": "Each box represents a VM, and the lines between boxes represent allowed traffic. Click a VM to view its rules; the number on a line is the open port.",
   "UserGuide.firewall.step3.title": "These buttons only change how you view it",
   "UserGuide.firewall.step3.text": "\"Auto-arrange\" tidies up positions; \"Connection labels\" shows or hides ports; \"Map\" toggles the thumbnail in the bottom-right corner. None of these modify any firewall rules.",
-
   "UserGuide.reverseProxy.title": "Reverse Proxy",
   "UserGuide.reverseProxy.step1.title": "Turn a VM service into an easy-to-remember URL",
   "UserGuide.reverseProxy.step1.text": "Once the website or API inside your VM is running, click \"Add Domain\" and choose the VM, the service port, and the URL. The system handles the outbound routing for you.",
@@ -106,7 +92,6 @@
   "UserGuide.reverseProxy.step2.text": "This explains what you need to prepare before setup and how the URL connects to your VM. Once HTTPS is enabled, the certificate is requested and renewed automatically.",
   "UserGuide.reverseProxy.step3.title": "Each row is one public URL",
   "UserGuide.reverseProxy.step3.text": "The VM number is the target machine's ID, and the port is the one the service inside the VM listens on; the HTTPS label indicates a secure connection. Click \"Open\" to test the URL directly.",
-
   "UserGuide.domain.title": "Domain Management",
   "UserGuide.domain.step1.title": "Set up Cloudflare the first time you use this",
   "UserGuide.domain.step1.text": "Click \"Connection Settings\" and enter your Account ID and API Token. \"Test Connection\" only verifies that the settings are valid — it does not modify DNS.",
@@ -116,7 +101,6 @@
   "UserGuide.domain.step3.text": "For example, \"Zones (3)\" means there are 3 domains available in the account. Click a domain on the left first, and its DNS records will appear on the right.",
   "UserGuide.domain.step4.title": "Search or add DNS records here",
   "UserGuide.domain.step4.text": "Use the search box to find existing records; \"Add Record\" creates a mapping between a name and an IP/service. If you're unsure about the record type, don't modify a production domain directly.",
-
   "UserGuide.aiApi.title": "AI API",
   "UserGuide.aiApi.step1.title": "These four numbers are your request and key counts",
   "UserGuide.aiApi.step1.text": "\"Active keys\" is the number of keys that can currently call the API; \"Expired keys\" can no longer be used; \"Approved requests\" doesn't necessarily equal the number of currently valid keys.",
@@ -150,7 +134,6 @@
   "UserGuide.aiApi.step15.text": "Total calls is the number of requests; Input Tokens is the amount of text sent to the model, and Output Tokens is the amount returned by the model. You can view usage by model further below.",
   "UserGuide.aiApi.step16.title": "Template usage is the consumption from the template feature",
   "UserGuide.aiApi.step16.text": "This tracks calls made through the AI Template API, counted separately from the direct calls above, so you can tell which type of feature is consuming more.",
-
   "Sidebar.topDashboard": "Home",
   "Sidebar.groupResource": "Resources",
   "Sidebar.itemMyResources": "My Resources",
@@ -166,12 +149,12 @@
   "Sidebar.itemReverseProxy": "Reverse Proxy",
   "Sidebar.groupAi": "AI Services",
   "Sidebar.itemAiApi": "AI API",
-  "Sidebar.itemAiApiReview": "Request Review",
+  "Sidebar.itemAiApiReview": "AI API review",
   "Sidebar.itemAiApiKeys": "Key Management",
   "Sidebar.itemAiMonitoring": "Usage Monitoring",
   "Sidebar.groupTeaching": "Teaching",
   "Sidebar.itemClassManagement": "Class Management",
-  "Sidebar.itemCourseTemplateManagement": "Multi-Machine Environment Templates",
+  "Sidebar.itemCourseTemplateManagement": "Learning Environments",
   "Sidebar.groupSystem": "System Administration",
   "Sidebar.itemAdmin": "User Management",
   "Sidebar.itemQuotas": "Quota Management",

@@ -753,8 +753,60 @@ _CLASS_MGMT_ELEMENTS: tuple[ElementSpec, ...] = (
         section="班級總覽",
     ),
     ElementSpec(
+        id="classmgmt.filter_planning", role="button", label="準備中",
+        section="班級總覽", help="篩選還沒送出機器配置的班級。",
+    ),
+    ElementSpec(
+        id="classmgmt.filter_building", role="button", label="建置中",
+        section="班級總覽",
+        help="篩選已送出、正在等待審核或正在建立機器的班級；"
+             "這段期間老師不需要做任何事。",
+    ),
+    ElementSpec(
+        id="classmgmt.filter_partial_failed", role="button", label="需要處理",
+        section="班級總覽",
+        help="只有在真的有班級建機失敗時才會出現；點進去可以重試或退回編輯。",
+    ),
+    ElementSpec(
+        id="classmgmt.filter_active", role="button", label="可以上課",
+        section="班級總覽", help="篩選機器都建好、可以開始上課的班級。",
+    ),
+    ElementSpec(
+        id="classmgmt.show_archived", role="button", label="顯示已結束",
+        section="班級總覽",
+        help="已結束的班級預設不列出，也不計入其他分頁的數字。",
+    ),
+    ElementSpec(
         id="classmgmt.boot_lead", role="readonly", label="提前開機",
         section="上課環境", help="機器會在上課時段前先開好。",
+    ),
+    ElementSpec(
+        id="classmgmt.shutdown_grace", role="readonly", label="下課後關機",
+        section="上課環境",
+        help="下課後機器會多留這段時間才自動關機，讓學生有時間收尾。",
+    ),
+    ElementSpec(
+        id="classmgmt.class_info_fold", role="button", label="班級資訊",
+        section="班級總覽",
+        help="班級總覽上一行收合的課表摘要，點開會展開學期、上課地點、"
+             "課程期間、提前開機與下課後關機。",
+    ),
+    ElementSpec(
+        id="classmgmt.more_menu", role="button", label="更多班級操作",
+        section="班級總覽",
+        help="頁首的 ⋯ 按鈕。編輯班級與課表、延長課程日期、封存並回收"
+             "都收在這裡。",
+    ),
+    ElementSpec(
+        id="classmgmt.extend_class", role="button", label="延長課程日期",
+        section="班級總覽",
+        help="在 ⋯ 選單裡。延長後會自動補上新的課次，機器到期日一併順延。",
+    ),
+    ElementSpec(
+        id="classmgmt.archive_class", role="button", label="封存並回收",
+        section="班級總覽",
+        help="在 ⋯ 選單裡，動作不可逆：班級會結束，班上的機器會被刪除。"
+             "回收失敗時可以從班級總覽的狀態面板重試。",
     ),
 )
 
@@ -785,15 +837,15 @@ _CLASS_SETUP_ELEMENTS: tuple[ElementSpec, ...] = (
         help="安排 checkpoint 與每週內容。",
     ),
     ElementSpec(
-        id="classsetup.step_review", role="list", label="確認建立", section="每週任務",
-        help="做容量預檢後送出。",
+        id="classsetup.step_review", role="list", label="確認建立", section="確認建立",
+        help="做容量預檢後送出。送出後學生、環境與課表會鎖定並進入管理員審核。",
     ),
 )
 
-# ── 多機環境模板 ────────────────────────────────────────────────────
+# ── 學習環境 ────────────────────────────────────────────────────
 _COURSE_TPL_ELEMENTS: tuple[ElementSpec, ...] = (
     ElementSpec(
-        id="coursetpl.create", role="button", label="建立多機環境",
+        id="coursetpl.create", role="button", label="建立學習環境",
         section="模板清單",
     ),
     ElementSpec(id="coursetpl.status_published", role="readonly", label="已發布", section="模板清單"),
@@ -1275,14 +1327,14 @@ _SURFACES: tuple[SurfaceSpec, ...] = (
         path="/class-setup",
         title="建立班級",
         purpose="依序完成課表、學生、環境與每週任務，每一步都會保存到正式班級。",
-        sections=("課表", "學生", "環境", "每週任務"),
+        sections=("課表", "學生", "環境", "每週任務", "確認建立"),
         access="staff",
         elements=_CLASS_SETUP_ELEMENTS,
     ),
     SurfaceSpec(
         id="course-template-management",
         path="/course-template-management",
-        title="多機環境模板",
+        title="學習環境",
         purpose=(
             "定義一組固定的機器配置，提供給正式課程、快速練習或兩者共用。"
             "每位學生最多三台機器。"

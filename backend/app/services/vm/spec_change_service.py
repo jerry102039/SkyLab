@@ -13,6 +13,7 @@ from app.exceptions import (
     ProxmoxError,
 )
 from app.models import SpecChangeRequestStatus, SpecChangeType
+from app.repositories import resource as resource_repo
 from app.repositories import spec_change_request as spec_request_repo
 from app.schemas import (
     SpecChangeRequestCreate,
@@ -21,7 +22,7 @@ from app.schemas import (
     SpecChangeRequestsPublic,
 )
 from app.services.proxmox import proxmox_service
-from app.services.resource import quota_service
+from app.services.resource import quota_service, resource_service
 from app.services.resource.access import require_resource_management
 from app.services.user import audit_service
 
@@ -62,6 +63,21 @@ def _check_ownership_and_get_info(
     return proxmox_service.find_resource(vmid)
 
 
+def _reject_fixed_spec_resource(*, session: Session, vmid: int) -> None:
+    """課堂與快速練習的機器照課程環境版本建立，規格不接受個別調整。
+
+    ``ResourcePublic.can_request_spec_change`` 一直有算這件事，但沒有任何地方
+    讀它——所以旗標說不行、API 還是收單。守衛放在這裡才算數。
+    """
+    resource = resource_repo.get_resource_by_vmid(session=session, vmid=vmid)
+    if resource is None:
+        return
+    if resource.allocation_scope == "teaching_class":
+        raise BadRequestError(t("spec_change.class_machine_spec_fixed"))
+    if resource_service._is_practice_resource(session, resource, None):
+        raise BadRequestError(t("spec_change.practice_machine_spec_fixed"))
+
+
 def _get_current_specs(
     node: str, vmid: int, resource_type: str
 ) -> dict:
@@ -75,6 +91,7 @@ def create(
     resource_info = _check_ownership_and_get_info(
         session=session, user=user, vmid=vmid
     )
+    _reject_fixed_spec_resource(session=session, vmid=vmid)
 
     node = resource_info["node"]
     resource_type = resource_info["type"]

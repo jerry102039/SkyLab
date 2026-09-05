@@ -64,6 +64,11 @@ function formatDatetime(isoStr) {
 }
 
 /* ── Primitive sub-components ── */
+/* reboot / reset 之後機器仍是開著的；原本一律當成 stopped 會讓列上的狀態說謊。 */
+function statusAfterAction(action) {
+  return action === "stop" || action === "shutdown" ? "stopped" : "running";
+}
+
 function StatusBadge({ status }) {
   const { t } = useTranslation("personal");
   const s = STATUS_MAP[status] ?? { label: status, color: "muted", icon: "help_outline" };
@@ -252,7 +257,7 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
     setActionLoading(action);
     try {
       await ResourcesService[action](resource.vmid);
-      onUpdated({ ...resource, status: action === "start" ? "running" : "stopped" });
+      onUpdated({ ...resource, status: statusAfterAction(action) });
     } finally {
       setActionLoading(null);
     }
@@ -306,12 +311,23 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
   </>;
 }
 
+function machineSpecLabel(machine) {
+  const parts = [];
+  if (machine.cpu) parts.push(`${machine.cpu} CPU`);
+  if (machine.memoryBytes) parts.push(`${Math.round(machine.memoryBytes / 1024 ** 3)} GB`);
+  return parts.join(" · ");
+}
+
 function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
   const { t } = useTranslation("personal");
   const toast = useToast();
+  const navigate = useNavigate();
   const type = TYPE_MAP[machine.type] ?? { label: machine.type, icon: "computer" };
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuClosing, setMenuClosing] = useState(false);
+  const menuBtnRef = useRef(null);
   const resource = machine.resource;
   const isLxc = machine.type === "lxc";
   const environmentReady = ["running", "active"].includes(groupStatus);
@@ -319,32 +335,46 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
     environmentReady && resource?.vmid && resource.can_control !== false,
   );
   const canOpen = canControl && resource.status === "running";
-  const controlAction = resource?.status === "running" ? "shutdown" : "start";
+  const specLabel = machineSpecLabel(machine);
 
-  async function handleControl() {
+  function closeMenu() {
+    setMenuClosing(true);
+    setTimeout(() => { setMenuOpen(false); setMenuClosing(false); }, 130);
+  }
+
+  // 與單機列同一組電源控制；環境內的機器差別只在不能單台刪除。
+  async function handleControl(action) {
     if (!canControl || actionLoading) return;
-    setActionLoading(true);
+    setActionLoading(action);
     try {
-      await ResourcesService[controlAction](resource.vmid);
-      const status = controlAction === "start" ? "running" : "stopped";
-      onUpdated({ ...resource, status });
-      toast.success(controlAction === "start" ? t("EnvironmentMachineRow.startCommandSent") : t("EnvironmentMachineRow.shutdownCommandSent"));
+      await ResourcesService[action](resource.vmid);
+      onUpdated({ ...resource, status: statusAfterAction(action) });
+      toast.success(t("EnvironmentMachineRow.commandSent"));
     } catch (error) {
       toast.error(error?.message ?? t("EnvironmentMachineRow.controlFailed"));
     } finally {
-      setActionLoading(false);
+      setActionLoading(null);
     }
   }
 
   return <>
     <tr className={`${styles.tr} ${styles.environmentMachineRow}`}>
-    <td className={styles.td}><div className={`${styles.nameCell} ${styles.environmentMachineName}`}><span className={styles.machineBranch}>└</span><div><strong>{machine.name}</strong><small>{machine.role} · {t(type.labelKey ?? type.label)}</small></div></div></td>
+    <td className={styles.td}><div className={`${styles.nameCell} ${styles.environmentMachineName}`}><span className={styles.machineBranch}>└</span><div>{resource?.vmid > 0
+      ? <button type="button" className={styles.nameLink} onClick={() => navigate(`/my-resources/${resource.vmid}`)}>{machine.name}</button>
+      : <strong>{machine.name}</strong>}<small>{machine.role} · {t(type.labelKey ?? type.label)}{specLabel ? ` · ${specLabel}` : ""}</small></div></div></td>
     <td className={styles.td}><div className={styles.envPrimary}>{machine.os}</div><div className={styles.envSub}>{machine.resource ? t("EnvironmentMachineRow.resourceConnected") : t("EnvironmentMachineRow.creating")}</div></td>
     <td className={styles.td}><StatusBadge status={machine.status} /></td>
     <td className={styles.td}><span className={styles.mono}>{machine.ip}</span></td>
     <td className={styles.td}><span className={styles.muted}>{t("EnvironmentMachineRow.managedByEnvironment")}</span></td>
     <td className={styles.td}>{machine.node}</td>
-    <td className={styles.td}><div className={styles.rowActions}><button type="button" className={styles.terminalBtn} disabled={!canOpen} title={canOpen ? (isLxc ? t("EnvironmentMachineRow.terminal") : t("EnvironmentMachineRow.console")) : t("EnvironmentMachineRow.notReadyTitle")} onClick={() => setConsoleOpen(true)}><MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />{isLxc ? t("EnvironmentMachineRow.terminal") : t("EnvironmentMachineRow.console")}</button><button type="button" className={styles.terminalBtn} disabled={!canControl || actionLoading || !["running", "stopped"].includes(resource?.status)} onClick={handleControl}><MIcon name={actionLoading ? "hourglass_empty" : controlAction === "start" ? "play_arrow" : "power_settings_new"} size={14} />{controlAction === "start" ? t("EnvironmentMachineRow.start") : t("EnvironmentMachineRow.shutdown")}</button></div></td>
+    <td className={styles.td}><div className={styles.rowActions}>
+      <button type="button" className={styles.terminalBtn} disabled={!canOpen} title={canOpen ? (isLxc ? t("EnvironmentMachineRow.terminal") : t("EnvironmentMachineRow.console")) : t("EnvironmentMachineRow.notReadyTitle")} onClick={() => setConsoleOpen(true)}><MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />{isLxc ? t("EnvironmentMachineRow.terminal") : t("EnvironmentMachineRow.console")}</button>
+      {actionLoading && <MIcon name="hourglass_empty" size={16} />}
+      {canControl && <div className={styles.menuWrap}>
+        {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onClose={closeMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
+        <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)} title={t("ResourceRow.moreActions")}><MIcon name="more_vert" size={18} /></button>
+      </div>}
+    </div></td>
     </tr>
     {consoleOpen && isLxc && createPortal(<TerminalDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
     {consoleOpen && !isLxc && createPortal(<VncDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
@@ -356,8 +386,27 @@ function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
   const [expanded, setExpanded] = useState(true);
   const [ending, setEnding] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
+  const [groupAction, setGroupAction] = useState(null);
   const toast = useToast();
   const canEnd = group.kind === "quick_practice" && !["reclaiming", "reclaimed"].includes(group.status);
+  const controllableVmids = group.machines
+    .filter((machine) => machine.resource?.vmid && machine.resource.can_control !== false)
+    .map((machine) => machine.resource.vmid);
+  const runningCount = group.machines.filter((machine) => machine.status === "running").length;
+
+  async function runGroupAction(action) {
+    if (!controllableVmids.length || groupAction) return;
+    setGroupAction(action);
+    try {
+      await ResourcesService.batchAction(controllableVmids, action);
+      toast.success(t("EnvironmentGroupRows.groupCommandSent"));
+      onEnded?.();
+    } catch (error) {
+      toast.error(error?.message ?? t("EnvironmentGroupRows.groupCommandFailed"));
+    } finally {
+      setGroupAction(null);
+    }
+  }
 
   async function endPractice() {
     setEnding(true);
@@ -385,13 +434,15 @@ function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
       <td className={styles.td}><button type="button" className={styles.environmentToggle} aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}><MIcon name={expanded ? "expand_more" : "chevron_right"} size={20} /><span><strong>{group.kindLabel}｜{group.title}</strong><small>{t("EnvironmentGroupRows.machineCount", { count: group.machines.length })}</small></span></button></td>
       <td className={styles.td}><div className={styles.envPrimary}>{group.kind === "course" ? t("EnvironmentGroupRows.courseEnv") : t("EnvironmentGroupRows.quickPracticeEnv")}</div><div className={styles.envSub}>{t("EnvironmentGroupRows.groupOverview")}</div></td>
       <td className={styles.td}><StatusBadge status={group.status} /></td>
-      <td className={styles.td}><span className={styles.muted}>{t("EnvironmentGroupRows.expandToView")}</span></td>
+      <td className={styles.td}><span className={styles.muted}>{t("EnvironmentGroupRows.runningCount", { running: runningCount, total: group.machines.length })}</span></td>
       <td className={styles.td}><strong className={styles.environmentTiming}>{group.timingLabel}</strong></td>
       <td className={styles.td}>{group.nodeLabel}</td>
       <td className={styles.td}><div className={styles.groupActions}>
-        {canEnd
-          ? <button type="button" className={styles.terminalBtn} disabled={ending} onClick={() => setEndConfirm(true)}><MIcon name="stop_circle" size={14} />{ending ? t("EnvironmentGroupRows.ending") : t("EnvironmentGroupRows.endPractice")}</button>
-          : <span className={styles.muted}>{t("EnvironmentGroupRows.expandToView")}</span>}
+        {controllableVmids.length > 0 && <>
+          <button type="button" className={styles.terminalBtn} disabled={Boolean(groupAction) || runningCount === group.machines.length} onClick={() => runGroupAction("start")}><MIcon name={groupAction === "start" ? "hourglass_empty" : "play_arrow"} size={14} />{t("EnvironmentGroupRows.startAll")}</button>
+          <button type="button" className={styles.terminalBtn} disabled={Boolean(groupAction) || runningCount === 0} onClick={() => runGroupAction("shutdown")}><MIcon name={groupAction === "shutdown" ? "hourglass_empty" : "power_settings_new"} size={14} />{t("EnvironmentGroupRows.shutdownAll")}</button>
+        </>}
+        {canEnd && <button type="button" className={styles.terminalBtn} disabled={ending} onClick={() => setEndConfirm(true)}><MIcon name="stop_circle" size={14} />{ending ? t("EnvironmentGroupRows.ending") : t("EnvironmentGroupRows.endPractice")}</button>}
       </div></td>
     </tr>
     {expanded && group.machines.map((machine) => <EnvironmentMachineRow key={machine.id} machine={machine} groupStatus={group.status} onUpdated={onUpdated} />)}

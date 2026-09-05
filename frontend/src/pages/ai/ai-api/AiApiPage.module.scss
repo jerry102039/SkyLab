@@ -138,7 +138,7 @@
   padding: $spacing-8 12px;
   border: 1px solid var(--color-border);
   border-radius: $radius-8;
-  background: var(--color-bg);
+  background: var(--color-surface);
   color: var(--color-text-primary);
   font-size: $font-size-14;
   transition: border-color $transition-base, box-shadow $transition-base;
@@ -309,7 +309,7 @@
   border-radius: $radius-8;
   font-size: $font-size-14;
   font-weight: $font-weight-500;
-  background: var(--color-bg);
+  background: var(--color-surface);
   color: var(--color-text-primary);
 
   &:focus {
@@ -507,7 +507,7 @@
   padding: $spacing-16;
   border: 1px solid var(--color-border);
   border-radius: $radius-12;
-  background: var(--color-bg);
+  background: var(--color-surface);
 }
 
 .usageStatLabel {

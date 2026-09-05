@@ -83,6 +83,11 @@ export default function CourseTemplateManagementPage() {
     return matchesQuery && (status === "all" || template.status === status);
   }), [query, status, templates]);
 
+  const statusCounts = useMemo(() => templates.reduce(
+    (counts, template) => ({ ...counts, [template.status]: (counts[template.status] ?? 0) + 1 }),
+    { all: templates.length },
+  ), [templates]);
+
   return <div className={`${styles.page} ${styles.listPage}`}>
     <PageHeader title={t("CourseTemplateManagementPage.pageTitle")} subtitle={t("CourseTemplateManagementPage.pageSubtitle")}>
       <button type="button" className={styles.btnPrimary} onClick={() => navigate("/course-template-management/new")}><MIcon name="add" size={16} />{t("CourseTemplateManagementPage.createEnvBtn")}</button>
@@ -91,17 +96,17 @@ export default function CourseTemplateManagementPage() {
     <section className={styles.card}>
       <div className={styles.toolbar}>
         <label className={styles.searchInput}><MIcon name="search" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("CourseTemplateManagementPage.searchPlaceholder")} /></label>
-        <div className={styles.pillTabs}>{[["all", "CourseTemplateManagementPage.filterAll"], ["published", "CourseTemplateManagementPage.statusPublished"], ["draft", "CourseTemplateManagementPage.statusDraft"], ["retired", "CourseTemplateManagementPage.statusRetired"]].map(([key, labelKey]) => <button type="button" key={key} className={status === key ? styles.pillActive : ""} onClick={() => setStatus(key)}>{t(labelKey)}</button>)}</div>
+        <div className={styles.pillTabs}>{[["all", "CourseTemplateManagementPage.filterAll"], ["published", "CourseTemplateManagementPage.statusPublished"], ["draft", "CourseTemplateManagementPage.statusDraft"], ["retired", "CourseTemplateManagementPage.statusRetired"]].map(([key, labelKey]) => <button type="button" key={key} className={status === key ? styles.pillActive : ""} onClick={() => setStatus(key)}>{t(labelKey)}<i>{statusCounts[key] ?? 0}</i></button>)}</div>
       </div>
       {error && <p className={styles.errorMessage}>{error}</p>}
-      <div className={styles.listSummary}><span>{loading ? t("CourseTemplateManagementPage.loadingEllipsis") : t("CourseTemplateManagementPage.showingCount", { count: rows.length })}</span><span>{t("CourseTemplateManagementPage.sameEnvNote")}</span></div>{loading ? <LoadingState /> : <><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>{t("CourseTemplateManagementPage.thName")}</th><th>{t("CourseTemplateManagementPage.thMachinesPerStudent")}</th><th>{t("CourseTemplateManagementPage.thResourceTotal")}</th><th>{t("CourseTemplateManagementPage.thVersion")}</th><th>{t("CourseTemplateManagementPage.thProvideMode")}</th><th>{t("CourseTemplateManagementPage.thUsingClasses")}</th><th>{t("CourseTemplateManagementPage.thStatus")}</th><th /></tr></thead><tbody>{rows.map((template) => <tr key={template.id} className={styles.rowLink} onClick={() => navigate(`/course-template-management/${template.id}`)}>
+      {loading ? <LoadingState /> : <><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>{t("CourseTemplateManagementPage.thName")}</th><th>{t("CourseTemplateManagementPage.thMachinesPerStudent")}</th><th>{t("CourseTemplateManagementPage.thResourceTotal")}</th><th>{t("CourseTemplateManagementPage.thVersion")}</th><th>{t("CourseTemplateManagementPage.thProvideMode")}</th><th>{t("CourseTemplateManagementPage.thUsingClasses")}</th><th>{t("CourseTemplateManagementPage.thStatus")}</th><th /></tr></thead><tbody>{rows.map((template) => <tr key={template.id} className={styles.rowLink} onClick={() => navigate(`/course-template-management/${template.id}`)}>
         <td><strong>{template.name}</strong><small>{template.description}</small></td>
         <td><strong>{t("CourseTemplateManagementPage.machinesPerStudentUnit", { count: template.nodes.length })}</strong><small>{template.nodes.map((node) => node.name).join("、")}</small></td>
         <td>{t("CourseTemplateManagementPage.resourceSummary", { cpu: template.nodes.reduce((sum, node) => sum + node.cpu, 0), memory: template.nodes.reduce((sum, node) => sum + node.memory, 0) })}</td><td>v{template.version}</td><td><strong>{template.usageScope ? t(USAGE_LABEL_KEYS[template.usageScope] ?? USAGE_LABEL_KEYS.course) : t(USAGE_LABEL_KEYS.course)}</strong><small>{audienceNote(template, t)}</small></td><td>{t("CourseTemplateManagementPage.classesCount", { count: template.classes })}</td>
         <td><span className={`${styles.statusBadge} ${styles[`status_${template.status}`]}`}>{t(STATUS_LABEL_KEYS[template.status])}</span></td>
         <td onClick={(event) => event.stopPropagation()}><div className={styles.rowActions}>
-          {template.status === "published" && <button type="button" className={styles.btnSecondary} disabled={busyId === template.id} onClick={() => retire(template)}>{t("CourseTemplateManagementPage.retireLabel")}</button>}
-          <button type="button" className={styles.btnSecondary} disabled={busyId === template.id} onClick={() => remove(template)}>{t("CourseTemplateManagementPage.deleteLabel")}</button>
+          {template.status === "published" && <button type="button" className={styles.iconBtn} title={t("CourseTemplateManagementPage.retireLabel")} aria-label={t("CourseTemplateManagementPage.retireLabel")} disabled={busyId === template.id} onClick={() => retire(template)}><MIcon name="unpublished" size={18} /></button>}
+          <button type="button" className={`${styles.iconBtn} ${styles.iconBtnDanger}`} title={t("CourseTemplateManagementPage.deleteLabel")} aria-label={t("CourseTemplateManagementPage.deleteLabel")} disabled={busyId === template.id} onClick={() => remove(template)}><MIcon name="delete" size={18} /></button>
           <button type="button" className={styles.iconBtn} aria-label={t("CourseTemplateManagementPage.openTemplateAria")} onClick={() => navigate(`/course-template-management/${template.id}`)}><MIcon name="chevron_right" size={19} /></button>
         </div></td>
       </tr>)}</tbody></table></div>

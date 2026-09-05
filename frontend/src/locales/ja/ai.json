@@ -82,7 +82,6 @@
   "AiApiPage.loadError": "AI APIデータの読み込みに失敗しました",
   "AiApiPage.submitSuccess": "AI APIの申請を送信しました",
   "AiApiPage.submitError": "申請に失敗しました",
-
   "AiApiKeysPage.statusActive": "有効",
   "AiApiKeysPage.statusInactive": "無効",
   "AiApiKeysPage.inactiveReasonRevoked": "取り消し済み",
@@ -100,8 +99,6 @@
   "AiApiKeysPage.statAll": "全記録",
   "AiApiKeysPage.statActive": "有効",
   "AiApiKeysPage.statInactive": "無効",
-  "AiApiKeysPage.filterTitle": "絞り込み",
-  "AiApiKeysPage.filterDesc": "状態と使用者のEmailで絞り込めます。",
   "AiApiKeysPage.filterAll": "すべて",
   "AiApiKeysPage.filterActive": "有効",
   "AiApiKeysPage.filterInactive": "無効",
@@ -120,7 +117,6 @@
   "AiApiKeysPage.prevPage": "前のページ",
   "AiApiKeysPage.nextPage": "次のページ",
   "AiApiKeysPage.loadError": "キーデータの読み込みに失敗しました",
-
   "AiApiReviewPage.tabPending": "審査中",
   "AiApiReviewPage.tabApproved": "承認済み",
   "AiApiReviewPage.tabRejected": "却下済み",
@@ -158,7 +154,6 @@
   "AiApiReviewPage.colReviewedAt": "審査日時",
   "AiApiReviewPage.colActions": "操作",
   "AiApiReviewPage.loadError": "AI API審査データの読み込みに失敗しました",
-
   "AiMonitoringPage.preset7d": "過去7日間",
   "AiMonitoringPage.preset30d": "過去30日間",
   "AiMonitoringPage.preset90d": "過去90日間",
@@ -200,7 +195,6 @@
   "AiMonitoringPage.emptyUsersTitle": "使用者の使用状況データはまだありません",
   "AiMonitoringPage.emptyCallsTitle": "呼び出し記録はまだありません",
   "AiMonitoringPage.loadError": "AIモニタリングデータの読み込みに失敗しました",
-
   "AiPvePage.pageTitle": "PVE運用アシスタント",
   "AiPvePage.pageSubtitle": "管理者専用のサイト全体PVE運用ツール。VM/LXCとノードの状態を照会でき、コマンド実行前に再確認します"
 }

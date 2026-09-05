@@ -13,7 +13,7 @@ import PageHeader from "../../../../components/PageHeader/PageHeader";
 
 const TABS = [
   { key: "overview",       labelKey: "ResourceDetailPage.tabOverview", icon: "info" },
-  { key: "monitoring",     labelKey: "ResourceDetailPage.tabMonitoring", icon: "monitoring" },
+  { key: "monitoring",     labelKey: "ResourceDetailPage.tabMonitoring", icon: "monitor_heart" },
   { key: "specifications", labelKey: "ResourceDetailPage.tabSpecifications", icon: "tune" },
   { key: "snapshots",      labelKey: "ResourceDetailPage.tabSnapshots", icon: "photo_camera" },
   { key: "auditLogs",      labelKey: "ResourceDetailPage.tabAuditLogs", icon: "receipt_long" },
