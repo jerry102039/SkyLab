@@ -418,7 +418,7 @@ function TopologyPreview({ item }) {
     };
   });
   // 高度跟著節點數走，一台機器不該撐出一整片空網格。
-  const canvasHeight = Math.min(360, 150 + Math.max(0, item.nodes.length - 1) * 85);
+  const canvasHeight = Math.min(400, 260 + Math.max(0, item.nodes.length - 1) * 70);
   return <div className={styles.readonlyTopology} style={{ height: canvasHeight }}>
     <ReactFlow
       nodes={nodes}
@@ -450,7 +450,7 @@ function Machines({ item, templates, template, onRefresh, onTemplate, createdTem
     }
     try {
       const result = await TeachingClassesService.selectCourse(item.id, candidate.versionId);
-      onTemplate(candidate.id); onRefresh(result); setMessage(t("ClassWorkspacePage.selectedEnvMsg", { name: candidate.name, version: candidate.version }));
+      onTemplate(candidate.id); onRefresh(result); setMessage("");
     } catch (error) { setMessage(error?.message ?? t("ClassWorkspacePage.applyEnvFailed")); }
   }
   // 鎖定後不該再擺一份選不了的清單：直接呈現已套用的環境與它的拓撲。
@@ -480,9 +480,11 @@ function Machines({ item, templates, template, onRefresh, onTemplate, createdTem
       {message && <p className={styles.inlineMessage}>{message}</p>}
     </section>
     {item.nodes.length > 0 && <section className={styles.card}>
-      <div className={styles.cardHeader}><div><h2>{t("ClassWorkspacePage.confirmBeforeLockTitle")}</h2><p>{item.course_environment ? `${item.course_environment.name} v${item.course_environment.version} · ` : ""}{item.students.length ? t("ClassWorkspacePage.topologyDescSuffix", { count: item.nodes.length, total: item.students.length * item.nodes.length }) : t("ClassWorkspacePage.topologyDescNoStudents", { count: item.nodes.length })}</p></div></div>
+      <div className={styles.cardHeader}>
+        <div><h2>{t("ClassWorkspacePage.topologyTitle")}</h2></div>
+        <span className={styles.topologySummary}>{t("ClassWorkspacePage.perStudentUnit", { count: item.nodes.length })} · {item.topologyEdges.length ? t("ClassWorkspacePage.envFactLinkCount", { count: item.topologyEdges.length }) : t("ClassWorkspacePage.envFactNoLink")}</span>
+      </div>
       <TopologyPreview item={item} />
-      {!item.topologyEdges.length && <p className={styles.topologyEmptyNote}>{t("ClassWorkspacePage.noTopologyEdgesNote")}</p>}
     </section>}
   </div>;
 }
