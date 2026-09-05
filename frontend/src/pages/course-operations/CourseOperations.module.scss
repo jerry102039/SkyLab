@@ -56,7 +56,7 @@
 /* 環境模板編輯器的分頁列，與班級頁、一鍵建立精靈同一套外觀 */
 .stepTabsBar { display: flex; align-items: stretch; min-width: 0; overflow: hidden; @include glass-surface($shadow: var(--shadow-sm)); border-radius: $radius-12; }
 .stepTabs, .workspaceTabs { display: flex; gap: 4px; flex-wrap: wrap; }
-.stepTabs { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; gap: 0; padding: 5px; scrollbar-width: thin; }
+.stepTabs { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 0; padding: 5px; scrollbar-width: thin; }
 .stepTabs button, .workspaceTabs button { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 0; border-radius: $radius-8; color: var(--color-text-secondary); background: transparent; font: inherit; font-size: $font-size-14; cursor: pointer; }
 .stepTabs button { position: relative; flex: 1 0 max-content; justify-content: center; min-width: 126px; height: 44px; padding: 0 15px; }
 .stepTabs button::after { position: absolute; right: 0; bottom: -5px; left: 0; height: 2px; border-radius: 2px 2px 0 0; background: transparent; content: ""; }
@@ -173,9 +173,6 @@
 .table th { height: 38px; padding-inline: $spacing-16; background: color-mix(in srgb, var(--color-hover) 58%, var(--color-surface)); font-size: $font-size-12; letter-spacing: .035em; text-transform: uppercase; }
 .table td { height: 62px; padding-inline: $spacing-16; }
 .rowLink:hover { background: color-mix(in srgb, var(--color-primary) 3.5%, var(--color-surface)); }
-.listSummary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; padding: 8px 18px; border-bottom: 1px solid var(--color-border); color: var(--color-text-muted); font-size: $font-size-12; }
-.listSummary span { display: inline-flex; align-items: center; gap: 6px; }
-.listSummary i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-pending); }
 .classToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px 18px; flex-wrap: wrap; padding: 2px 0; }
 .archivedToggle { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--color-text-muted); font-size: $font-size-12; cursor: pointer; user-select: none; }
 .archivedToggle input { width: 13px; height: 13px; margin: 0; accent-color: var(--color-primary); cursor: pointer; }
@@ -302,7 +299,7 @@
 
 .workspaceContent { min-width: 0; overflow: hidden; }
 .workflowTabsBar { display: flex; align-items: stretch; min-width: 0; overflow: hidden; @include glass-surface($shadow: var(--shadow-sm)); border-radius: $radius-12; }
-.workflowTabsBar .workspaceTabs { display: flex; flex: 1; min-width: 0; overflow-x: auto; padding: 5px; border: 0; scrollbar-width: thin; }
+.workflowTabsBar .workspaceTabs { display: flex; flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; padding: 5px; border: 0; scrollbar-width: thin; }
 .workflowTabsBar .workspaceTabs button { position: relative; display: flex; flex: 1 0 max-content; align-items: center; justify-content: center; gap: 7px; min-width: 126px; height: 44px; padding: 0 15px; border: 0; border-radius: $radius-8; color: var(--color-text-secondary); background: transparent; cursor: pointer; }
 .workflowTabsBar .workspaceTabs button::after { position: absolute; right: 0; bottom: -5px; left: 0; height: 2px; border-radius: 2px 2px 0 0; background: transparent; content: ""; }
 .workflowTabsBar .workspaceTabs button:hover:not(:disabled) { color: var(--color-text-primary); background: var(--color-hover); }
@@ -423,14 +420,12 @@
 .machineWorkspaceHeader p { margin: 4px 0 0; color: var(--color-text-secondary); font-size: $font-size-14; }
 
 .nodeLimit { padding: 7px 10px; border: 1px solid var(--color-border); border-radius: $radius-pill; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface)); font-size: $font-size-12; font-weight: $font-weight-500; white-space: nowrap; }
-.machineAddBar { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)) max-content; align-items: end; justify-content: start; gap: 10px; padding: 13px 22px; border-bottom: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-hover) 24%, var(--color-surface)); }
-.machineAddBar .field { gap: 3px; }
-.machineAddBar .field > span { color: var(--color-text-secondary); font-size: $font-size-12; }
-.machineAddBar .btnPrimary { min-width: 138px; min-height: 40px; }
+.machineAddBar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; padding: 14px 22px; border-bottom: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-hover) 24%, var(--color-surface)); }
+.machineAddBar .field { flex: 1 1 210px; min-width: 0; }
+.machineAddBar .btnPrimary { flex: 0 0 auto; min-width: 138px; }
 
-.topologyHelp { display: flex; align-items: center; gap: 7px; padding: 12px 22px 8px; color: var(--color-text-secondary); font-size: $font-size-12; }
-.topologyWorkspace { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 12px; padding: 0 22px 22px; }
-.topologyCanvas { height: 360px; overflow: hidden; border: 1px solid var(--color-border); border-radius: $radius-12; background: color-mix(in srgb, var(--color-hover) 24%, var(--color-surface)); }
+.topologyWorkspace { display: grid; grid-template-columns: minmax(0, 1fr) 312px; gap: 16px; padding: 16px 22px 22px; }
+.topologyCanvas { height: 420px; overflow: hidden; border: 1px solid var(--color-border); border-radius: $radius-12; background: color-mix(in srgb, var(--color-hover) 24%, var(--color-surface)); }
 .topologyCanvas :global(.react-flow) { background: transparent; }
 .topologyCanvas :global(.react-flow) svg { max-width: none; }
 .topologyCanvas :global(.react-flow__edge path) { stroke-opacity: 1 !important; }
@@ -445,7 +440,7 @@
 .flowNodeLabel { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 3px 1px; text-align: left; }
 .flowNodeLabel strong { overflow: hidden; color: var(--color-text-primary); font-size: $font-size-12; text-overflow: ellipsis; white-space: nowrap; }
 .flowNodeLabel span, .flowNodeLabel small { color: var(--color-text-muted); font-size: $font-size-10; }
-.topologyInspector { display: flex; min-width: 0; height: 360px; box-sizing: border-box; flex-direction: column; gap: 10px; overflow-y: auto; padding: 14px; border: 1px solid var(--color-border); border-radius: $radius-12; background: var(--color-surface); }
+.topologyInspector { display: flex; min-width: 0; height: 420px; box-sizing: border-box; flex-direction: column; gap: 12px; overflow-y: auto; padding: 16px; border: 1px solid var(--color-border); border-radius: $radius-12; background: var(--color-surface); }
 /* 已鎖定的班級：環境是既成事實，攤成四格摘要就好，不用一整份選單。 */
 .envFacts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
 .envFacts > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 13px 20px; }
@@ -460,15 +455,17 @@
 .readonlyTopologyNode span, .readonlyTopologyNode small { color: var(--color-text-muted); font-size: $font-size-10; }
 .topologySummary { flex: 0 0 auto; padding: 4px 11px; border-radius: $radius-pill; color: var(--color-text-secondary); background: color-mix(in srgb, var(--color-hover) 55%, transparent); font-size: $font-size-12; font-weight: $font-weight-500; white-space: nowrap; }
 .setupActions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-.topologyInspector label { display: flex; flex-direction: column; gap: 4px; color: var(--color-text-secondary); font-size: $font-size-10; }
-.topologyInspector select, .topologyInspector input { width: 100%; min-height: 34px; box-sizing: border-box; padding: 6px 9px; border: 1px solid var(--color-border); border-radius: $radius-8; color: var(--color-text); background: var(--color-surface); }
+.topologyInspector label { @include form-field; }
+.topologyInspector select, .topologyInspector input { @include form-control; }
 .inspectorTitle { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 8px; padding-bottom: 3px; }
 .inspectorTitle > :first-child { color: var(--color-primary); }
 .inspectorTitle div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .inspectorTitle strong { overflow: hidden; font-size: $font-size-12; text-overflow: ellipsis; white-space: nowrap; }
 .inspectorTitle small { overflow: hidden; color: var(--color-text-muted); font-size: $font-size-10; text-overflow: ellipsis; white-space: nowrap; }
-.inspectorSplit { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.inspectorHint { margin: 0; color: var(--color-text-muted); font-size: $font-size-10; line-height: 1.5; }
+.inspectorSplit { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.inspectorTriple { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.inspectorTriple input { padding-inline: 8px; }
+.inspectorHint { margin: 0; color: var(--color-text-muted); font-size: $font-size-12; line-height: 1.5; }
 .rowActions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .iconBtnDanger:hover { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 9%, transparent); }
 .rowActions button { white-space: nowrap; }
@@ -477,7 +474,7 @@
 .audienceClassItem input { width: auto; margin-top: 2px; }
 .audienceClassItem span { display: flex; min-width: 0; flex-direction: column; gap: 2px; font-size: $font-size-14; }
 .audienceClassItem small { color: var(--color-text-muted); font-size: $font-size-10; }
-.inspectorDanger { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 5px; margin-top: auto; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--color-danger) 35%, var(--color-border)); border-radius: $radius-8; color: var(--color-danger); background: var(--color-surface); cursor: pointer; }
+.inspectorDanger { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 5px; margin-top: auto; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--color-danger) 35%, var(--color-border)); border-radius: $radius-8; color: var(--color-danger); background: var(--color-surface); cursor: pointer; }
 .table { min-width: 720px; }
 
 .jobGrid span { color: var(--color-text-muted); font-size: $font-size-10; }
@@ -518,8 +515,7 @@
   .classroomStudentRow { grid-template-columns: minmax(180px, .8fr) 70px minmax(0, 1.5fr); }
   .classroomMachines { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
   .machineWorkspaceHeader { align-items: flex-start; flex-direction: column; }
-  .machineAddBar { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
-  .topologyWorkspace { grid-template-columns: minmax(0, 1fr) 240px; }
+  .topologyWorkspace { grid-template-columns: minmax(0, 1fr) 268px; }
   /* 窄一點時檔案列換到第二行，週次／主題／可見度仍然同一排 */
   .weekRows article, .weekRowsHead { grid-template-columns: 100px minmax(220px, 1fr) 124px; }
   .weekRowsHead span:nth-child(3) { display: none; }
@@ -582,7 +578,8 @@
   .createDialog { width: 100%; max-height: calc(100vh - 24px); border-radius: $radius-16 $radius-16 0 0; }
   .createDialogBody { max-height: calc(100vh - 156px); }
   .machineWorkspaceHeader { padding: 18px; }
-  .machineAddBar { grid-template-columns: 1fr; justify-content: stretch; padding: 14px 18px; }
+  .machineAddBar { padding: 14px 18px; }
+  .machineAddBar .field { flex-basis: 100%; }
   .machineAddBar .btnPrimary { width: 100%; }
   .topologyWorkspace { grid-template-columns: 1fr; padding-inline: $spacing-16; }
   .topologyCanvas { height: 280px; }
