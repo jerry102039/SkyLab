@@ -412,7 +412,13 @@
 .flowNodeLabel strong { overflow: hidden; color: var(--color-text-primary); font-size: $font-size-12; text-overflow: ellipsis; white-space: nowrap; }
 .flowNodeLabel span, .flowNodeLabel small { color: var(--color-text-muted); font-size: $font-size-10; }
 .topologyInspector { display: flex; min-width: 0; height: 360px; box-sizing: border-box; flex-direction: column; gap: 10px; overflow-y: auto; padding: 14px; border: 1px solid var(--color-border); border-radius: $radius-12; background: var(--color-surface); }
-.readonlyTopology { height: 320px; margin: 0 16px 16px; overflow: hidden; border: 1px solid var(--color-border); border-radius: $radius-12; background: color-mix(in srgb, var(--color-hover) 24%, var(--color-surface)); }
+/* 已鎖定的班級：環境是既成事實，攤成四格摘要就好，不用一整份選單。 */
+.envFacts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+.envFacts > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 13px 20px; }
+.envFacts > div + div { border-left: 1px solid var(--color-divider); }
+.envFacts span { color: var(--color-text-muted); font-size: $font-size-10; }
+.envFacts strong { @include text-truncate; color: var(--color-text-primary); font-size: $font-size-14; font-weight: $font-weight-700; }
+.readonlyTopology { margin: 16px; overflow: hidden; border: 1px solid var(--color-border); border-radius: $radius-12; background: color-mix(in srgb, var(--color-hover) 24%, var(--color-surface)); }
 .readonlyTopology :global(.react-flow) svg { max-width: none; }
 .readonlyTopology :global(.react-flow__edge path) { stroke-opacity: 1 !important; }
 .readonlyTopologyNode { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 12px 14px; text-align: left; }
@@ -444,14 +450,25 @@
 .jobGrid article { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: $radius-8; background: var(--color-surface); }
 .jobGrid strong { font-size: $font-size-12; }
 .jobGrid small { color: var(--color-text-secondary); font-size: $font-size-10; }
+/* 18 列共用一份欄位標題，不要每一列都重印一次「主題／任務」「任務檔案」。 */
 .weekRows { display: flex; flex-direction: column; border-top: 1px solid var(--color-border); }
-.weekRows article { display: grid; grid-template-columns: 120px minmax(260px, 1.1fr) minmax(320px, 1fr); align-items: center; gap: 18px; padding: 18px 22px; border-bottom: 1px solid var(--color-divider); }
-.weekDate { display: flex; flex-direction: column; align-self: center; gap: 4px; }
+.weekRows article, .weekRowsHead { display: grid; grid-template-columns: 116px minmax(240px, 1.2fr) minmax(240px, 1fr) 124px; align-items: center; gap: 18px; padding: 14px 22px; border-bottom: 1px solid var(--color-divider); }
+.weekRowsHead { padding-block: 9px; border-bottom: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-hover) 40%, var(--color-surface)); }
+.weekRowsHead span { color: var(--color-text-muted); font-size: $font-size-10; font-weight: $font-weight-700; letter-spacing: .04em; }
+.weekRowsHead span:last-child { text-align: center; }
+.weekRows article:last-child { border-bottom: 0; }
+.weekDate { display: flex; flex-direction: column; gap: 3px; }
 .weekDate strong { color: var(--color-primary); font-size: $font-size-12; }
 .weekDate span { color: var(--color-text-secondary); font-size: $font-size-12; font-variant-numeric: tabular-nums; }
-.weekFiles { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
-.weekFiles > span { color: var(--color-text-secondary); font-size: $font-size-12; font-weight: $font-weight-500; }
-.weekFileList { display: flex; min-height: 40px; align-items: center; flex-wrap: wrap; gap: 6px; }
+.weekTitleInput { @include form-control; }
+.weekFileList { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 6px; }
+/* 學生可見與否的切換：草稿是安靜的中性色，已發布才亮起來。 */
+.weekPublishButton { display: inline-flex; width: 100%; height: 32px; align-items: center; justify-content: center; gap: 5px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: $radius-pill; color: var(--color-text-muted); background: var(--color-surface); font: inherit; font-size: $font-size-12; font-weight: $font-weight-500; white-space: nowrap; cursor: pointer; transition: color $transition-base, border-color $transition-base, background $transition-base; }
+.weekPublishButton:hover:not(:disabled) { color: var(--color-text-primary); background: var(--color-hover); }
+.weekPublishButton:disabled { opacity: .5; cursor: not-allowed; }
+.weekPublished { border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-border)); color: var(--color-success); background: color-mix(in srgb, var(--color-success) 9%, var(--color-surface)); }
+.weekPublished:hover:not(:disabled) { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 15%, var(--color-surface)); }
+.weekVisibleCount { flex: 0 0 auto; padding: 4px 11px; border-radius: $radius-pill; color: var(--color-success); background: color-mix(in srgb, var(--color-success) 11%, transparent); font-size: $font-size-12; font-weight: $font-weight-500; white-space: nowrap; }
 .weekFileChip { display: inline-flex; min-width: 0; max-width: 220px; align-items: center; gap: 5px; height: 32px; padding: 0 7px 0 9px; border: 1px solid var(--color-border); border-radius: $radius-8; color: var(--color-text-secondary); background: color-mix(in srgb, var(--color-hover) 32%, var(--color-surface)); }
 .weekFileChip b { overflow: hidden; font-size: $font-size-12; font-weight: $font-weight-500; text-overflow: ellipsis; white-space: nowrap; }
 .weekFileChip button { display: grid; flex: 0 0 auto; width: 20px; height: 20px; place-items: center; padding: 0; border: 0; border-radius: 5px; color: var(--color-text-muted); background: transparent; cursor: pointer; }
@@ -468,8 +485,13 @@
   .machineWorkspaceHeader { align-items: flex-start; flex-direction: column; }
   .machineAddBar { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
   .topologyWorkspace { grid-template-columns: minmax(0, 1fr) 240px; }
-  .weekRows article { grid-template-columns: 100px minmax(220px, 1fr); }
-  .weekFiles { grid-column: 2; }
+  /* 窄一點時檔案列換到第二行，週次／主題／可見度仍然同一排 */
+  .weekRows article, .weekRowsHead { grid-template-columns: 100px minmax(220px, 1fr) 124px; }
+  .weekRowsHead span:nth-child(3) { display: none; }
+  .weekRows article > .weekDate { grid-area: 1 / 1; }
+  .weekRows article > .weekTitleInput { grid-area: 1 / 2; }
+  .weekRows article > .weekPublishButton { grid-area: 1 / 3; }
+  .weekRows article > .weekFileList { grid-area: 2 / 2 / auto / -1; }
   .memberRow { grid-template-columns: minmax(200px, 1.3fr) minmax(100px, .7fr) 100px 34px; }
   .memberRow > span:nth-of-type(3) { display: none; }
 }
@@ -530,8 +552,9 @@
   .topologyWorkspace { grid-template-columns: 1fr; padding-inline: $spacing-16; }
   .topologyCanvas { height: 280px; }
   .topologyInspector { height: auto; max-height: none; }
-  .weekRows article { grid-template-columns: 1fr; align-items: stretch; padding: 16px 18px; }
-  .weekFiles { grid-column: auto; }
+  .weekRows article { grid-template-columns: 1fr; align-items: stretch; gap: 10px; padding: 16px 18px; }
+  .weekRowsHead { display: none; }
+  .weekRows article > .weekFileList { grid-column: auto; }
 }
 
 @include respond-below(sm) {
