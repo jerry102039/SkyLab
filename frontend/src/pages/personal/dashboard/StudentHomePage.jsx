@@ -63,7 +63,7 @@ const TOUR_STEPS = [
 const AI_DETECTABLE_META = {
   auto: { labelKey: "StudentHomePage.detectableAuto", icon: "smart_toy", tone: "auto" },
   partial: { labelKey: "StudentHomePage.detectablePartial", icon: "rule", tone: "partial" },
-  manual: { labelKey: "StudentHomePage.detectableManual", icon: "person_check", tone: "manual" },
+  manual: { labelKey: "StudentHomePage.detectableManual", icon: "how_to_reg", tone: "manual" },
 };
 
 const AI_CHECK_STATUS_META = {

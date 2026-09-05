@@ -82,7 +82,6 @@
   "AiApiPage.loadError": "載入 AI API 資料失敗",
   "AiApiPage.submitSuccess": "AI API 申請已送出",
   "AiApiPage.submitError": "申請失敗",
-
   "AiApiKeysPage.statusActive": "啟用",
   "AiApiKeysPage.statusInactive": "失效",
   "AiApiKeysPage.inactiveReasonRevoked": "已撤銷",
@@ -100,8 +99,6 @@
   "AiApiKeysPage.statAll": "全部紀錄",
   "AiApiKeysPage.statActive": "啟用",
   "AiApiKeysPage.statInactive": "失效",
-  "AiApiKeysPage.filterTitle": "篩選",
-  "AiApiKeysPage.filterDesc": "可依狀態與使用者 Email 篩選。",
   "AiApiKeysPage.filterAll": "全部",
   "AiApiKeysPage.filterActive": "啟用",
   "AiApiKeysPage.filterInactive": "失效",
@@ -120,7 +117,6 @@
   "AiApiKeysPage.prevPage": "上一頁",
   "AiApiKeysPage.nextPage": "下一頁",
   "AiApiKeysPage.loadError": "載入金鑰資料失敗",
-
   "AiApiReviewPage.tabPending": "待審核",
   "AiApiReviewPage.tabApproved": "已通過",
   "AiApiReviewPage.tabRejected": "已拒絕",
@@ -158,7 +154,6 @@
   "AiApiReviewPage.colReviewedAt": "審核時間",
   "AiApiReviewPage.colActions": "操作",
   "AiApiReviewPage.loadError": "載入 AI API 審核資料失敗",
-
   "AiMonitoringPage.preset7d": "近 7 天",
   "AiMonitoringPage.preset30d": "近 30 天",
   "AiMonitoringPage.preset90d": "近 90 天",
@@ -200,7 +195,6 @@
   "AiMonitoringPage.emptyUsersTitle": "尚無使用者用量資料",
   "AiMonitoringPage.emptyCallsTitle": "尚無呼叫紀錄",
   "AiMonitoringPage.loadError": "載入 AI 監控資料失敗",
-
   "AiPvePage.pageTitle": "PVE 維運助手",
   "AiPvePage.pageSubtitle": "管理員專用的全站 PVE 維運工具，可查詢 VM/LXC 與節點狀態，執行指令前會再次確認"
 }

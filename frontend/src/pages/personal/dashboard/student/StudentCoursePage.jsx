@@ -25,7 +25,7 @@ import styles from "./StudentCoursePage.module.scss";
 const AI_DETECTABLE_META = {
   auto: { labelKey: "StudentCoursePage.detectableAuto", icon: "smart_toy", tone: "auto" },
   partial: { labelKey: "StudentCoursePage.detectablePartial", icon: "rule", tone: "partial" },
-  manual: { labelKey: "StudentCoursePage.detectableManual", icon: "person_check", tone: "manual" },
+  manual: { labelKey: "StudentCoursePage.detectableManual", icon: "how_to_reg", tone: "manual" },
 };
 
 const NO_COURSE_STATUS = { labelKey: "StudentCoursePage.noCourseStatus", tone: "muted", icon: "event_busy" };

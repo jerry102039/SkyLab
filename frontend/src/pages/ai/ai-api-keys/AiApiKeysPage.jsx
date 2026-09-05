@@ -185,28 +185,24 @@ export default function AiApiKeysPage() {
         </div>
       </div>
 
-      {/* ── Filters ── */}
-      <div className={styles.filterCard}>
-        <h3 className={styles.filterTitle}>{t("AiApiKeysPage.filterTitle")}</h3>
-        <p className={styles.filterDesc}>{t("AiApiKeysPage.filterDesc")}</p>
-        <div className={styles.filterRow}>
-          <select
-            className={styles.filterSelect}
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
-          >
-            <option value="all">{t("AiApiKeysPage.filterAll")}</option>
-            <option value="active">{t("AiApiKeysPage.filterActive")}</option>
-            <option value="inactive">{t("AiApiKeysPage.filterInactive")}</option>
-          </select>
-          <input
-            type="text"
-            className={styles.filterInput}
-            placeholder={t("AiApiKeysPage.filterEmailPlaceholder")}
-            value={userEmail}
-            onChange={(e) => { setUserEmail(e.target.value); setPage(0); }}
-          />
-        </div>
+      {/* 篩選就是兩個輸入框，標題與說明只是把畫面上看得到的事再講一次 */}
+      <div className={styles.filterRow}>
+        <select
+          className={styles.filterSelect}
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
+        >
+          <option value="all">{t("AiApiKeysPage.filterAll")}</option>
+          <option value="active">{t("AiApiKeysPage.filterActive")}</option>
+          <option value="inactive">{t("AiApiKeysPage.filterInactive")}</option>
+        </select>
+        <input
+          type="text"
+          className={styles.filterInput}
+          placeholder={t("AiApiKeysPage.filterEmailPlaceholder")}
+          value={userEmail}
+          onChange={(e) => { setUserEmail(e.target.value); setPage(0); }}
+        />
       </div>
 
       {/* ── Table ── */}

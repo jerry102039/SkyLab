@@ -82,7 +82,6 @@
   "AiApiPage.loadError": "Failed to load AI API data",
   "AiApiPage.submitSuccess": "AI API request submitted",
   "AiApiPage.submitError": "Request failed",
-
   "AiApiKeysPage.statusActive": "Active",
   "AiApiKeysPage.statusInactive": "Inactive",
   "AiApiKeysPage.inactiveReasonRevoked": "Revoked",
@@ -100,8 +99,6 @@
   "AiApiKeysPage.statAll": "All Records",
   "AiApiKeysPage.statActive": "Active",
   "AiApiKeysPage.statInactive": "Inactive",
-  "AiApiKeysPage.filterTitle": "Filters",
-  "AiApiKeysPage.filterDesc": "Filter by status and user email.",
   "AiApiKeysPage.filterAll": "All",
   "AiApiKeysPage.filterActive": "Active",
   "AiApiKeysPage.filterInactive": "Inactive",
@@ -120,7 +117,6 @@
   "AiApiKeysPage.prevPage": "Previous",
   "AiApiKeysPage.nextPage": "Next",
   "AiApiKeysPage.loadError": "Failed to load key data",
-
   "AiApiReviewPage.tabPending": "Pending",
   "AiApiReviewPage.tabApproved": "Approved",
   "AiApiReviewPage.tabRejected": "Rejected",
@@ -158,7 +154,6 @@
   "AiApiReviewPage.colReviewedAt": "Reviewed At",
   "AiApiReviewPage.colActions": "Actions",
   "AiApiReviewPage.loadError": "Failed to load AI API review data",
-
   "AiMonitoringPage.preset7d": "Last 7 days",
   "AiMonitoringPage.preset30d": "Last 30 days",
   "AiMonitoringPage.preset90d": "Last 90 days",
@@ -200,7 +195,6 @@
   "AiMonitoringPage.emptyUsersTitle": "No user usage data yet",
   "AiMonitoringPage.emptyCallsTitle": "No call records yet",
   "AiMonitoringPage.loadError": "Failed to load AI monitoring data",
-
   "AiPvePage.pageTitle": "PVE Operations Assistant",
   "AiPvePage.pageSubtitle": "An administrator-only site-wide PVE operations tool for querying VM/LXC and node status, with confirmation required before executing commands"
 }

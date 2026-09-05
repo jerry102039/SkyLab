@@ -32,6 +32,7 @@ const navGroups = [
     items: [
       { key: "request-review", labelKey: "Sidebar.itemRequestReview", icon: "fact_check", adminOnly: true },
       { key: "batch-review",   labelKey: "Sidebar.itemBatchReview", icon: "library_add_check", adminOnly: true },
+      { key: "ai-api-review",  labelKey: "Sidebar.itemAiApiReview", icon: "rate_review", adminOnly: true },
     ],
   },
   {
@@ -49,7 +50,6 @@ const navGroups = [
     icon: "smart_toy",
     items: [
       { key: "ai-api",        labelKey: "Sidebar.itemAiApi",   icon: "psychology" },
-      { key: "ai-api-review", labelKey: "Sidebar.itemAiApiReview", icon: "rate_review", adminOnly: true },
       { key: "ai-api-keys",   labelKey: "Sidebar.itemAiApiKeys", icon: "vpn_key", adminOnly: true },
       { key: "ai-monitoring", labelKey: "Sidebar.itemAiMonitoring", icon: "monitor_heart", adminOnly: true },
       /* PVE 維運助手不放側欄：管理者首頁就是它的入口，那裡同時看得到待處理的問題 */
