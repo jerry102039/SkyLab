@@ -6,6 +6,8 @@ import PageHeader from "../../../components/PageHeader/PageHeader";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import { CourseEnvironmentsService } from "../../../services/courseEnvironments";
+import EnvironmentChoice from "../EnvironmentChoice";
+import shared from "../CourseOperations.module.scss";
 import { TeachingClassesService } from "../../../services/teachingClasses";
 import { focusInvalidField } from "../../../utils/focusField";
 import {
@@ -282,42 +284,15 @@ export default function ClassSetupPage() {
             </div>
           </div>
 
-          <div className={styles.templatePauseCard}>
-            <span className={styles.templatePauseIcon}><MIcon name="bookmark_added" size={22} /></span>
-            <div>
-              <strong>{t("ClassSetupPage.noSuitableTemplateTitle")}</strong>
-              <p>{t("ClassSetupPage.templatePauseDesc")}</p>
-              <small><MIcon name="cloud_done" size={14} />{t("ClassSetupPage.noDataLossHint")}</small>
-            </div>
-            <div className={styles.templatePauseActions}>
-              {templates.length > 0 && (
-                <button type="button" className={styles.btnPrimary} onClick={createTemplate}>
-                  <MIcon name="add" size={16} />{t("ClassSetupPage.createNewTemplateBtn")}
-                </button>
-              )}
-              <button type="button" className={styles.btnSecondary} onClick={pauseSetup}>
-                {t("ClassSetupPage.saveForLaterBtn")}
-              </button>
-            </div>
-          </div>
-
           {templates.length > 0 ? (
-            <div className={styles.environmentGrid}>
-              {templates.map((template) => (
-                <button
-                  type="button"
-                  key={template.versionId}
-                  className={String(template.versionId) === String(templateId) ? styles.environmentSelected : ""}
-                  onClick={() => setTemplateId(String(template.versionId))}
-                >
-                  <span><MIcon name="account_tree" size={20} /></span>
-                  <div>
-                    <strong>{template.name}</strong>
-                    <p>{template.description || t("ClassSetupPage.noDescriptionFallback")}</p>
-                    <small>{t("ClassSetupPage.perStudentMachinesPublished", { count: template.nodes.length, version: template.version })}</small>
-                  </div>
-                  <em>{String(template.versionId) === String(templateId) ? t("ClassSetupPage.selectedLabel") : t("ClassSetupPage.selectLabel")}</em>
-                </button>
+            <div className={shared.envChoices}>
+              {templates.map((candidate) => (
+                <EnvironmentChoice
+                  key={candidate.versionId}
+                  candidate={candidate}
+                  selected={String(candidate.versionId) === String(templateId)}
+                  onSelect={() => setTemplateId(String(candidate.versionId))}
+                />
               ))}
             </div>
           ) : (
@@ -334,10 +309,30 @@ export default function ClassSetupPage() {
 
           {selectedTemplate && (
             <div className={styles.environmentSummary}>
-              <strong>{t("ClassSetupPage.estimatedMachinesTotal", { count: Number(item?.students.length ?? 0) * selectedTemplate.nodes.length })}</strong>
+              <strong>{item?.students.length
+                ? t("ClassSetupPage.estimatedMachinesTotal", { count: item.students.length * selectedTemplate.nodes.length })
+                : t("ClassSetupPage.estimatedMachinesNoStudents")}</strong>
               <span>{t("ClassSetupPage.studentsTimesMachines", { students: item?.students.length ?? 0, perStudent: selectedTemplate.nodes.length })}</span>
             </div>
           )}
+
+          {/* 找不到合適範本是例外，放在清單後面當出口，不要擋在選擇之前 */}
+          <div className={styles.templatePauseCard}>
+            <span className={styles.templatePauseIcon}><MIcon name="bookmark_added" size={22} /></span>
+            <div>
+              <strong>{t("ClassSetupPage.noSuitableTemplateTitle")}</strong>
+              <p>{t("ClassSetupPage.templatePauseDesc")}</p>
+              <small><MIcon name="cloud_done" size={14} />{t("ClassSetupPage.noDataLossHint")}</small>
+            </div>
+            <div className={styles.templatePauseActions}>
+              <button type="button" className={styles.btnPrimary} onClick={createTemplate}>
+                <MIcon name="add" size={16} />{t("ClassSetupPage.createNewTemplateBtn")}
+              </button>
+              <button type="button" className={styles.btnSecondary} onClick={pauseSetup}>
+                {t("ClassSetupPage.saveForLaterBtn")}
+              </button>
+            </div>
+          </div>
         </section>
       )}
 

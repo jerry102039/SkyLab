@@ -13,6 +13,7 @@ import { ClassroomService } from "../../../services/classroom";
 import { courseNodeHasUsableSource, CourseEnvironmentsService } from "../../../services/courseEnvironments";
 import { TeachingClassesService } from "../../../services/teachingClasses";
 import ClassCreateDialog from "./ClassCreateDialog";
+import EnvironmentChoice from "../EnvironmentChoice";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import { focusInvalidField } from "../../../utils/focusField";
 import {
@@ -474,12 +475,12 @@ function Machines({ item, templates, template, onRefresh, onTemplate, createdTem
   return <div className={styles.stack}>
     <section className={styles.card}>
       <div className={styles.cardHeader}><div><h2>{t("ClassWorkspacePage.chooseEnvTitle")}</h2><p>{t("ClassWorkspacePage.chooseEnvDesc")}</p></div><div className={styles.pageActions}><button type="button" className={styles.btnSecondary} onClick={() => navigate(`/course-template-management/new?returnTo=${encodeURIComponent(`/class-management/${item.id}/machines`)}`)}><MIcon name="add" size={16} />{t("ClassWorkspacePage.createNewEnvBtn")}</button></div></div>
-      <div className={styles.templateChoices}>{templates.map((candidate) => <button type="button" key={candidate.versionId} className={`${template?.id === candidate.id ? styles.templateSelected : ""} ${String(candidate.id) === String(createdTemplateId) ? styles.templateSuggested : ""}`} onClick={() => choose(candidate)}><span><MIcon name="account_tree" size={21} /></span><div><strong>{candidate.name} · v{candidate.version}</strong><p>{candidate.description}</p><small>{t("ClassWorkspacePage.perStudentMachinesLocked", { count: candidate.nodes.length })}</small></div></button>)}</div>
+      <div className={styles.envChoices}>{templates.map((candidate) => <EnvironmentChoice key={candidate.versionId} candidate={candidate} selected={template?.id === candidate.id} suggested={String(candidate.id) === String(createdTemplateId)} onSelect={() => choose(candidate)} />)}</div>
       {!templates.length && <div className={styles.emptyState}><p>{t("ClassWorkspacePage.noPublishedEnvNote")}</p></div>}
       {message && <p className={styles.inlineMessage}>{message}</p>}
     </section>
     {item.nodes.length > 0 && <section className={styles.card}>
-      <div className={styles.cardHeader}><div><h2>{t("ClassWorkspacePage.confirmBeforeLockTitle")}</h2><p>{item.course_environment ? `${item.course_environment.name} v${item.course_environment.version} · ` : ""}{t("ClassWorkspacePage.topologyDescSuffix", { count: item.nodes.length, total: item.students.length * item.nodes.length })}</p></div></div>
+      <div className={styles.cardHeader}><div><h2>{t("ClassWorkspacePage.confirmBeforeLockTitle")}</h2><p>{item.course_environment ? `${item.course_environment.name} v${item.course_environment.version} · ` : ""}{item.students.length ? t("ClassWorkspacePage.topologyDescSuffix", { count: item.nodes.length, total: item.students.length * item.nodes.length }) : t("ClassWorkspacePage.topologyDescNoStudents", { count: item.nodes.length })}</p></div></div>
       <TopologyPreview item={item} />
       {!item.topologyEdges.length && <p className={styles.topologyEmptyNote}>{t("ClassWorkspacePage.noTopologyEdgesNote")}</p>}
     </section>}

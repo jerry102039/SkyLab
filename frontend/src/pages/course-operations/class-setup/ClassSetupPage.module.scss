@@ -53,7 +53,7 @@
 .studentLayout aside > span small { margin-left: 4px; font-size: $font-size-12; }
 .studentLayout aside p { margin: 0 0 $spacing-8; color: var(--color-text-secondary); font-size: $font-size-10; line-height: 1.5; }
 .studentLayout aside em { @include text-truncate; padding: 7px 9px; border: 1px solid var(--color-border); border-radius: 7px; color: var(--color-text-secondary); background: var(--color-surface); font-size: $font-size-10; font-style: normal; }
-.templatePauseCard { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 14px; margin: $spacing-24 $spacing-24 0; padding: $spacing-16; border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border)); border-radius: $radius-12; background: color-mix(in srgb, var(--color-primary) 5%, transparent); }
+.templatePauseCard { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 14px; margin: $spacing-16 $spacing-24 $spacing-24; padding: $spacing-16; border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border)); border-radius: $radius-12; background: color-mix(in srgb, var(--color-primary) 5%, transparent); }
 .templatePauseIcon { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 11px; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 11%, transparent); }
 .templatePauseCard > div:nth-child(2) { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
 .templatePauseCard strong { color: var(--color-text-primary); font-size: $font-size-14; }
@@ -61,17 +61,7 @@
 .templatePauseCard small { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; color: var(--color-success); font-size: $font-size-10; font-weight: $font-weight-700; }
 .templatePauseActions { display: flex; align-items: stretch; flex-direction: column; gap: 7px; }
 .templatePauseActions button { white-space: nowrap; }
-.environmentGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: $spacing-24; }
-.environmentGrid > button { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 11px; min-height: 92px; padding: 13px; border: 1px solid var(--color-border); border-radius: $radius-12; color: var(--color-text); background: transparent; text-align: left; cursor: pointer; }
-.environmentGrid > button:hover { border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border)); background: color-mix(in srgb, var(--color-primary) 3%, transparent); }
-.environmentGrid > button.environmentSelected { border: 2px solid var(--color-primary); padding: 12px; background: color-mix(in srgb, var(--color-primary) 6%, transparent); }
-.environmentGrid > button > span { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 10px; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 9%, transparent); }
-.environmentGrid > button div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
-.environmentGrid strong { @include text-truncate; font-size: $font-size-14; }
-.environmentGrid p { @include text-truncate; margin: 0; color: var(--color-text-secondary); font-size: $font-size-10; }
-.environmentGrid small { color: var(--color-text-muted); font-size: $font-size-10; }
-.environmentGrid em { color: var(--color-primary); font-size: $font-size-10; font-style: normal; font-weight: $font-weight-700; }
-.environmentSummary { @include flex-between; gap: $spacing-16; margin: 0 $spacing-24 $spacing-24; padding: 12px 14px; border-radius: $radius-8; color: var(--color-info); background: color-mix(in srgb, var(--color-info) 7%, transparent); font-size: $font-size-12; }
+.environmentSummary { @include flex-between; gap: $spacing-16; margin: $spacing-16 $spacing-24 0; padding: 12px 14px; border-radius: $radius-8; color: var(--color-info); background: color-mix(in srgb, var(--color-info) 7%, transparent); font-size: $font-size-12; }
 .environmentSummary span { color: var(--color-text-secondary); font-size: $font-size-10; }
 .publishToggle { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 12px; padding: 12px $spacing-24; border-bottom: 1px solid var(--color-divider); background: color-mix(in srgb, var(--color-hover) 45%, transparent); cursor: pointer; }
 .publishToggle input { width: 15px; height: 15px; margin: 1px 0 0; accent-color: var(--color-primary); cursor: pointer; }
@@ -122,7 +112,7 @@
 @include respond-below(lg) { .studentLayout { grid-template-columns: 1fr; } .capacityFacts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @include respond-below(md) {
   .backBtn { align-self: stretch; }
-  .formGrid, .environmentGrid { grid-template-columns: 1fr; padding: $spacing-16; }
+  .formGrid { grid-template-columns: 1fr; padding: $spacing-16; }
   .full { grid-column: auto; }
   .advancedGrid { grid-template-columns: 1fr; }
   .sectionHeader { grid-template-columns: 34px minmax(0, 1fr); padding: $spacing-16; }
