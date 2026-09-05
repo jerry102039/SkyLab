@@ -175,22 +175,22 @@ export default function ClassCreateDialog({
                   </select>
                 </label>
                 <label className={styles.field}>
-                  <span>{t("ClassCreateDialog.fieldStartTime")}</span>
-                  <input
-                    type="time"
-                    value={form.startTime}
-                    onChange={(event) =>
-                      update("startTime", event.target.value)
-                    }
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>{t("ClassCreateDialog.fieldEndTime")}</span>
-                  <input
-                    type="time"
-                    value={form.endTime}
-                    onChange={(event) => update("endTime", event.target.value)}
-                  />
+                  <span>{t("ClassCreateDialog.fieldClassTime")}</span>
+                  <div className={styles.timePair}>
+                    <input
+                      type="time"
+                      value={form.startTime}
+                      onChange={(event) =>
+                        update("startTime", event.target.value)
+                      }
+                    />
+                    <i>{t("ClassCreateDialog.timeRangeSeparator")}</i>
+                    <input
+                      type="time"
+                      value={form.endTime}
+                      onChange={(event) => update("endTime", event.target.value)}
+                    />
+                  </div>
                 </label>
                 <label className={styles.field}>
                   <span>{t("ClassCreateDialog.fieldBootLead")}</span>

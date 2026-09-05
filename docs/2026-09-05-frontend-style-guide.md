@@ -352,6 +352,33 @@ import MIcon from "../components/MIcon";
 
 > **規則**：所有按鈕 hover 都必須加 `:not(:disabled)`，disabled 狀態一律 `opacity: 0.5; cursor: not-allowed`。
 
+### 表單（Form）
+
+表單欄位一律使用 `_mixins.scss` 的表單 mixin 組，**不要在頁面內另立一套字級與內距**：
+
+```scss
+.field { @include form-field; }                              // 標籤 + 控制項的直式容器
+.field input, .field select, .field textarea { @include form-control; }
+.fieldInvalid.fieldInvalid { @include form-control-invalid; } // 送出時未填的欄位
+```
+
+```jsx
+<label className={styles.field}>
+  <span>班級名稱</span>
+  <input className={invalid ? styles.fieldInvalid : undefined} aria-invalid={invalid} … />
+</label>
+```
+
+> **規則一**：控制項高度固定 36px、字級 14px，刻意與 `.btnPrimary` / `.btnSecondary`
+> 一致——同一列的欄位與按鈕才會對齊。要更矮更小的表單請先問是不是真的需要，
+> 不要在頁面裡改 `min-height` 或 `font-size`。
+
+> **規則二**：欄位怎麼排（幾欄、哪個跨欄）寫在頁面自己的 grid 上（`.formGrid`、
+> `.createFormGrid`、`.fieldFull`），mixin 只負責欄位本身長什麼樣。
+
+> **規則三**：一組「起—迄」的值是**一個**欄位，不是兩個。用 `.timePair` 這種
+> 成對控制項，標籤寫「上課時間」，不要拆成「開始時間」「結束時間」兩個 `.field`。
+
 ### 表格（Table）
 
 列表頁表格一律使用 `_mixins.scss` 的表格 mixin 組，**不要在頁面內重抄整組樣式**：

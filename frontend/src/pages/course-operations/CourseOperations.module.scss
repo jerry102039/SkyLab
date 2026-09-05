@@ -62,12 +62,13 @@
 .stepTabs button.stepActive > span { color: var(--color-text); background: var(--color-surface); }
 
 .formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 0 16px 16px; }
-.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--color-text); font-size: $font-size-14; font-weight: $font-weight-500; }
+.field { @include form-field; }
 .fieldFull { grid-column: 1 / -1; }
-.field input, .field textarea, .field select { width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: $radius-8; outline: 0; color: var(--color-text); background: var(--color-surface); font: inherit; font-size: $font-size-14; }
-.field input:focus, .field textarea:focus, .field select:focus { border-color: var(--color-primary); }
+.field input, .field textarea, .field select { @include form-control; }
 .field textarea { resize: vertical; }
-.field input[readonly] { color: var(--color-text-muted); background: var(--color-hover); }
+/* 上課時間是一個「起—迄」控制項，不是兩個獨立欄位；精靈與編輯對話框共用。 */
+.timePair { display: grid; grid-template-columns: 1fr 22px 1fr; align-items: center; gap: 4px; }
+.timePair i { color: var(--color-text-muted); font-size: $font-size-10; font-style: normal; text-align: center; }
 
 .actionFooter { display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid var(--color-border); }
 
@@ -285,9 +286,6 @@
 .createDialogBody .errorMessage { margin: 0 22px 18px; }
 .createDialogFooter { display: flex; align-items: center; justify-content: flex-end; gap: 9px; min-height: 66px; padding: 12px 18px; border-top: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-hover) 38%, var(--color-surface)); }
 .formGrid { gap: 20px; padding: 4px 22px 22px; }
-.field > span { margin-bottom: 3px; font-weight: $font-weight-500; }
-.field input, .field textarea, .field select { border-radius: $radius-8; background: color-mix(in srgb, var(--color-hover) 22%, var(--color-surface)); }
-.field input:focus, .field textarea:focus, .field select:focus { background: var(--color-surface); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent); }
 
 .workspaceContent { min-width: 0; overflow: hidden; }
 .workflowTabsBar { display: flex; align-items: stretch; min-width: 0; overflow: hidden; @include glass-surface($shadow: var(--shadow-sm)); border-radius: $radius-12; }
@@ -549,11 +547,4 @@
 .page.listPage { max-width: none; margin: 0; }
 
 /* 送出時未填的欄位：紅框標示並被聚焦（雙類名壓過 .field input 這類巢狀選擇器） */
-.fieldInvalid.fieldInvalid {
-  border-color: var(--color-danger);
-
-  &:focus {
-    border-color: var(--color-danger);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 12%, transparent);
-  }
-}
+.fieldInvalid.fieldInvalid { @include form-control-invalid; }
