@@ -203,6 +203,7 @@
   "EnvironmentMachineRow.startCommandSent": "起動コマンドを送信しました",
   "EnvironmentMachineRow.shutdownCommandSent": "正常シャットダウンコマンドを送信しました",
   "EnvironmentMachineRow.controlFailed": "マシン操作に失敗しました",
+  "EnvironmentMachineRow.commandSent": "コマンドを送信しました",
   "EnvironmentGroupRows.machineCount": "マシン{{count}}台 · グループ全体で管理",
   "EnvironmentGroupRows.courseEnv": "コース複数マシン環境",
   "EnvironmentGroupRows.quickPracticeEnv": "クイック演習環境",
@@ -690,7 +691,6 @@
   "studentDashboard.actionStarting": "起動中…",
   "studentDashboard.actionEnter": "マシンに入る",
   "studentDashboard.actionStartAndEnter": "起動して入る",
-
   "SpecificationsTab.updateSuccess": "スペックを更新しました",
   "SpecificationsTab.updateFailed": "スペックの更新に失敗しました",
   "SpecificationsTab.noChanges": "スペックに変更はありません",
@@ -700,6 +700,7 @@
   "SpecificationsTab.title": "スペック調整",
   "SpecificationsTab.descAdmin": "管理者は新しいスペックを直接適用できます（即時反映）",
   "SpecificationsTab.descUser": "送信後、管理者が審査し、承認されると適用されます",
+  "SpecificationsTab.descFixed": "このマシンはコース環境バージョンから作成されており、スペックは環境テンプレートで決まるため個別に変更できません。",
   "SpecificationsTab.cpuCoresLabel": "CPUコア",
   "SpecificationsTab.currentLabel": "現在：{{value}}",
   "SpecificationsTab.memoryLabel": "メモリ (MB)",
@@ -714,7 +715,6 @@
   "SpecificationsTab.step1": "理由を添えてスペック変更申請を送信",
   "SpecificationsTab.step2": "管理者が「申請審査」ページで審査",
   "SpecificationsTab.step3": "承認後、システムが自動的に新しいスペックを適用",
-
   "AdvancedSettingsTab.loadRulesFailed": "リバースプロキシルールの読み込みに失敗しました",
   "AdvancedSettingsTab.featureUnavailable": "この機能は現在一時的に利用できません",
   "AdvancedSettingsTab.vmMustBeRunning": "URLを追加するには先にVMを起動してください",
@@ -740,7 +740,6 @@
   "AdvancedSettingsTab.deleteUrlDescPart2": "を削除してもよろしいですか？削除するとこのURLは即座に無効になり、関連する設定もあわせて削除されます。",
   "AdvancedSettingsTab.cancel": "キャンセル",
   "AdvancedSettingsTab.deleting": "削除中...",
-
   "MonitoringTab.timeframeHour": "直近1時間",
   "MonitoringTab.timeframeDay": "直近1日",
   "MonitoringTab.timeframeWeek": "直近1週間",
@@ -759,7 +758,6 @@
   "MonitoringTab.seriesMemory": "メモリ %",
   "MonitoringTab.seriesDownload": "ダウンロード",
   "MonitoringTab.seriesUpload": "アップロード",
-
   "OverviewTab.statusRunning": "実行中",
   "OverviewTab.statusStopped": "停止中",
   "OverviewTab.statusPaused": "一時停止中",
@@ -799,7 +797,6 @@
   "OverviewTab.publicKeyLabel": "公開鍵",
   "OverviewTab.privateKeyLabel": "秘密鍵",
   "OverviewTab.privateKeyHiddenHint": "秘密鍵は非表示です。「表示」をクリックして確認してください",
-
   "SnapshotsTab.loadFailed": "スナップショット一覧を読み込めません",
   "SnapshotsTab.operationFailed": "操作に失敗しました",
   "SnapshotsTab.snapshotCreating": "スナップショット作成中",

@@ -112,14 +112,15 @@ export default function PowerMenu({
             {t(labelKey)}
           </button>
         ))}
-        <button
+        {/* 環境內的機器不能單台刪除，整組回收由環境層級處理；沒有 onDeleteClick 就不顯示 */}
+        {onDeleteClick && <button
           type="button"
           className={`${styles.powerMenuItem} ${styles.powerMenuItemDanger}`}
           onClick={() => onDeleteClick()}
         >
           <span className={styles.powerMenuIcon}><MIcon name="delete_outline" size={15} /></span>
           {t("PowerMenu.delete")}
-        </button>
+        </button>}
       </div>
     </div>,
     document.body,

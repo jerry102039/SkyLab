@@ -5,7 +5,6 @@
   "availability.no_node_for_window": "沒有節點可用於所申請的時段。",
   "availability.window_required_short": "需要指定申請時段。",
   "availability.invalid_timezone": "時區無效",
-
   "vm_request.no_node_for_window": "沒有節點可用於所申請的時段。",
   "vm_request.provisioned_request_no_node": "已建立的申請 {request_id} 沒有已知節點。",
   "vm_request.no_node_after_reservations": "套用保留後，沒有節點可用於所申請的時段。",
@@ -38,8 +37,9 @@
   "vm_request.retry_requires_approved": "只有已核准的 VM 申請可以重試（目前狀態={status}）",
   "vm_request.retry_already_provisioned": "此申請已完成建立；請改為操作或刪除該資源。",
   "vm_request.retry_requires_failed": "只有建立失敗的申請可以重試。",
-
   "spec_change.cpu_value_required": "變更 CPU 時必須提供 requested_cpu",
+  "spec_change.class_machine_spec_fixed": "課堂機器的規格由課程環境版本決定，無法個別調整。",
+  "spec_change.practice_machine_spec_fixed": "快速練習機器的規格由環境版本決定，無法個別調整。",
   "spec_change.memory_value_required": "變更記憶體時必須提供 requested_memory",
   "spec_change.disk_value_required": "變更磁碟時必須提供 requested_disk",
   "spec_change.disk_increase_only": "磁碟容量只能增加。目前：{current}GB",
@@ -49,7 +49,6 @@
   "spec_change.disk_current_unknown": "無法套用 VMID {vmid} 的磁碟變更：目前磁碟容量未知",
   "spec_change.disk_increase_only_detail": "磁碟容量只能增加（目前={current}GB，申請={requested}GB）",
   "spec_change.apply_failed": "在核准資料寫入前套用變更失敗：{error}",
-
   "batch_provision.no_students": "班級沒有學生，無法執行批量建立",
   "batch_provision.template_not_ready": "指定的範本不存在或尚未就緒",
   "batch_provision.insufficient_ip": "可用 IP 不足：需要 {needed} 個，但僅剩 {available} 個可用",

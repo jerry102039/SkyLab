@@ -64,6 +64,11 @@ function formatDatetime(isoStr) {
 }
 
 /* ── Primitive sub-components ── */
+/* reboot / reset 之後機器仍是開著的；原本一律當成 stopped 會讓列上的狀態說謊。 */
+function statusAfterAction(action) {
+  return action === "stop" || action === "shutdown" ? "stopped" : "running";
+}
+
 function StatusBadge({ status }) {
   const { t } = useTranslation("personal");
   const s = STATUS_MAP[status] ?? { label: status, color: "muted", icon: "help_outline" };
@@ -252,7 +257,7 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
     setActionLoading(action);
     try {
       await ResourcesService[action](resource.vmid);
-      onUpdated({ ...resource, status: action === "start" ? "running" : "stopped" });
+      onUpdated({ ...resource, status: statusAfterAction(action) });
     } finally {
       setActionLoading(null);
     }
@@ -306,12 +311,22 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
   </>;
 }
 
+function machineSpecLabel(machine) {
+  const parts = [];
+  if (machine.cpu) parts.push(`${machine.cpu} CPU`);
+  if (machine.memoryBytes) parts.push(`${Math.round(machine.memoryBytes / 1024 ** 3)} GB`);
+  return parts.join(" · ");
+}
+
 function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
   const { t } = useTranslation("personal");
   const toast = useToast();
   const type = TYPE_MAP[machine.type] ?? { label: machine.type, icon: "computer" };
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuClosing, setMenuClosing] = useState(false);
+  const menuBtnRef = useRef(null);
   const resource = machine.resource;
   const isLxc = machine.type === "lxc";
   const environmentReady = ["running", "active"].includes(groupStatus);
@@ -319,32 +334,44 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
     environmentReady && resource?.vmid && resource.can_control !== false,
   );
   const canOpen = canControl && resource.status === "running";
-  const controlAction = resource?.status === "running" ? "shutdown" : "start";
+  const specLabel = machineSpecLabel(machine);
 
-  async function handleControl() {
+  function closeMenu() {
+    setMenuClosing(true);
+    setTimeout(() => { setMenuOpen(false); setMenuClosing(false); }, 130);
+  }
+
+  // 與單機列同一組電源控制；環境內的機器差別只在不能單台刪除。
+  async function handleControl(action) {
     if (!canControl || actionLoading) return;
-    setActionLoading(true);
+    setActionLoading(action);
     try {
-      await ResourcesService[controlAction](resource.vmid);
-      const status = controlAction === "start" ? "running" : "stopped";
-      onUpdated({ ...resource, status });
-      toast.success(controlAction === "start" ? t("EnvironmentMachineRow.startCommandSent") : t("EnvironmentMachineRow.shutdownCommandSent"));
+      await ResourcesService[action](resource.vmid);
+      onUpdated({ ...resource, status: statusAfterAction(action) });
+      toast.success(t("EnvironmentMachineRow.commandSent"));
     } catch (error) {
       toast.error(error?.message ?? t("EnvironmentMachineRow.controlFailed"));
     } finally {
-      setActionLoading(false);
+      setActionLoading(null);
     }
   }
 
   return <>
     <tr className={`${styles.tr} ${styles.environmentMachineRow}`}>
-    <td className={styles.td}><div className={`${styles.nameCell} ${styles.environmentMachineName}`}><span className={styles.machineBranch}>└</span><div><strong>{machine.name}</strong><small>{machine.role} · {t(type.labelKey ?? type.label)}</small></div></div></td>
+    <td className={styles.td}><div className={`${styles.nameCell} ${styles.environmentMachineName}`}><span className={styles.machineBranch}>└</span><div><strong>{machine.name}</strong><small>{machine.role} · {t(type.labelKey ?? type.label)}{specLabel ? ` · ${specLabel}` : ""}</small></div></div></td>
     <td className={styles.td}><div className={styles.envPrimary}>{machine.os}</div><div className={styles.envSub}>{machine.resource ? t("EnvironmentMachineRow.resourceConnected") : t("EnvironmentMachineRow.creating")}</div></td>
     <td className={styles.td}><StatusBadge status={machine.status} /></td>
     <td className={styles.td}><span className={styles.mono}>{machine.ip}</span></td>
     <td className={styles.td}><span className={styles.muted}>{t("EnvironmentMachineRow.managedByEnvironment")}</span></td>
     <td className={styles.td}>{machine.node}</td>
-    <td className={styles.td}><div className={styles.rowActions}><button type="button" className={styles.terminalBtn} disabled={!canOpen} title={canOpen ? (isLxc ? t("EnvironmentMachineRow.terminal") : t("EnvironmentMachineRow.console")) : t("EnvironmentMachineRow.notReadyTitle")} onClick={() => setConsoleOpen(true)}><MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />{isLxc ? t("EnvironmentMachineRow.terminal") : t("EnvironmentMachineRow.console")}</button><button type="button" className={styles.terminalBtn} disabled={!canControl || actionLoading || !["running", "stopped"].includes(resource?.status)} onClick={handleControl}><MIcon name={actionLoading ? "hourglass_empty" : controlAction === "start" ? "play_arrow" : "power_settings_new"} size={14} />{controlAction === "start" ? t("EnvironmentMachineRow.start") : t("EnvironmentMachineRow.shutdown")}</button></div></td>
+    <td className={styles.td}><div className={styles.rowActions}>
+      <button type="button" className={styles.terminalBtn} disabled={!canOpen} title={canOpen ? (isLxc ? t("EnvironmentMachineRow.terminal") : t("EnvironmentMachineRow.console")) : t("EnvironmentMachineRow.notReadyTitle")} onClick={() => setConsoleOpen(true)}><MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />{isLxc ? t("EnvironmentMachineRow.terminal") : t("EnvironmentMachineRow.console")}</button>
+      {actionLoading && <MIcon name="hourglass_empty" size={16} />}
+      {canControl && <div className={styles.menuWrap}>
+        {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onClose={closeMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
+        <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)} title={t("ResourceRow.moreActions")}><MIcon name="more_vert" size={18} /></button>
+      </div>}
+    </div></td>
     </tr>
     {consoleOpen && isLxc && createPortal(<TerminalDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
     {consoleOpen && !isLxc && createPortal(<VncDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}

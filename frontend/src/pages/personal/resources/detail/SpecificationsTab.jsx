@@ -15,6 +15,9 @@ export default function SpecificationsTab({ vmid }) {
   const isAdmin = user?.role === "admin" || user?.is_superuser || false;
 
   const [config, setConfig] = useState(null);
+  // 課堂與快速練習的機器照課程環境版本建立，規格不接受個別調整；
+  // 後端一直有算 can_request_spec_change，只是沒有人讀。
+  const [specFixed, setSpecFixed] = useState(false);
   const [cores, setCores] = useState(1);
   const [memory, setMemory] = useState(512);
   const [reason, setReason] = useState("");
@@ -31,6 +34,13 @@ export default function SpecificationsTab({ vmid }) {
       setMemory(c.memory_mb || 512);
     } catch {
       setError(true);
+      return;
+    }
+    try {
+      const resource = await ResourcesService.get(vmid);
+      setSpecFixed(resource?.can_request_spec_change === false);
+    } catch {
+      setSpecFixed(false);
     }
   };
 
@@ -97,9 +107,11 @@ export default function SpecificationsTab({ vmid }) {
           <div>
             <h2 className={styles.cardTitle}>{t("SpecificationsTab.title")}</h2>
             <p className={styles.cardDesc}>
-              {isAdmin
-                ? t("SpecificationsTab.descAdmin")
-                : t("SpecificationsTab.descUser")}
+              {specFixed
+                ? t("SpecificationsTab.descFixed")
+                : isAdmin
+                  ? t("SpecificationsTab.descAdmin")
+                  : t("SpecificationsTab.descUser")}
             </p>
           </div>
         </div>
@@ -113,6 +125,7 @@ export default function SpecificationsTab({ vmid }) {
                 min={1}
                 max={32}
                 value={cores}
+                disabled={specFixed}
                 onChange={(e) => setCores(Number.parseInt(e.target.value, 10) || 1)}
               />
               <span className={styles.fieldHint}>{t("SpecificationsTab.currentLabel", { value: config.cpu_cores })}</span>
@@ -126,13 +139,14 @@ export default function SpecificationsTab({ vmid }) {
                 max={65536}
                 step={512}
                 value={memory}
+                disabled={specFixed}
                 onChange={(e) => setMemory(Number.parseInt(e.target.value, 10) || 512)}
               />
               <span className={styles.fieldHint}>{t("SpecificationsTab.currentMemoryLabel", { value: config.memory_mb })}</span>
             </div>
           </div>
 
-          {!isAdmin && (
+          {!isAdmin && !specFixed && (
             <div className={`${styles.field} ${reasonInvalid ? styles.fieldInvalid : ""}`}>
               <label htmlFor="spec-reason">{t("SpecificationsTab.reasonLabel")}</label>
               <textarea
@@ -148,18 +162,18 @@ export default function SpecificationsTab({ vmid }) {
             </div>
           )}
 
-          <button
+          {!specFixed && <button
             type="button"
             className={styles.btnPrimary}
             disabled={busy}
             onClick={handleSubmit}
           >
             {busy ? t("SpecificationsTab.processing") : isAdmin ? t("SpecificationsTab.applyChanges") : t("SpecificationsTab.submitRequest")}
-          </button>
+          </button>}
         </div>
       </div>
 
-      {!isAdmin && (
+      {!isAdmin && !specFixed && (
         <div className={styles.card}>
           <div className={styles.cardHeader}>
             <h2 className={styles.cardTitle}>{t("SpecificationsTab.reviewProcessTitle")}</h2>

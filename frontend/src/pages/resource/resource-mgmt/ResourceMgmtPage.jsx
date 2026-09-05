@@ -98,6 +98,13 @@ function statusAfterAction(action) {
   return action === "stop" || action === "shutdown" ? "stopped" : "running";
 }
 
+function machineSpecLabel(machine) {
+  const parts = [];
+  if (machine.cpu) parts.push(`${machine.cpu} CPU`);
+  if (machine.memoryBytes) parts.push(`${Math.round(machine.memoryBytes / 1024 ** 3)} GB`);
+  return parts.join(" · ");
+}
+
 /* ── Primitive sub-components ── */
 function StatusBadge({ status }) {
   const statusMap = useStatusMap();
@@ -115,25 +122,33 @@ function EnvironmentMachineRow({ machine, onUpdated }) {
   const typeMap = useTypeMap();
   const type = typeMap[machine.type] ?? { label: machine.type, icon: "computer" };
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuClosing, setMenuClosing] = useState(false);
+  const menuBtnRef = useRef(null);
   const resource = machine.resource;
   const isLxc = machine.type === "lxc";
   const canControl = Boolean(resource?.vmid && resource.can_control !== false);
   const canOpen = canControl && resource.status === "running";
-  const controlAction = resource?.status === "running" ? "shutdown" : "start";
+  const specLabel = machineSpecLabel(machine);
 
-  async function handleControl() {
+  function closeMenu() {
+    setMenuClosing(true);
+    setTimeout(() => { setMenuOpen(false); setMenuClosing(false); }, 130);
+  }
+
+  // 與單機列同一組電源控制；環境內的機器差別只在不能單台刪除。
+  async function handleControl(action) {
     if (!canControl || actionLoading) return;
-    setActionLoading(true);
+    setActionLoading(action);
     try {
-      await ResourcesService[controlAction](resource.vmid);
-      const status = controlAction === "start" ? "running" : "stopped";
-      onUpdated({ ...resource, status });
-      toast.success(controlAction === "start" ? t("ResourceMgmtPage.startCommandSent") : t("ResourceMgmtPage.shutdownCommandSent"));
+      await ResourcesService[action](resource.vmid);
+      onUpdated({ ...resource, status: statusAfterAction(action) });
+      toast.success(t("ResourceMgmtPage.machineCommandSent"));
     } catch (error) {
       toast.error(error?.message ?? t("ResourceMgmtPage.machineActionFailed"));
     } finally {
-      setActionLoading(false);
+      setActionLoading(null);
     }
   }
 
@@ -145,7 +160,7 @@ function EnvironmentMachineRow({ machine, onUpdated }) {
           <span className={styles.machineBranch} aria-hidden="true">└</span>
           <div>
             <div className={styles.namePrimary}>{machine.name}</div>
-            <div className={styles.nameSub}>{machine.role} · {type.label}</div>
+            <div className={styles.nameSub}>{machine.role} · {type.label}{specLabel ? ` · ${specLabel}` : ""}</div>
           </div>
         </div>
       </td>
@@ -162,7 +177,11 @@ function EnvironmentMachineRow({ machine, onUpdated }) {
           <MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />
           {isLxc ? t("ResourceMgmtPage.terminalTitle") : t("ResourceMgmtPage.consoleTitle")}
         </button>
-        <button type="button" className={styles.consoleBtn} disabled={!canControl || actionLoading || !["running", "stopped"].includes(resource?.status)} onClick={handleControl}><MIcon name={actionLoading ? "hourglass_empty" : controlAction === "start" ? "play_arrow" : "power_settings_new"} size={14} />{controlAction === "start" ? t("ResourceMgmtPage.actionStart") : t("ResourceMgmtPage.actionShutdown")}</button>
+        {actionLoading && <MIcon name="hourglass_empty" size={16} />}
+        {canControl && <div className={styles.menuWrap}>
+          {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onClose={closeMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
+          <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)} title={t("ResourceMgmtPage.powerControlTitle")}><MIcon name="more_vert" size={18} /></button>
+        </div>}
       </div></td>
     </tr>
     {consoleOpen && isLxc && createPortal(<TerminalDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
@@ -653,10 +672,6 @@ export default function ResourceMgmtPage() {
 
       {/* ── 內容 ── */}
       <div className={styles.content}>
-        <div className={styles.previewNotice} role="note">
-          <MIcon name="account_tree" size={17} />
-          <span><strong>{t("ResourceMgmtPage.multiMachineNoticeBold")}</strong>{t("ResourceMgmtPage.multiMachineNoticeText")}</span>
-        </div>
         {error ? (
           <ErrorState onRetry={fetchResources} />
         ) : loading ? (
