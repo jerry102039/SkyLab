@@ -8,6 +8,12 @@ import LoadingState from "../../../components/LoadingState/LoadingState";
 import { CourseEnvironmentsService } from "../../../services/courseEnvironments";
 import { TeachingClassesService } from "../../../services/teachingClasses";
 import { focusInvalidField } from "../../../utils/focusField";
+import {
+  BOOT_LEAD_OPTIONS,
+  classSchedulePayload,
+  createClassScheduleForm,
+  SHUTDOWN_GRACE_OPTIONS,
+} from "../classScheduleForm";
 import styles from "./ClassSetupPage.module.scss";
 
 const STEPS = [
@@ -37,24 +43,6 @@ const WEEKDAY_SHORT_KEYS = [
   "ClassSetupPage.weekdayShortSat",
   "ClassSetupPage.weekdayShortSun",
 ];
-
-function localDate(date) {
-  const value = new Date(date);
-  value.setMinutes(value.getMinutes() - value.getTimezoneOffset());
-  return value.toISOString().slice(0, 10);
-}
-
-function defaultForm() {
-  const start = new Date();
-  start.setDate(start.getDate() + ((8 - start.getDay()) % 7));
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + 4);
-  const rocYear = start.getFullYear() - 1911;
-  return {
-    name: "", code: "", term: `${rocYear}-1`, location: "", startDate: localDate(start), endDate: localDate(end),
-    weekday: (start.getDay() + 6) % 7, startTime: "13:10", endTime: "16:00", timezone: "Asia/Taipei", bootLeadMinutes: 10,
-  };
-}
 
 export function parseStudentEmails(value) {
   return [...new Set(String(value).split(/[\s,;]+/).map((email) => email.trim().toLowerCase()).filter(Boolean))];
@@ -104,7 +92,7 @@ export default function ClassSetupPage() {
   const classId = params.get("classId") ?? "";
   const requestedStep = Number(params.get("step") ?? 1);
   const step = Math.min(5, Math.max(1, requestedStep));
-  const [form, setForm] = useState(defaultForm);
+  const [form, setForm] = useState(() => createClassScheduleForm());
   const [item, setItem] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [templateId, setTemplateId] = useState("");
@@ -133,12 +121,7 @@ export default function ClassSetupPage() {
     setItem(normalized);
     setWeeks(normalized.weeks);
     if (normalized.course_version_id) setTemplateId(String(normalized.course_version_id));
-    setForm({
-      name: normalized.name, code: normalized.code, term: normalized.term, location: normalized.location ?? "",
-      startDate: normalized.start_date, endDate: normalized.end_date, weekday: normalized.weekday,
-      startTime: String(normalized.start_time).slice(0, 5), endTime: String(normalized.end_time).slice(0, 5),
-      timezone: normalized.timezone, bootLeadMinutes: normalized.boot_lead_minutes,
-    });
+    setForm(createClassScheduleForm(normalized));
   }
 
   useEffect(() => {
@@ -189,11 +172,7 @@ export default function ClassSetupPage() {
 
   async function saveBasic() {
     if (!form.name.trim()) { markInvalid("name", nameRef); return false; }
-    const payload = {
-      name: form.name.trim(), code: form.code.trim() || `CLASS-${Date.now().toString().slice(-8)}`, term: form.term.trim() || t("ClassSetupPage.unspecifiedTerm"), location: form.location.trim() || null,
-      start_date: form.startDate, end_date: form.endDate, weekday: Number(form.weekday), start_time: form.startTime,
-      end_time: form.endTime, timezone: form.timezone, boot_lead_minutes: Number(form.bootLeadMinutes),
-    };
+    const payload = classSchedulePayload(form);
     const saved = classId ? await TeachingClassesService.update(classId, payload) : await TeachingClassesService.create(payload);
     applyClass(saved);
     if (!classId) setParams({ classId: String(saved.id), step: "2" });
@@ -266,7 +245,7 @@ export default function ClassSetupPage() {
         <label><span>{t("ClassSetupPage.fieldEndDate")}</span><input type="date" value={form.endDate} onChange={(event) => updateForm("endDate", event.target.value)} /></label>
         <label><span>{t("ClassSetupPage.fieldWeekday")}</span><select value={form.weekday} onChange={(event) => updateForm("weekday", Number(event.target.value))}>{WEEKDAY_FULL_KEYS.map((labelKey, index) => <option key={labelKey} value={index}>{t(labelKey)}</option>)}</select></label>
         <label><span>{t("ClassSetupPage.fieldClassTime")}</span><div className={styles.timePair}><input type="time" value={form.startTime} onChange={(event) => updateForm("startTime", event.target.value)} /><i>{t("ClassSetupPage.timeRangeSeparator")}</i><input type="time" value={form.endTime} onChange={(event) => updateForm("endTime", event.target.value)} /></div></label>
-        <details className={styles.advanced}><summary>{t("ClassSetupPage.advancedSettings")}</summary><div className={styles.advancedGrid}><label><span>{t("ClassSetupPage.fieldTerm")}</span><input value={form.term} onChange={(event) => updateForm("term", event.target.value)} /></label><label><span>{t("ClassSetupPage.fieldBootLead")}</span><select value={form.bootLeadMinutes} onChange={(event) => updateForm("bootLeadMinutes", Number(event.target.value))}><option value={0}>{t("ClassSetupPage.bootLeadOnTime")}</option><option value={5}>{t("ClassSetupPage.bootLeadMinutesOption", { minutes: 5 })}</option><option value={10}>{t("ClassSetupPage.bootLeadMinutesOption", { minutes: 10 })}</option><option value={15}>{t("ClassSetupPage.bootLeadMinutesOption", { minutes: 15 })}</option><option value={30}>{t("ClassSetupPage.bootLeadMinutesOption", { minutes: 30 })}</option></select></label></div></details>
+        <details className={styles.advanced}><summary>{t("ClassSetupPage.advancedSettings")}</summary><div className={styles.advancedGrid}><label><span>{t("ClassSetupPage.fieldTerm")}</span><input value={form.term} onChange={(event) => updateForm("term", event.target.value)} /></label><label><span>{t("ClassSetupPage.fieldBootLead")}</span><select value={form.bootLeadMinutes} onChange={(event) => updateForm("bootLeadMinutes", Number(event.target.value))}>{BOOT_LEAD_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("ClassSetupPage.bootLeadOnTime") : t("ClassSetupPage.bootLeadMinutesOption", { minutes })}</option>)}</select></label><label><span>{t("ClassSetupPage.fieldShutdownGrace")}</span><select value={form.shutdownGraceMinutes} onChange={(event) => updateForm("shutdownGraceMinutes", Number(event.target.value))}>{SHUTDOWN_GRACE_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("ClassSetupPage.shutdownGraceImmediate") : t("ClassSetupPage.shutdownGraceMinutesOption", { minutes })}</option>)}</select></label></div></details>
       </div></section>}
 
       {step === 2 && <section className={styles.card}><div className={styles.sectionHeader}><span>2</span><div><h2>{t("ClassSetupPage.step2Title")}</h2><p>{t("ClassSetupPage.step2Desc")}</p></div></div><div className={styles.studentLayout}><label><span>{t("ClassSetupPage.fieldStudentEmails")}</span><textarea ref={emailsRef} className={invalidField === "emails" ? styles.invalid : undefined} aria-invalid={invalidField === "emails"} rows={10} value={emails} onChange={(event) => { setEmails(event.target.value); clearInvalid("emails"); }} placeholder={"student01@example.edu\nstudent02@example.edu"} autoFocus /><small>{t("ClassSetupPage.pendingEmailsCount", { count: parseStudentEmails(emails).length })}</small></label><aside><strong>{t("ClassSetupPage.currentStudentsLabel")}</strong><span>{item?.students.length ?? 0}<small>{t("ClassSetupPage.unitPeople")}</small></span><p>{item?.students.length ? t("ClassSetupPage.canAddMoreStudents") : t("ClassSetupPage.needAtLeastOneStudent")}</p>{item?.students.slice(0, 5).map((student) => <em key={student.id}>{student.full_name || student.email}</em>)}</aside></div></section>}

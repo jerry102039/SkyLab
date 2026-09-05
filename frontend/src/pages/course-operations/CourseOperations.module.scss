@@ -44,7 +44,8 @@
 .rowLink:hover { background: var(--color-hover); }
 .statusBadge, .lockBadge { @include badge-base; gap: 4px; padding: 2px 10px; white-space: nowrap; }
 .status_active, .status_published { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 12%, transparent); }
-.status_planning, .status_draft, .status_pending_review { color: var(--color-pending); background: color-mix(in srgb, var(--color-pending) 12%, transparent); }
+.status_planning, .status_draft { color: var(--color-status-neutral); background: color-mix(in srgb, var(--color-status-neutral) 12%, transparent); }
+.status_pending_review { color: var(--color-pending); background: color-mix(in srgb, var(--color-pending) 12%, transparent); }
 .status_provisioning { color: var(--color-info); background: color-mix(in srgb, var(--color-info) 12%, transparent); }
 .status_partial_failed { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 12%, transparent); }
 .status_archived, .status_retired { color: var(--color-text-muted); background: var(--color-hover); }
@@ -162,12 +163,19 @@
 .listSummary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; padding: 8px 18px; border-bottom: 1px solid var(--color-border); color: var(--color-text-muted); font-size: $font-size-12; }
 .listSummary span { display: inline-flex; align-items: center; gap: 6px; }
 .listSummary i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-pending); }
-.classToolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 2px 0; }
+.classToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px 18px; flex-wrap: wrap; padding: 2px 0; }
+.archivedToggle { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--color-text-muted); font-size: $font-size-12; cursor: pointer; user-select: none; }
+.archivedToggle input { width: 13px; height: 13px; margin: 0; accent-color: var(--color-primary); cursor: pointer; }
 .classToolbar .searchInput { flex: 0 1 320px; border: 1px solid var(--color-border); border-radius: $radius-8; background: var(--color-surface); }
 .classToolbar .pillTabs { justify-content: flex-end; }
 .classToolbar .pillTabs button { display: inline-flex; align-items: center; gap: 6px; }
 .classToolbar .pillTabs i { min-width: 17px; box-sizing: border-box; padding: 1px 5px; border-radius: $radius-pill; color: var(--color-text-muted); background: var(--color-hover); font-size: $font-size-10; font-style: normal; font-weight: $font-weight-500; font-variant-numeric: tabular-nums; text-align: center; }
 .classToolbar .pillTabs button.pillActive i { color: var(--color-surface); background: color-mix(in srgb, var(--color-surface) 24%, transparent); }
+.pillTabs button.pillAlert { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 10%, transparent); font-weight: $font-weight-500; }
+.pillTabs button.pillAlert:hover { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 17%, transparent); }
+.pillTabs button.pillAlert.pillActive { color: var(--color-surface); background: var(--color-danger); }
+.classToolbar .pillTabs button.pillAlert i { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 17%, transparent); }
+.classToolbar .pillTabs button.pillAlert.pillActive i { color: var(--color-surface); background: color-mix(in srgb, var(--color-surface) 24%, transparent); }
 .classCardGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; align-items: stretch; }
 .classCard { display: flex; min-width: 0; flex-direction: column; overflow: hidden; @include glass-surface($shadow: var(--shadow-sm)); border-radius: $radius-16; transition: border-color $transition-base, box-shadow $transition-base, transform $transition-base; }
 .classCard:hover { border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border)); box-shadow: 0 7px 24px color-mix(in srgb, var(--color-text-primary) 8%, transparent); transform: translateY(-1px); }

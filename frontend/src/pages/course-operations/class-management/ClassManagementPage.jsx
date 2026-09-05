@@ -17,14 +17,18 @@ const STATUS_KEYS = {
   archived: "ClassManagementPage.statusArchived",
 };
 
-const FILTER_KEYS = [
-  ["all", "ClassManagementPage.filterAll"],
-  ["planning", "ClassManagementPage.filterPlanning"],
-  ["pending_review", "ClassManagementPage.filterPendingReview"],
-  ["provisioning", "ClassManagementPage.filterProvisioning"],
-  ["partial_failed", "ClassManagementPage.filterPartialFailed"],
-  ["active", "ClassManagementPage.filterActive"],
+// 分頁是導航（我要找哪一批），徽章才是細節（這一班現在怎樣），所以粒度不同：
+// 「等待審核」與「正在建立」對老師都是「等，什麼都不能做」，合併成一個桶。
+// 「需要處理」是告警不是分類，count 為 0 時不佔位置。
+const FILTER_GROUPS = [
+  { key: "all", labelKey: "ClassManagementPage.filterAll", statuses: null },
+  { key: "planning", labelKey: "ClassManagementPage.filterPlanning", statuses: ["planning"] },
+  { key: "building", labelKey: "ClassManagementPage.filterBuilding", statuses: ["pending_review", "provisioning"] },
+  { key: "partial_failed", labelKey: "ClassManagementPage.filterPartialFailed", statuses: ["partial_failed"], alertOnly: true },
+  { key: "active", labelKey: "ClassManagementPage.filterActive", statuses: ["active"] },
 ];
+
+const SETUP_STEP_COUNT = 3;
 
 const WEEKDAY_KEYS = [
   "ClassManagementPage.weekdayMon",
@@ -62,10 +66,19 @@ function normalizeClass(item) {
   };
 }
 
+export function setupChecklist(item) {
+  return [
+    item.students > 0,
+    Boolean(item.course_environment) && (item.nodes?.length ?? 0) > 0,
+    (item.weeks ?? []).some((week) => String(week.title ?? "").trim()),
+  ];
+}
+
 export function classSetupResumeStep(item) {
-  if (!item.students) return 2;
-  if (!item.nodes?.length) return 3;
-  if (!(item.weeks ?? []).some((week) => String(week.title ?? "").trim())) return 4;
+  const [hasStudents, hasEnvironment, hasTasks] = setupChecklist(item);
+  if (!hasStudents) return 2;
+  if (!hasEnvironment) return 3;
+  if (!hasTasks) return 4;
   return 5;
 }
 
@@ -82,6 +95,7 @@ function nextAction(item, t) {
   }
   if (item.status === "partial_failed") return [t("ClassManagementPage.actionViewFailed"), `/class-management/${item.id}`];
   if (item.status === "active") return [t("ClassManagementPage.actionEnterClass"), `/class-management/${item.id}`];
+  if (item.status === "archived") return [t("ClassManagementPage.actionViewClass"), `/class-management/${item.id}`];
   return [t("ClassManagementPage.actionViewProgress"), `/class-management/${item.id}`];
 }
 
@@ -94,6 +108,7 @@ export default function ClassManagementPage() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -104,17 +119,34 @@ export default function ClassManagementPage() {
     return () => { active = false; };
   }, [t]);
 
-  const rows = useMemo(
-    () => classes.filter((item) => (status === "all" || item.status === status)
-      && `${item.name} ${item.code}`.toLowerCase().includes(query.toLowerCase())),
-    [classes, query, status],
+  const archivedCount = useMemo(
+    () => classes.filter((item) => item.status === "archived").length,
+    [classes],
+  );
+
+  const visible = useMemo(
+    () => classes.filter((item) => showArchived || item.status !== "archived"),
+    [classes, showArchived],
   );
 
   const statusCounts = useMemo(() => {
-    const counts = { all: classes.length };
-    classes.forEach((item) => { counts[item.status] = (counts[item.status] ?? 0) + 1; });
+    const counts = { all: visible.length };
+    FILTER_GROUPS.forEach((group) => {
+      if (group.statuses) counts[group.key] = visible.filter((item) => group.statuses.includes(item.status)).length;
+    });
     return counts;
-  }, [classes]);
+  }, [visible]);
+
+  const tabs = useMemo(
+    () => FILTER_GROUPS.filter((group) => !group.alertOnly || statusCounts[group.key] > 0 || status === group.key),
+    [statusCounts, status],
+  );
+
+  const rows = useMemo(() => {
+    const group = FILTER_GROUPS.find((entry) => entry.key === status);
+    return visible.filter((item) => (!group?.statuses || group.statuses.includes(item.status))
+      && item.name.toLowerCase().includes(query.toLowerCase()));
+  }, [visible, query, status]);
 
   return <div className={`${styles.page} ${styles.listPage}`}>
     <PageHeader title={t("ClassManagementPage.title")} subtitle={t("ClassManagementPage.subtitle")}>
@@ -128,18 +160,19 @@ export default function ClassManagementPage() {
 
     <div className={styles.classToolbar}>
       <label className={styles.searchInput}><MIcon name="search" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("ClassManagementPage.searchPlaceholder")} /></label>
-      <div className={styles.pillTabs}>{FILTER_KEYS.map(([key, labelKey]) => <button type="button" key={key} className={status === key ? styles.pillActive : ""} onClick={() => setStatus(key)}>{t(labelKey)}<i>{statusCounts[key] ?? 0}</i></button>)}</div>
+      <div className={styles.pillTabs}>{tabs.map((group) => <button type="button" key={group.key} className={`${status === group.key ? styles.pillActive : ""}${group.alertOnly ? ` ${styles.pillAlert}` : ""}`} onClick={() => setStatus(group.key)}>{t(group.labelKey)}<i>{statusCounts[group.key] ?? 0}</i></button>)}</div>
+      {archivedCount > 0 && <label className={styles.archivedToggle}><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); if (!event.target.checked) setStatus("all"); }} />{t("ClassManagementPage.showArchived", { count: archivedCount })}</label>}
     </div>
 
     {loading ? <LoadingState fullPage text={t("ClassManagementPage.loadingText")} /> : rows.length ? <section className={styles.classCardGrid}>
       {rows.map((item) => {
-        const setupReady = [item.students > 0, item.nodes.length > 0].filter(Boolean).length;
-        const progress = item.status === "planning" ? setupReady / 2 * 100 : item.totalMachines ? item.readyMachines / item.totalMachines * 100 : 0;
+        const setupReady = setupChecklist(item).filter(Boolean).length;
+        const progress = item.status === "planning" ? setupReady / SETUP_STEP_COUNT * 100 : item.totalMachines ? item.readyMachines / item.totalMachines * 100 : 0;
         const [action, target] = nextAction(item, t);
         return <article className={`${styles.classCard}${item.status === "partial_failed" ? ` ${styles.classCardAlert}` : ""}`} key={item.id}>
           <button type="button" className={styles.classCardMain} onClick={() => navigate(`/class-management/${item.id}`)}>
             <div className={styles.classCardTop}>
-              <div><span>{item.code} · {item.term}</span><h2>{item.name}</h2></div>
+              <div><span>{item.term}</span><h2>{item.name}</h2></div>
               <span className={`${styles.statusBadge} ${styles[`status_${item.status}`]}`}>{STATUS_KEYS[item.status] ? t(STATUS_KEYS[item.status]) : item.status}</span>
             </div>
             <div className={styles.classMeta}>
@@ -147,7 +180,7 @@ export default function ClassManagementPage() {
               <span><MIcon name="calendar_today" size={15} />{item.startDate} {t("ClassManagementPage.dateTo")} {item.endDate}</span>
               <span><MIcon name="power_settings_new" size={15} />{t("ClassManagementPage.bootLeadLabel", { minutes: item.bootLeadMinutes })}</span>
             </div>
-            <div className={styles.classProgress}><div><span>{item.status === "planning" ? t("ClassManagementPage.progressSetup") : t("ClassManagementPage.progressBuild")}</span><strong>{item.status === "planning" ? `${setupReady}/2` : `${item.readyMachines}/${item.totalMachines}`}</strong></div><i><b style={{ width: `${progress}%` }} /></i></div>
+            <div className={styles.classProgress}><div><span>{item.status === "planning" ? t("ClassManagementPage.progressSetup") : t("ClassManagementPage.progressBuild")}</span><strong>{item.status === "planning" ? `${setupReady}/${SETUP_STEP_COUNT}` : `${item.readyMachines}/${item.totalMachines}`}</strong></div><i><b style={{ width: `${progress}%` }} /></i></div>
           </button>
           <div className={styles.classStats}>
             <div><strong>{item.students}</strong><span>{t("ClassManagementPage.unitStudents")}</span></div>

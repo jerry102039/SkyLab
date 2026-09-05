@@ -48,6 +48,7 @@ function normalizeClass(item) {
     startTime: String(item.start_time ?? "").slice(0, 5),
     endTime: String(item.end_time ?? "").slice(0, 5),
     bootLeadMinutes: item.boot_lead_minutes,
+    shutdownGraceMinutes: item.shutdown_grace_minutes,
     nodes: item.machine_nodes ?? [],
     weeks: (item.weeks ?? []).map((week) => ({
       ...week,
@@ -72,7 +73,8 @@ function CourseMachineAccess({ item, onNavigate }) {
   const { t } = useTranslation("teaching");
   const [expanded, setExpanded] = useState(false);
   const machines = item.nodes ?? [];
-  const running = Math.min(item.readyMachines, machines.length);
+  const total = item.totalMachines || machines.length;
+  const running = Math.min(item.readyMachines, total);
 
   return <section className={`${styles.overviewInfoCard} ${styles.machineAccessCard}`}>
     <div className={styles.overviewCardHeader}>
@@ -89,7 +91,7 @@ function CourseMachineAccess({ item, onNavigate }) {
       </div>
     </div>
     <div className={styles.machineAccessSummary}>
-      <span className={styles.machineAccessStatus}><i />{t("ClassWorkspacePage.machinesReadyCount", { running, total: item.totalMachines || machines.length })}</span>
+      <span className={styles.machineAccessStatus}><i />{t("ClassWorkspacePage.machinesReadyCount", { running, total })}</span>
       <span><MIcon name="schedule" size={15} />{t("ClassWorkspacePage.managedByCourseSchedule")}</span>
       <p>{t("ClassWorkspacePage.viewFromCourseHint")}</p>
     </div>
@@ -206,9 +208,9 @@ function Overview({
       <section className={styles.overviewInfoCard}>
         <div className={styles.overviewCardHeader}><h2>{t("ClassWorkspacePage.classInfoTitle")}</h2>{item.status === "planning" && <button type="button" onClick={onEditSchedule}>{t("ClassWorkspacePage.editScheduleBtn")}<MIcon name="edit" size={15} /></button>}</div>
         <div className={styles.classFacts}>
-          <div><span>{t("ClassWorkspacePage.classCodeLabel")}</span><strong>{item.code}</strong></div><div><span>{t("ClassWorkspacePage.termLabel")}</span><strong>{item.term}</strong></div>
-          <div><span>{t("ClassWorkspacePage.fixedScheduleLabel")}</span><strong>{weekday} {item.startTime}–{item.endTime}</strong></div><div><span>{t("ClassWorkspacePage.bootLeadFieldLabel")}</span><strong>{t("ClassWorkspacePage.minutesSuffix", { minutes: item.bootLeadMinutes })}</strong></div>
-          <div><span>{t("ClassWorkspacePage.coursePeriodLabel")}</span><strong>{item.startDate}–{item.endDate}</strong></div><div><span>{t("ClassWorkspacePage.timezoneLabel")}</span><strong>{item.timezone}</strong></div>
+          <div><span>{t("ClassWorkspacePage.termLabel")}</span><strong>{item.term}</strong></div><div><span>{t("ClassWorkspacePage.locationLabel")}</span><strong>{item.location || t("ClassWorkspacePage.locationUnset")}</strong></div>
+          <div><span>{t("ClassWorkspacePage.fixedScheduleLabel")}</span><strong>{weekday} {item.startTime}–{item.endTime}</strong></div><div><span>{t("ClassWorkspacePage.coursePeriodLabel")}</span><strong>{item.startDate}–{item.endDate}</strong></div>
+          <div><span>{t("ClassWorkspacePage.bootLeadFieldLabel")}</span><strong>{t("ClassWorkspacePage.minutesSuffix", { minutes: item.bootLeadMinutes })}</strong></div><div><span>{t("ClassWorkspacePage.shutdownGraceFieldLabel")}</span><strong>{t("ClassWorkspacePage.minutesSuffix", { minutes: item.shutdownGraceMinutes })}</strong></div>
         </div>
       </section>
       <section className={styles.overviewInfoCard}>
@@ -789,7 +791,7 @@ export default function ClassWorkspacePage() {
 
   return <div className={styles.page}>
     <PageHeader
-      eyebrow={`${item.code} · ${item.term}`}
+      eyebrow={item.location ? `${item.term} · ${item.location}` : item.term}
       title={item.name}
       subtitle={t("ClassWorkspacePage.subtitleTemplate", { students: item.students.length, weeks: item.weeks.length, weekday: t(["ClassWorkspacePage.weekdayShortMon", "ClassWorkspacePage.weekdayShortTue", "ClassWorkspacePage.weekdayShortWed", "ClassWorkspacePage.weekdayShortThu", "ClassWorkspacePage.weekdayShortFri", "ClassWorkspacePage.weekdayShortSat", "ClassWorkspacePage.weekdayShortSun"][item.weekday]), start: item.startTime, end: item.endTime })}
     >

@@ -48,6 +48,7 @@ from app.services.teaching import (
     class_capacity_service,
     class_lifecycle_service,
     class_network_service,
+    class_status_service,
 )
 from app.services.vm import batch_provision_service
 
@@ -64,7 +65,6 @@ PUBLIC_PROVISION_ERROR = (
 
 class ClassCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    code: str = Field(min_length=1, max_length=80)
     term: str = Field(min_length=1, max_length=80)
     location: str | None = Field(default=None, max_length=255)
     start_date: date
@@ -74,11 +74,11 @@ class ClassCreate(BaseModel):
     end_time: time
     timezone: str = "Asia/Taipei"
     boot_lead_minutes: int = Field(default=10, ge=0, le=120)
+    shutdown_grace_minutes: int = Field(default=30, ge=0, le=240)
 
 
 class ClassPatch(BaseModel):
     name: str | None = None
-    code: str | None = None
     term: str | None = None
     location: str | None = Field(default=None, max_length=255)
     start_date: date | None = None
@@ -373,7 +373,13 @@ def _validate_schedule(item) -> None:
 
 @router.post("")
 def create_class(body: ClassCreate, session: SessionDep, current_user: InstructorUser):
-    item = TeachingClass(owner_id=current_user.id, **body.model_dump())
+    class_id = uuid.uuid4()
+    item = TeachingClass(
+        id=class_id,
+        owner_id=current_user.id,
+        code=f"cls-{class_id.hex[:8]}",
+        **body.model_dump(),
+    )
     _validate_schedule(item)
     session.add(item)
     session.flush()
@@ -897,7 +903,7 @@ def _submit_node_job(
             "memory": node.memory_mb,
             "disk_size": node.disk_gb,
             "rootfs_size": node.disk_gb,
-            "environment_type": f"{item.code}-{node.role}",
+            "environment_type": f"{item.name}-{node.role}",
             "expiry_date": item.end_date.isoformat(),
             "ip_reservation_prefix": f"{item.id}:{node.node_key}",
         },
@@ -1273,7 +1279,6 @@ def provision_status(
     )
     students = _students(session, class_id)
     enrollment_by_user = {row.user_id: row for row in students}
-    jobs = []
     for node in nodes:
         job = (
             session.get(BatchProvisionJob, node.batch_job_id)
@@ -1282,7 +1287,6 @@ def provision_status(
         )
         if not job:
             continue
-        jobs.append(job)
         tasks = session.exec(
             select(BatchProvisionTask).where(BatchProvisionTask.job_id == job.id)
         ).all()
@@ -1307,52 +1311,7 @@ def provision_status(
             )
             mapping.error = task.error
             session.add(mapping)
-    values = [
-        job.status.value if hasattr(job.status, "value") else str(job.status)
-        for job in jobs
-    ]
-    any_failed = any(job.failed_count > 0 for job in jobs) or any(
-        value in {"failed", "rejected", "cancelled"} for value in values
-    )
-    all_ready = (
-        bool(jobs)
-        and len(jobs) == len(nodes)
-        and all(
-            value == "completed" and job.failed_count == 0 and job.done == job.total
-            for value, job in zip(values, jobs, strict=True)
-        )
-    )
-    if all_ready:
-        session.flush()
-        topology_errors = class_network_service.apply_class_topology(
-            session, class_id=class_id
-        )
-        if topology_errors:
-            item.status = TeachingClassStatus.partial_failed
-        else:
-            item.status = TeachingClassStatus.active
-            course_service.ensure_class_path(
-                session,
-                teaching_class=item,
-                published=True,
-            )
-            reservation = session.exec(
-                select(ClassCapacityReservation).where(
-                    ClassCapacityReservation.class_id == class_id
-                )
-            ).first()
-            if reservation:
-                reservation.status = "consumed"
-                session.add(reservation)
-    elif any_failed:
-        item.status = TeachingClassStatus.partial_failed
-    elif any(
-        value in {"approved", "pending", "running", "completed"} for value in values
-    ):
-        item.status = TeachingClassStatus.provisioning
-    elif values:
-        item.status = TeachingClassStatus.pending_review
-    item.updated_at = get_datetime_utc()
-    session.add(item)
+    class_status_service.recompute(session=session, class_id=class_id)
     session.commit()
+    session.refresh(item)
     return _serialize(session, item)
