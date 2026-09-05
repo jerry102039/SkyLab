@@ -128,7 +128,11 @@ export default function ClassSetupPage() {
   function clearInvalid(key) { setInvalidField((current) => (current === key ? "" : current)); }
 
   const selectedTemplate = templates.find((template) => String(template.versionId) === String(templateId));
-  const completed = [Boolean(item), Boolean(item?.students.length), Boolean(item?.course_environment && item?.nodes.length), weeks.some((week) => String(week.title ?? "").trim())];
+  const studentsReady = Boolean(item?.students.length);
+  const environmentReady = Boolean(item?.course_environment && item?.nodes.length);
+  const completed = [Boolean(item), studentsReady, environmentReady, weeks.some((week) => String(week.title ?? "").trim())];
+  // 與班級頁的「建機準備 x/2」同一份定義，兩邊不會算出不同數字。
+  const provisionReady = [studentsReady, environmentReady].filter(Boolean).length;
 
   function applyClass(result) {
     const normalized = normalizeClass(result);
@@ -244,11 +248,14 @@ export default function ClassSetupPage() {
       <button type="button" className={styles.backBtn} onClick={() => navigate("/class-management")}><MIcon name="arrow_back" size={18} />{t("ClassSetupPage.backToClassManagement")}</button>
     </PageHeader>
 
-    <nav className={styles.stepper} aria-label={t("ClassSetupPage.stepperAriaLabel")}>{STEPS.map(([key, labelKey, hintKey], index) => {
-      const number = index + 1;
-      const done = number < step || (number <= 4 && completed[index]);
-      return <button type="button" key={key} disabled={!classId && number > 1} className={`${step === number ? styles.stepActive : ""} ${done ? styles.stepDone : ""}`} onClick={() => number <= step && go(number)}><span>{done ? <MIcon name="check" size={15} /> : number}</span><div><strong>{t(labelKey)}</strong><small>{t(hintKey)}</small></div></button>;
-    })}</nav>
+    <section className={styles.stepperBar}>
+      <nav className={styles.stepper} aria-label={t("ClassSetupPage.stepperAriaLabel")}>{STEPS.map(([key, labelKey], index) => {
+        const number = index + 1;
+        const done = number < step || (number <= 4 && completed[index]);
+        return <button type="button" key={key} disabled={!classId && number > 1} className={`${step === number ? styles.stepActive : ""} ${done ? styles.stepDone : ""}`} onClick={() => number <= step && go(number)}><span>{done ? <MIcon name="check" size={13} /> : number}</span><strong>{t(labelKey)}</strong></button>;
+      })}</nav>
+      <div className={styles.stepperProgress}><span>{t("ClassSetupPage.progressLabel")}</span><strong>{t("ClassSetupPage.progressCount", { count: provisionReady })}</strong></div>
+    </section>
 
     {message && <div className={styles.message}><MIcon name="info" size={17} />{message}</div>}
 
@@ -336,7 +343,38 @@ export default function ClassSetupPage() {
 
       {step === 4 && <section className={styles.card}><div className={styles.sectionHeader}><span>4</span><div><h2>{t("ClassSetupPage.step4Title")}</h2><p>{t("ClassSetupPage.step4Desc")}</p></div><em>{t("ClassSetupPage.weeksConfiguredCount", { done: taskCount, total: weeks.length })}</em></div><label className={styles.publishToggle}><input type="checkbox" checked={publishWeeks} onChange={(event) => setPublishWeeks(event.target.checked)} /><div><strong>{t("ClassSetupPage.publishWeeksLabel")}</strong><small>{t("ClassSetupPage.publishWeeksHint")}</small></div></label><div className={styles.weekList}>{weeks.map((week, index) => <label key={week.id ?? week.session_date}><span><strong>{t("ClassSetupPage.weekNumberLabel", { week: week.week_number ?? index + 1 })}</strong><small>{week.session_date}</small></span><input value={week.title ?? ""} onChange={(event) => setWeeks((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, title: event.target.value } : row))} placeholder={t("ClassSetupPage.weekTitlePlaceholder")} /></label>)}</div></section>}
 
-      {step === 5 && <section className={styles.reviewLayout}><div className={styles.card}><div className={styles.sectionHeader}><span>5</span><div><h2>{t("ClassSetupPage.step5Title")}</h2><p>{t("ClassSetupPage.step5Desc")}</p></div></div><div className={styles.summaryList}><SummaryLine done={Boolean(item)} label={t("ClassSetupPage.summaryLabelSchedule")} value={item ? `${item.start_date} ${t("ClassSetupPage.scheduleDateTo")} ${item.end_date} · ${t("ClassSetupPage.weeklyPrefix")}${t(WEEKDAY_SHORT_KEYS[item.weekday])} ${String(item.start_time).slice(0, 5)}` : t("ClassSetupPage.notCreatedYet")} /><SummaryLine done={Boolean(item?.students.length)} label={t("ClassSetupPage.summaryLabelStudents")} value={t("ClassSetupPage.studentsCountLabel", { count: item?.students.length ?? 0 })} /><SummaryLine done={Boolean(item?.course_environment && item?.nodes.length)} label={t("ClassSetupPage.summaryLabelEnvironment")} value={item?.course_environment ? t("ClassSetupPage.envSummaryValue", { name: item.course_environment.name, count: item.nodes.length }) : t("ClassSetupPage.notSelectedYet")} /><SummaryLine done={taskCount > 0} label={t("ClassSetupPage.summaryLabelTasks")} value={t("ClassSetupPage.weeksSetSummary", { done: taskCount, total: weeks.length, visible: visibleCount })} /></div></div><aside className={styles.capacityCard}><span className={styles.capacityIcon}><MIcon name={capacity?.ready ? "check" : "hourglass_top"} size={24} /></span><h2>{capacity ? capacity.ready ? t("ClassSetupPage.capacityReady") : t("ClassSetupPage.capacityNotReady") : t("ClassSetupPage.capacityChecking")}</h2>{capacity?.ready ? <><p>{t("ClassSetupPage.capacitySummary", { machines: capacity.machine_count, ips: capacity.ip_count })}</p><dl><div><dt>CPU</dt><dd>{capacity.cpu_cores}</dd></div><div><dt>RAM</dt><dd>{Math.round(capacity.memory_mb / 1024)} GB</dd></div><div><dt>Disk</dt><dd>{capacity.disk_gb} GB</dd></div></dl></> : <p>{capacity?.issues?.join("；") ?? t("ClassSetupPage.capacityCheckingDetail")}</p>}<button type="button" className={styles.btnPrimary} disabled={!capacity?.ready || busy} onClick={provision}><MIcon name="rocket_launch" size={17} />{busy ? t("ClassSetupPage.submittingBtn") : t("ClassSetupPage.finishAndSubmitBtn")}</button><button type="button" className={styles.btnSecondary} onClick={() => navigate(`/class-management/${classId}`)}>{t("ClassSetupPage.saveDraftLaterBtn")}</button></aside></section>}
+      {step === 5 && <div className={styles.stack}>
+        <section className={styles.readyPanel}>
+          <div className={styles.readySummary}>
+            <span className={styles.readyIcon}><MIcon name={capacity?.ready ? "check" : "hourglass_top"} size={22} /></span>
+            <div>
+              <span>{t("ClassSetupPage.progressLabel")} · {t("ClassSetupPage.progressCount", { count: provisionReady })}</span>
+              <h2>{capacity ? capacity.ready ? t("ClassSetupPage.capacityReady") : t("ClassSetupPage.capacityNotReady") : t("ClassSetupPage.capacityChecking")}</h2>
+              <p>{capacity?.ready ? t("ClassSetupPage.capacitySummary", { machines: capacity.machine_count, ips: capacity.ip_count }) : capacity?.issues?.join("；") ?? t("ClassSetupPage.capacityCheckingDetail")}</p>
+            </div>
+            <div className={styles.readyActions}>
+              <button type="button" className={styles.btnSecondary} onClick={() => navigate(`/class-management/${classId}`)}>{t("ClassSetupPage.saveDraftLaterBtn")}</button>
+              <button type="button" className={styles.btnPrimary} disabled={!capacity?.ready || busy} onClick={provision}><MIcon name="rocket_launch" size={17} />{busy ? t("ClassSetupPage.submittingBtn") : t("ClassSetupPage.finishAndSubmitBtn")}</button>
+            </div>
+          </div>
+          {capacity?.ready && <div className={styles.capacityFacts}>
+            <div><span>{t("ClassSetupPage.capacityFactMachines")}</span><strong>{capacity.machine_count}</strong></div>
+            <div><span>CPU</span><strong>{capacity.cpu_cores}</strong></div>
+            <div><span>RAM</span><strong>{Math.round(capacity.memory_mb / 1024)} GB</strong></div>
+            <div><span>Disk</span><strong>{capacity.disk_gb} GB</strong></div>
+            <div><span>{t("ClassSetupPage.capacityFactIps")}</span><strong>{capacity.ip_count}</strong></div>
+          </div>}
+        </section>
+        <section className={styles.card}>
+          <div className={styles.sectionHeader}><span>5</span><div><h2>{t("ClassSetupPage.step5Title")}</h2><p>{t("ClassSetupPage.step5Desc")}</p></div></div>
+          <div className={styles.summaryList}>
+            <SummaryLine done={Boolean(item)} label={t("ClassSetupPage.summaryLabelSchedule")} value={item ? `${item.start_date} ${t("ClassSetupPage.scheduleDateTo")} ${item.end_date} · ${t("ClassSetupPage.weeklyPrefix")}${t(WEEKDAY_SHORT_KEYS[item.weekday])} ${String(item.start_time).slice(0, 5)}` : t("ClassSetupPage.notCreatedYet")} />
+            <SummaryLine done={studentsReady} label={t("ClassSetupPage.summaryLabelStudents")} value={t("ClassSetupPage.studentsCountLabel", { count: item?.students.length ?? 0 })} />
+            <SummaryLine done={environmentReady} label={t("ClassSetupPage.summaryLabelEnvironment")} value={item?.course_environment ? t("ClassSetupPage.envSummaryValue", { name: item.course_environment.name, count: item.nodes.length }) : t("ClassSetupPage.notSelectedYet")} />
+            <SummaryLine done={taskCount > 0} label={t("ClassSetupPage.summaryLabelTasks")} value={t("ClassSetupPage.weeksSetSummary", { done: taskCount, total: weeks.length, visible: visibleCount })} />
+          </div>
+        </section>
+      </div>}
     </main>
 
     {step < 5 && <footer className={styles.footer}><button type="button" className={styles.btnSecondary} disabled={step === 1 || busy} onClick={() => go(step - 1)}>{t("ClassSetupPage.prevStepBtn")}</button><span>{t("ClassSetupPage.stepProgressLabel", { step })}</span>{step === 3 && !templateId ? <em className={styles.footerHint}><MIcon name="info" size={16} />{templates.length === 0 ? t("ClassSetupPage.needCreateTemplateHint") : t("ClassSetupPage.selectTemplateHint")}</em> : <button type="button" className={styles.btnPrimary} disabled={busy} onClick={next}>{busy ? t("ClassSetupPage.savingBtn") : t("ClassSetupPage.saveAndNextBtn")}<MIcon name="arrow_forward" size={16} /></button>}</footer>}

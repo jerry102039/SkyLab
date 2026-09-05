@@ -82,7 +82,6 @@
 .templateChoices p { margin: 4px 0; color: var(--color-text-secondary); font-size: $font-size-12; line-height: 1.4; }
 .templateChoices small { color: var(--color-text-muted); font-size: $font-size-10; }
 
-
 .lockBadge { color: var(--color-pending); background: color-mix(in srgb, var(--color-pending) 12%, transparent); }
 .workspaceTabs { padding-bottom: 8px; border-bottom: 1px solid var(--color-border); }
 .workspaceTabs button.workspaceTabActive { color: var(--color-surface); background: var(--color-text); }
@@ -270,6 +269,7 @@
 .compactFormSection { padding: 20px 22px 22px; }
 .compactFormSection + .compactFormSection { border-top: 1px solid var(--color-border); }
 .compactFormSection h2, .compactFormSection h3 { margin: 0 0 16px; font-size: $font-size-14; font-weight: $font-weight-700; }
+.dialogNote { margin: 0 0 16px; color: var(--color-text-secondary); font-size: $font-size-12; line-height: 1.6; }
 .createFormGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .createNameField { grid-column: span 2; }
 
@@ -322,50 +322,47 @@
 .setupItemDone em { color: var(--color-text-muted); background: var(--color-hover); }
 .setupItemTodo { background: color-mix(in srgb, var(--color-primary) 3%, var(--color-surface)); }
 .setupItemTodo > span, .setupItemTodo em { color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface)); }
-.overviewDetailGrid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 16px; }
+.overviewDetailGrid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 16px; align-items: start; }
+
+/* 概覽只留三塊：現在該做什麼、本週、一行摘要（機器與班級資訊）。 */
+.summaryRow { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 14px 18px; border: 0; color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.summaryRow > span { display: flex; min-width: 0; align-items: center; gap: 9px; overflow: hidden; color: var(--color-text-primary); font-size: $font-size-12; font-weight: $font-weight-500; text-overflow: ellipsis; white-space: nowrap; }
+.summaryRow > span > span:first-child { flex: 0 0 auto; color: var(--color-text-muted); }
+.summaryRow > em { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; color: var(--color-primary); font-size: $font-size-12; font-style: normal; font-weight: $font-weight-500; }
+.summaryRow:hover { background: color-mix(in srgb, var(--color-hover) 45%, transparent); }
+
+/* 班級資訊預設收起：大部分時候不必看，收起時仍露出最常用的課表、地點、開機。 */
+.classInfoFold > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 14px 18px; list-style: none; cursor: pointer; }
+.classInfoFold > summary::-webkit-details-marker { display: none; }
+.classInfoFold > summary:hover { background: color-mix(in srgb, var(--color-hover) 45%, transparent); }
+.classInfoFold > summary > span:first-child { display: flex; min-width: 0; align-items: center; gap: 9px; overflow: hidden; color: var(--color-text-primary); font-size: $font-size-12; font-weight: $font-weight-500; text-overflow: ellipsis; white-space: nowrap; }
+.classInfoFold > summary > span:first-child > span:first-child { flex: 0 0 auto; color: var(--color-text-muted); }
+.classInfoFold > summary > span:last-child { flex: 0 0 auto; color: var(--color-primary); transition: transform $transition-base; }
+.classInfoFold[open] > summary { border-bottom: 1px solid var(--color-border); }
+.classInfoFold[open] > summary > span:last-child { transform: rotate(180deg); }
+
+/* 頁首的 ⋯ 選單：低頻、不可逆的操作收在這裡，不與日常資訊並排。 */
+.headerMenuWrap { position: relative; }
+.headerMenuBtn { width: 36px; height: 36px; border: 1px solid var(--color-border); color: var(--color-text); background: var(--color-surface); box-shadow: var(--shadow-sm); }
+.headerMenuBtn:hover { background: var(--color-hover); }
+.headerMenu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 236px; padding: 6px; border: 1px solid var(--color-border); border-radius: $radius-12; background: var(--color-surface); box-shadow: var(--shadow-lg); }
+.headerMenu button { display: flex; width: 100%; align-items: center; gap: 9px; min-height: 38px; padding: 0 10px; border: 0; border-radius: $radius-8; color: var(--color-text-primary); background: transparent; font: inherit; font-size: $font-size-12; font-weight: $font-weight-500; text-align: left; cursor: pointer; }
+.headerMenu button:hover:not(:disabled) { background: var(--color-hover); }
+.headerMenu button:disabled { opacity: .5; cursor: not-allowed; }
+.headerMenu hr { height: 1px; margin: 5px 8px; border: 0; background: var(--color-divider); }
+.headerMenuRisky { color: var(--color-danger) !important; }
+.headerMenuRisky:hover:not(:disabled) { background: color-mix(in srgb, var(--color-danger) 8%, transparent) !important; }
 .overviewInfoCard { overflow: hidden; @include glass-surface($shadow: var(--shadow-sm)); border-radius: $radius-16; }
 .overviewCardHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 18px; border-bottom: 1px solid var(--color-border); }
 .overviewCardHeader h2 { margin: 0; font-size: $font-size-14; font-weight: $font-weight-700; }
 .overviewCardHeader button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 0; border: 0; color: var(--color-primary); background: transparent; font: inherit; font-size: $font-size-12; font-weight: $font-weight-500; cursor: pointer; }
-.machineAccessCard { grid-column: 1 / -1; }
-.machineAccessTitle { display: flex; min-width: 0; align-items: center; gap: 10px; }
-.machineAccessTitle > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.machineAccessTitle small { color: var(--color-text-muted); font-size: $font-size-10; }
-.machineAccessTitle em { padding: 3px 7px; border-radius: $radius-pill; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface)); font-size: $font-size-10; font-style: normal; font-weight: $font-weight-500; white-space: nowrap; }
-.machineAccessIcon { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: $radius-8; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface)); }
-.machineAccessHeaderActions { display: flex; align-items: center; gap: 12px; }
-.overviewCardHeader button.machineAccessPrimary { min-height: 32px; padding: 0 11px; border-radius: $radius-8; color: var(--color-text-on-primary); background: var(--color-primary); }
-.machineAccessSummary { display: flex; min-height: 46px; align-items: center; gap: 16px; padding: 9px 18px; color: var(--color-text-secondary); font-size: $font-size-12; }
-.machineAccessSummary > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.machineAccessSummary p { margin: 0 0 0 auto; color: var(--color-text-muted); }
-.machineAccessStatus i { width: 7px; height: 7px; border-radius: 50%; background: var(--color-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 12%, transparent); }
-.machineAccessList { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--color-border); }
-.machineAccessList article { display: grid; min-width: 0; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 13px 16px; }
-.machineAccessList article + article { border-left: 1px solid var(--color-divider); }
-.machineAccessList article > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.machineAccessList article strong, .machineAccessList article small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.machineAccessList article strong { font-size: $font-size-12; font-weight: $font-weight-500; }
-.machineAccessList article small { color: var(--color-text-muted); font-size: $font-size-10; }
-.machineAccessMachineIcon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: $radius-8; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface)); }
-.machineRunning { padding: 3px 7px; border-radius: $radius-pill; font-size: $font-size-10; font-weight: $font-weight-500; white-space: nowrap; }
-.machineRunning { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 10%, transparent); }
 
-.machineAccessList article > button { grid-column: 2 / -1; min-height: 28px; border: 1px solid var(--color-border); border-radius: $radius-8; color: var(--color-primary); background: var(--color-surface); font-size: $font-size-10; cursor: pointer; }
-.machineAccessList article > button:hover { background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)); }
 .classFacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .classFacts > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 12px 18px; border-bottom: 1px solid var(--color-divider); }
 .classFacts > div:nth-child(odd) { border-right: 1px solid var(--color-divider); }
 .classFacts > div:nth-last-child(-n + 2) { border-bottom: 0; }
 .classFacts span { color: var(--color-text-muted); font-size: $font-size-10; }
 .classFacts strong { overflow: hidden; font-size: $font-size-12; font-weight: $font-weight-500; text-overflow: ellipsis; white-space: nowrap; }
-.lifecycleCard { grid-column: 1 / -1; }
-.lifecycleBody { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 16px 18px; }
-.lifecycleBody > div:first-child strong { font-size: $font-size-14; }
-.lifecycleBody p { margin: 4px 0 0; color: var(--color-text-muted); font-size: $font-size-12; }
-.lifecycleDate { display: flex; min-width: 230px; flex-direction: column; gap: 6px; color: var(--color-text-muted); font-size: $font-size-12; }
-.lifecycleDate input { min-height: 36px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: $radius-8; color: var(--color-text); background: var(--color-surface); font: inherit; }
-.lifecycleActions { display: flex; align-items: center; gap: 8px; }
-.lifecycleActions .inspectorDanger { margin-top: 0; }
 .currentWeekSummary { display: flex; min-height: 130px; align-items: center; justify-content: space-between; gap: 18px; padding: 18px; }
 .currentWeekSummary > div { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
 .currentWeekSummary > div > span { color: var(--color-primary); font-size: $font-size-12; font-weight: $font-weight-500; }
@@ -468,8 +465,6 @@
 @include respond-below(lg) {
   .workflowTabsBar .workspaceTabs button { flex: 0 0 auto; }
   .overviewDetailGrid { grid-template-columns: 1fr; }
-  .machineAccessList { grid-template-columns: 1fr; }
-  .machineAccessList article + article { border-top: 1px solid var(--color-divider); border-left: 0; }
   .classroomStudentRow { grid-template-columns: minmax(180px, .8fr) 70px minmax(0, 1.5fr); }
   .classroomMachines { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
   .machineWorkspaceHeader { align-items: flex-start; flex-direction: column; }
@@ -491,10 +486,6 @@
   .setupSummary .btnPrimary { grid-column: 1 / -1; width: 100%; }
   .setupChecklist { grid-template-columns: 1fr; }
   .setupChecklist > div + div { border-top: 1px solid var(--color-border); border-left: 0; }
-  .machineAccessCard .overviewCardHeader { align-items: flex-start; flex-direction: column; }
-  .machineAccessHeaderActions { width: 100%; justify-content: space-between; }
-  .machineAccessSummary { align-items: flex-start; flex-direction: column; gap: 7px; }
-  .machineAccessSummary p { margin-left: 0; }
   .persistentFeedback { margin-inline: 18px; }
   .stepTabs { align-self: stretch; }
   .stepTabs button { flex: 1; min-width: 0; }
@@ -528,9 +519,6 @@
   .classFacts { grid-template-columns: 1fr; }
   .classFacts > div, .classFacts > div:nth-child(odd), .classFacts > div:nth-last-child(-n + 2) { border-right: 0; border-bottom: 1px solid var(--color-divider); }
   .classFacts > div:last-child { border-bottom: 0; }
-  .lifecycleBody { align-items: stretch; flex-direction: column; }
-  .lifecycleDate { min-width: 0; }
-  .lifecycleActions { flex-wrap: wrap; }
   .currentWeekSummary { align-items: flex-start; flex-direction: column; }
   .createFormGrid { grid-template-columns: 1fr; }
   .createNameField { grid-column: auto; }
