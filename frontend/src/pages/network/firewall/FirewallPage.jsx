@@ -32,6 +32,7 @@ import { buildFlow, portLabel } from "./utils/buildFlow";
 import { useTheme } from "../../../contexts/ThemeContext";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import useDialogPresence from "../../../hooks/useDialogPresence";
+import { useToast } from "../../../hooks/useToast";
 import styles from "./FirewallPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import PageHeader from "../../../components/PageHeader/PageHeader";
@@ -53,6 +54,7 @@ const toDialogKey = (nodeId) => (nodeId === GATEWAY_KEY ? "internet" : String(no
 export default function FirewallPage() {
   const { t } = useTranslation("network");
   const { theme } = useTheme();
+  const toast = useToast();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [topology,     setTopology]     = useState(null);
@@ -211,7 +213,7 @@ export default function FirewallPage() {
       setDeleteEdge(null);
       fetchTopology();
     } catch (err) {
-      alert(err?.message ?? t("FirewallPage.deleteFailed"));
+      toast.error(err?.message ?? t("FirewallPage.deleteFailed"));
     }
   };
 
