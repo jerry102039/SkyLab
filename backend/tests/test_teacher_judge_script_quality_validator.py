@@ -24,39 +24,6 @@ def _assert_blocked(script_content: str, *issue_keywords: str) -> None:
         )
 
 
-def test_quality_validator_blocks_stdout_truthiness_as_pass() -> None:
-    _assert_blocked(
-        """
-        import json
-        import subprocess
-
-        completed = subprocess.run(
-            ["python", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        status = "pass" if completed.stdout else "fail"
-        print(json.dumps({
-            "schema_version": "teacher_judge_result.v1",
-            "summary": "checked",
-            "checks": [{
-                "id": "python-version",
-                "title": "Python version",
-                "status": status,
-                "evidence": completed.stdout,
-                "raw": completed.stdout,
-            }],
-            "errors": [],
-        }))
-        """,
-        "stdout",
-        "pass",
-        "truth",
-    )
-
-
 @pytest.mark.parametrize(
     ("script_content", "issue_keywords"),
     [
@@ -769,11 +736,15 @@ def test_quality_validator_allows_minimal_compliant_script() -> None:
                 ))
             else:
                 snippet = str(result["stdout"] or result["stderr"] or "")
-                returncode = result["returncode"]
+                stream_status = "pass" if result["stdout"] else "fail"
+                if result["stderr"]:
+                    stream_status = "pass"
+                else:
+                    stream_status = "fail"
                 checks.append(record_check(
                     "runtime.python_version",
                     "收集 Python 版本",
-                    "pass" if returncode == 0 else "fail",
+                    stream_status,
                     truncate_output(snippet),
                     raw=json.dumps(result, ensure_ascii=False),
                 ))

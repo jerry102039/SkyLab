@@ -552,6 +552,61 @@ def test_bounded_history_keeps_latest_messages_in_stable_order() -> None:
     assert history[-1].content == "message-24"
 
 
+def test_session_public_many_matches_single_session_contract() -> None:
+    db = _session()
+    class_id = uuid.uuid4()
+    rubric_file = _file(db, class_id)
+    first = TeacherJudgeSession(
+        teaching_class_id=class_id,
+        title="第一個檢查",
+        selected_file_id=rubric_file.id,
+    )
+    second = TeacherJudgeSession(teaching_class_id=class_id, title="第二個檢查")
+    db.add_all([first, second])
+    db.commit()
+    db.refresh(first)
+    db.refresh(second)
+    db.add_all(
+        [
+            TeacherJudgeSessionMessage(
+                session_id=first.id,
+                role=TeacherJudgeMessageRole.user,
+                content="請檢查",
+            ),
+            TeacherJudgeSessionMessage(
+                session_id=first.id,
+                role=TeacherJudgeMessageRole.assistant,
+                content="已完成",
+            ),
+        ]
+    )
+    db.commit()
+    artifact = TeacherJudgeScriptArtifact(
+        teaching_class_id=class_id,
+        session_id=first.id,
+        name="檢查腳本",
+        template_key="linux",
+        script_content="echo ok",
+    )
+    db.add(artifact)
+    db.commit()
+    db.refresh(artifact)
+    db.add(TeacherJudgeScriptRun(teaching_class_id=class_id, artifact_id=artifact.id))
+    db.commit()
+
+    batch = session_service.session_public_many(db, [first, second])
+    singles = [session_service.session_public(db, item) for item in [first, second]]
+
+    assert [row.model_dump() for row in batch] == [
+        row.model_dump() for row in singles
+    ]
+    assert batch[0].selected_file_name == singles[0].selected_file_name
+    assert batch[0].message_count == 2
+    assert batch[0].script_count == 1
+    assert batch[0].run_count == 1
+    assert batch[1].message_count == 0
+
+
 @pytest.mark.asyncio
 async def test_summary_runs_only_on_tenth_completed_turn(
     monkeypatch: pytest.MonkeyPatch,

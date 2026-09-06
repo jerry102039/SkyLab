@@ -59,10 +59,8 @@ export function shouldDisplayChatMessage(message) {
 export const AiJudgeService = {
   /* ── 持久化檢查 Session ── */
 
-  listSessions(classId, status = "active") {
-    return apiGet(
-      `/api/v1/teaching-classes/${classId}/judge/sessions/?status=${encodeURIComponent(status)}`,
-    );
+  listSessions(classId) {
+    return apiGet(`/api/v1/teaching-classes/${classId}/judge/sessions/`);
   },
 
   createSession(classId, {
@@ -113,13 +111,6 @@ export const AiJudgeService = {
     return apiPost(
       `/api/v1/teaching-classes/${classId}/judge/sessions/${sessionId}/fork`,
       title ? { title } : {},
-    );
-  },
-
-  archiveSession(classId, sessionId) {
-    return apiPost(
-      `/api/v1/teaching-classes/${classId}/judge/sessions/${sessionId}/archive`,
-      {},
     );
   },
 
@@ -320,7 +311,7 @@ export const AiJudgeService = {
     );
   },
 
-  /** 核准腳本（status: reviewed → approved） */
+  /** 相容舊版待老師核准腳本；新流程通過靜態與 AI 檢查後會直接 approved。 */
   approveScript(classId, scriptId) {
     return apiPost(`/api/v1/teaching-classes/${classId}/judge/scripts/${scriptId}/approve`, {});
   },
@@ -328,6 +319,13 @@ export const AiJudgeService = {
   /** 刪除腳本 */
   deleteScript(classId, scriptId) {
     return apiDelete(`/api/v1/teaching-classes/${classId}/judge/scripts/${scriptId}`);
+  },
+
+  /** 重新命名腳本 */
+  renameScript(classId, scriptId, name) {
+    return apiPatch(`/api/v1/teaching-classes/${classId}/judge/scripts/${scriptId}`, {
+      name,
+    });
   },
 
   /* ── 腳本執行 ── */

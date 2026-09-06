@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from functools import lru_cache
 from inspect import signature
 from typing import Any, Literal, cast
 
@@ -34,7 +36,8 @@ from app.ai.teacher_judge.schemas import (
 from app.ai.teacher_judge.script_generation_contract import (
     RESULT_SCHEMA_VERSION,
     SCRIPT_GENERATION_CONTRACT_PROMPT,
-    SCRIPT_GENERATION_MAX_ATTEMPTS,
+    SCRIPT_GENERATION_MAX_RETRIES,
+    SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES,
 )
 from app.ai.teacher_judge.script_policy import check_script_policy
 from app.ai.teacher_judge.script_quality_validator import check_script_quality
@@ -172,7 +175,7 @@ AI_REVIEWER_SYSTEM_PROMPT = """
 
 ## 安全審查
 若腳本可能刪除、修改、修復、安裝、重啟或對外傳資料，approved 必須是 false。讀取檔案與原樣回傳受控命令的 stdout/stderr 本身不是拒絕理由。
-若腳本使用 `python.run_entrypoint`，只有在 rubric 已提供明確 cwd、argv、timeout 與成功條件，且程式只收集 exit code/stdout/stderr、沒有安裝或修復動作時才可核准；risk_level 至少為 medium，後續仍需老師核准腳本與執行。
+若腳本使用 `python.run_entrypoint`，只有在 rubric 已提供明確 cwd、argv、timeout 與成功條件，且程式只收集 exit code/stdout/stderr、沒有安裝或修復動作時才可核准；risk_level 至少為 medium。只有靜態政策與本 AI reviewer 都核准時，腳本才會進入可執行狀態。
 若腳本使用 `system.run_command`，確認它採 argv list、cwd、有限 timeout、無 shell/pipe/redirect，且只做唯讀／診斷操作；stdout/stderr 不需遮蔽。
 
 ## 錯誤記錄完整性
@@ -362,7 +365,7 @@ def _resolve_status(
     ai_review: AIReviewResult,
 ) -> TeacherJudgeScriptStatus:
     if policy_check.get("approved") is True and ai_review.get("approved") is True:
-        return TeacherJudgeScriptStatus.reviewed
+        return TeacherJudgeScriptStatus.approved
     return TeacherJudgeScriptStatus.review_failed
 
 
@@ -424,6 +427,97 @@ def _gate_attempt_record(
         else [],
         "fix_hints": fix_hints,
     }
+
+
+@lru_cache(maxsize=2048)
+def _cached_hint_fingerprint(hint_key: str) -> str:
+    """Cache stable sha256 fingerprints for retry signatures.
+
+    Pure memoization: same input string yields the same 16-hex digest as the
+    inline hashlib call it replaces. Bounded LRU, no retry-semantics change.
+    """
+    return hashlib.sha256(hint_key.encode("utf-8")).hexdigest()[:16]
+
+
+@lru_cache(maxsize=2048)
+def _cached_issue_fingerprint(normalized_issue: str) -> str:
+    """Cache stable sha256 fingerprints for retry signatures (see above)."""
+    return hashlib.sha256(normalized_issue.encode("utf-8")).hexdigest()[:16]
+
+
+def _failure_signature(
+    *,
+    phase: str,
+    issues: list[str],
+    fix_hints: list[FixHint],
+) -> str:
+    """Build a stable, non-sensitive key for the repeated-error guard."""
+    hint_parts = [
+        _cached_hint_fingerprint(
+            ":".join(
+                str(hint.get(key) or "")
+                for key in ("type", "target", "field", "function", "command")
+            )
+        )
+        for hint in fix_hints
+    ]
+    issue_parts = [
+        _cached_issue_fingerprint(" ".join(str(issue).split()).lower())
+        for issue in issues
+    ]
+    parts = [
+        part
+        for part in (
+            *(f"hint:{fingerprint}" for fingerprint in hint_parts),
+            *(f"issue:{fingerprint}" for fingerprint in issue_parts),
+        )
+        if part.strip(":")
+    ]
+    if not parts:
+        parts = ["unclassified"]
+    return f"{phase}:{'|'.join(dict.fromkeys(parts))[:300]}"
+
+
+def _retry_summary(
+    *,
+    retry_count: int,
+    failure_counts: dict[str, int],
+    stop_reason: str,
+) -> dict[str, object]:
+    return {
+        "retry_count": retry_count,
+        "max_retries": SCRIPT_GENERATION_MAX_RETRIES,
+        "same_failure_retry_limit": SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES,
+        "stop_reason": stop_reason,
+        "failure_counts": dict(failure_counts),
+    }
+
+
+def _feedback_snapshot(
+    *,
+    rubric_snapshot: dict[str, Any],
+    attempt: int,
+    gate_result: GateResult,
+    ai_review: AIReviewResult | None = None,
+) -> dict[str, Any]:
+    feedback: dict[str, Any] = {
+        "attempt": attempt,
+        "policy_approved": gate_result.get("safety_approved"),
+        "policy_issues": gate_result.get("safety_issues", []),
+        "quality_approved": gate_result.get("quality_approved"),
+        "quality_issues": gate_result.get("quality_issues", []),
+    }
+    if ai_review is not None:
+        feedback.update(
+            {
+                "ai_review_approved": ai_review.get("approved"),
+                "ai_review_issues": ai_review.get("issues", []),
+                "ai_review_suggested_fix": ai_review.get("suggested_fix"),
+            }
+        )
+    next_snapshot = dict(rubric_snapshot)
+    next_snapshot["previous_review_feedback"] = feedback
+    return next_snapshot
 
 
 def _repair_instructions(fix_hints: list[FixHint]) -> list[dict[str, object]]:
@@ -744,8 +838,10 @@ async def build_reviewed_script(
 ):
     attempt_snapshot = dict(rubric_snapshot)
     usage_records: list[ScriptUsageRecord] = []
+    attempt_records: list[dict[str, object]] = []
+    failure_counts: dict[str, int] = {}
+    retry_count = 0
 
-    # Phase 1: initial generation
     script_content, metrics = _script_result(
         await generate_script_content(
             rubric_snapshot=attempt_snapshot,
@@ -758,72 +854,104 @@ async def build_reviewed_script(
             "metrics": metrics,
         }
     )
-    attempt_records: list[dict[str, object]] = []
 
-    # Phase 2: fix loop (policy + quality only, no AI reviewer yet)
-    for attempt in range(1, SCRIPT_GENERATION_MAX_ATTEMPTS + 1):
+    gate_result: GateResult = {
+        "approved": False,
+        "blocked": True,
+        "risk_level": "high",
+        "issues": [],
+        "safety_approved": False,
+        "safety_issues": [],
+        "quality_approved": False,
+        "quality_issues": [],
+    }
+    last_ai_review: AIReviewResult = {
+        "approved": False,
+        "risk_level": "high",
+        "issues": [],
+        "suggested_fix": None,
+    }
+    stop_reason = "unrecoverable_error"
+
+    while True:
         safety_check = check_script_policy(script_content)
         quality_check = check_script_quality(script_content)
         gate_result = _merge_gate_results(safety_check, quality_check)
 
-        if gate_result["approved"]:
-            break
-
-        fix_hints = safety_check.get("fix_hints", []) + quality_check.get(
-            "fix_hints", []
-        )
-        attempt_record = _gate_attempt_record(
-            attempt=attempt,
-            safety_check=safety_check,
-            quality_check=quality_check,
-            fix_hints=fix_hints,
-        )
-        attempt_records.append(attempt_record)
-        logger.warning(
-            "Teacher Judge script gate failed on attempt %s/%s: safety_issues=%s quality_issues=%s fix_hints=%s",
-            attempt,
-            SCRIPT_GENERATION_MAX_ATTEMPTS,
-            attempt_record["safety_issues"],
-            attempt_record["quality_issues"],
-            _fix_hint_log_summary(fix_hints),
-        )
-
-        if attempt >= SCRIPT_GENERATION_MAX_ATTEMPTS:
-            gate_result["review_attempts"] = attempt_records
-            last_ai_review, metrics = _review_result(
-                await review_script_with_ai(
-                    script_content=script_content,
-                    rubric_snapshot=attempt_snapshot,
-                )
+        if not gate_result["approved"]:
+            fix_hints = safety_check.get("fix_hints", []) + quality_check.get(
+                "fix_hints", []
             )
-            usage_records.append(
+            signature = _failure_signature(
+                phase="static",
+                issues=gate_result["issues"],
+                fix_hints=fix_hints,
+            )
+            failure_counts[signature] = failure_counts.get(signature, 0) + 1
+            attempt_record = _gate_attempt_record(
+                attempt=len(attempt_records) + 1,
+                safety_check=safety_check,
+                quality_check=quality_check,
+                fix_hints=fix_hints,
+            )
+            attempt_record.update(
                 {
-                    "call_type": CALL_TJ_SCRIPT_REVIEW,
-                    "metrics": metrics,
+                    "phase": "static",
+                    "failure_signature": signature,
+                    "retry_count": retry_count,
+                    "same_failure_count": failure_counts[signature],
                 }
             )
-            status = _resolve_status(gate_result, last_ai_review)
-            result = (script_content, gate_result, last_ai_review, status)
-            if include_usage:
-                return (*result, usage_records)
-            return result
-
-        if not fix_hints:
-            # no structured hints available — fallback to full re-generate
-            attempt_snapshot = dict(rubric_snapshot)
-            attempt_snapshot["previous_review_feedback"] = {
-                "attempt": attempt,
-                "policy_approved": gate_result.get("safety_approved"),
-                "policy_issues": gate_result.get("safety_issues", []),
-                "quality_approved": gate_result.get("quality_approved"),
-                "quality_issues": gate_result.get("quality_issues", []),
-            }
-            script_content, metrics = _script_result(
-                await generate_script_content(
-                    rubric_snapshot=attempt_snapshot,
-                    template_key=template_key,
-                )
+            attempt_records.append(attempt_record)
+            logger.warning(
+                "Teacher Judge script gate failed retry=%s/%s same_failure=%s/%s signature=%s hints=%s",
+                retry_count,
+                SCRIPT_GENERATION_MAX_RETRIES,
+                failure_counts[signature],
+                SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES,
+                signature,
+                _fix_hint_log_summary(fix_hints),
             )
+
+            if failure_counts[signature] > SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES:
+                stop_reason = "same_failure_limit"
+                break
+            if retry_count >= SCRIPT_GENERATION_MAX_RETRIES:
+                stop_reason = "total_retry_limit"
+                break
+
+            retry_count += 1
+            attempt_snapshot = _feedback_snapshot(
+                rubric_snapshot=rubric_snapshot,
+                attempt=len(attempt_records),
+                gate_result=gate_result,
+            )
+            if fix_hints:
+                try:
+                    script_content, metrics = _script_result(
+                        await fix_script_content(
+                            script_content=script_content,
+                            fix_hints=fix_hints,
+                        )
+                    )
+                except HTTPException as exc:
+                    logger.warning(
+                        "Teacher Judge script patch failed; falling back to regenerate: %s",
+                        exc.detail,
+                    )
+                    script_content, metrics = _script_result(
+                        await generate_script_content(
+                            rubric_snapshot=attempt_snapshot,
+                            template_key=template_key,
+                        )
+                    )
+            else:
+                script_content, metrics = _script_result(
+                    await generate_script_content(
+                        rubric_snapshot=attempt_snapshot,
+                        template_key=template_key,
+                    )
+                )
             usage_records.append(
                 {
                     "call_type": CALL_TJ_SCRIPT_GENERATION,
@@ -832,67 +960,22 @@ async def build_reviewed_script(
             )
             continue
 
-        # incremental fix via LLM
-        try:
-            script_content, metrics = _script_result(
-                await fix_script_content(
-                    script_content=script_content,
-                    fix_hints=fix_hints,
-                )
+        last_ai_review, metrics = _review_result(
+            await review_script_with_ai(
+                script_content=script_content,
+                rubric_snapshot=attempt_snapshot,
             )
-            usage_records.append(
-                {
-                    "call_type": CALL_TJ_SCRIPT_GENERATION,
-                    "metrics": metrics,
-                }
-            )
-        except HTTPException as exc:
-            logger.warning(
-                "Teacher Judge script patch failed; falling back to regenerate: %s",
-                exc.detail,
-            )
-            # fix failed — fallback to full re-generate
-            attempt_snapshot = dict(rubric_snapshot)
-            attempt_snapshot["previous_review_feedback"] = {
-                "attempt": attempt,
-                "policy_approved": gate_result.get("safety_approved"),
-                "policy_issues": gate_result.get("safety_issues", []),
-                "quality_approved": gate_result.get("quality_approved"),
-                "quality_issues": gate_result.get("quality_issues", []),
-            }
-            script_content, metrics = _script_result(
-                await generate_script_content(
-                    rubric_snapshot=attempt_snapshot,
-                    template_key=template_key,
-                )
-            )
-            usage_records.append(
-                {
-                    "call_type": CALL_TJ_SCRIPT_GENERATION,
-                    "metrics": metrics,
-                }
-            )
-
-    # Phase 3: final AI reviewer (only once)
-    final_safety = check_script_policy(script_content)
-    final_quality = check_script_quality(script_content)
-    final_gate = _merge_gate_results(final_safety, final_quality)
-    final_gate["review_attempts"] = attempt_records
-    last_ai_review, metrics = _review_result(
-        await review_script_with_ai(
-            script_content=script_content,
-            rubric_snapshot=rubric_snapshot,
         )
-    )
-    usage_records.append(
-        {
-            "call_type": CALL_TJ_SCRIPT_REVIEW,
-            "metrics": metrics,
-        }
-    )
+        usage_records.append(
+            {
+                "call_type": CALL_TJ_SCRIPT_REVIEW,
+                "metrics": metrics,
+            }
+        )
+        if last_ai_review.get("approved") is True:
+            stop_reason = "passed"
+            break
 
-    # if AI reviewer failed, try one fix with AI feedback
-    if last_ai_review.get("approved") is not True and last_ai_review.get("issues"):
         ai_fix_hints: list[FixHint] = [
             cast(
                 "FixHint",
@@ -903,6 +986,47 @@ async def build_reviewed_script(
                 },
             )
         ]
+        signature = _failure_signature(
+            phase="ai_review",
+            issues=last_ai_review.get("issues", []),
+            fix_hints=ai_fix_hints,
+        )
+        failure_counts[signature] = failure_counts.get(signature, 0) + 1
+        attempt_records.append(
+            {
+                "attempt": len(attempt_records) + 1,
+                "phase": "ai_review",
+                "failure_signature": signature,
+                "retry_count": retry_count,
+                "same_failure_count": failure_counts[signature],
+                "safety_approved": gate_result["safety_approved"],
+                "safety_issues": gate_result["safety_issues"],
+                "quality_approved": gate_result["quality_approved"],
+                "quality_issues": gate_result["quality_issues"],
+                "ai_review_issues": last_ai_review.get("issues", []),
+                "ai_review_suggested_fix": last_ai_review.get("suggested_fix"),
+                "fix_hints": ai_fix_hints,
+            }
+        )
+        if not last_ai_review.get("issues") and not last_ai_review.get(
+            "suggested_fix"
+        ):
+            stop_reason = "unrecoverable_error"
+            break
+        if failure_counts[signature] > SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES:
+            stop_reason = "same_failure_limit"
+            break
+        if retry_count >= SCRIPT_GENERATION_MAX_RETRIES:
+            stop_reason = "total_retry_limit"
+            break
+
+        retry_count += 1
+        attempt_snapshot = _feedback_snapshot(
+            rubric_snapshot=rubric_snapshot,
+            attempt=len(attempt_records),
+            gate_result=gate_result,
+            ai_review=last_ai_review,
+        )
         try:
             script_content, metrics = _script_result(
                 await fix_script_content(
@@ -910,35 +1034,32 @@ async def build_reviewed_script(
                     fix_hints=ai_fix_hints,
                 )
             )
-            usage_records.append(
-                {
-                    "call_type": CALL_TJ_SCRIPT_GENERATION,
-                    "metrics": metrics,
-                }
+        except HTTPException as exc:
+            logger.warning(
+                "Teacher Judge AI feedback patch failed; falling back to regenerate: %s",
+                exc.detail,
             )
-            final_safety = check_script_policy(script_content)
-            final_quality = check_script_quality(script_content)
-            final_gate = _merge_gate_results(final_safety, final_quality)
-            final_gate["review_attempts"] = attempt_records
-            if final_gate["approved"]:
-                last_ai_review, metrics = _review_result(
-                    await review_script_with_ai(
-                        script_content=script_content,
-                        rubric_snapshot=rubric_snapshot,
-                    )
+            script_content, metrics = _script_result(
+                await generate_script_content(
+                    rubric_snapshot=attempt_snapshot,
+                    template_key=template_key,
                 )
-                usage_records.append(
-                    {
-                        "call_type": CALL_TJ_SCRIPT_REVIEW,
-                        "metrics": metrics,
-                    }
-                )
-        except HTTPException:
-            # 用量記錄失敗不影響審查主流程
-            pass
+            )
+        usage_records.append(
+            {
+                "call_type": CALL_TJ_SCRIPT_GENERATION,
+                "metrics": metrics,
+            }
+        )
 
-    status = _resolve_status(final_gate, last_ai_review)
-    result = (script_content, final_gate, last_ai_review, status)
+    gate_result["review_attempts"] = attempt_records
+    gate_result["retry_summary"] = _retry_summary(
+        retry_count=retry_count,
+        failure_counts=failure_counts,
+        stop_reason=stop_reason,
+    )
+    status = _resolve_status(gate_result, last_ai_review)
+    result = (script_content, gate_result, last_ai_review, status)
     if include_usage:
         return (*result, usage_records)
     return result
@@ -1062,8 +1183,15 @@ async def create_artifact(
             session, template_key, include_cross_template=True
         )
 
+    # Single model_dump reused for both the artifact rubric snapshot and the
+    # source file analysis_json (previously dumped twice with equal content).
+    # The snapshot takes a shallow top-level copy plus template_key, so
+    # analysis_json never gains template_key. Nested items are shared
+    # read-only: downstream only shallow-copies the top level and serializes
+    # each dict to its own JSON column on commit (no in-place nested mutation).
+    analysis_dump = rubric_analysis.model_dump(mode="json")
     rubric_snapshot = _with_template_command_catalog(
-        _rubric_snapshot(rubric_analysis, template_key),
+        {**analysis_dump, "template_key": template_key},
         template_commands,
     )
     source_file, source_file_snapshot_json = source_file_snapshot(
@@ -1072,7 +1200,7 @@ async def create_artifact(
         file_id=source_file_id,
     )
     if source_file is not None:
-        source_file.analysis_json = rubric_analysis.model_dump(mode="json")
+        source_file.analysis_json = analysis_dump
         source_file.updated_at = _now()
         session.add(source_file)
     (
@@ -1085,6 +1213,15 @@ async def create_artifact(
         rubric_snapshot=rubric_snapshot,
         template_key=template_key,
     )
+    if (
+        status == TeacherJudgeScriptStatus.reviewed
+        and policy_check.get("approved") is True
+        and ai_review.get("approved") is True
+    ):
+        # Compatibility for older test doubles/callers: a fully passed new
+        # workflow is system-approved even if the legacy helper name/status is
+        # still returned.
+        status = TeacherJudgeScriptStatus.approved
 
     artifact = TeacherJudgeScriptArtifact(
         teaching_class_id=teaching_class_id,
@@ -1102,6 +1239,7 @@ async def create_artifact(
         policy_check_result_json=cast("dict[str, Any]", policy_check),
         ai_review_result_json=cast("dict[str, Any]", ai_review),
         created_by=created_by,
+        approved_at=_now() if status == TeacherJudgeScriptStatus.approved else None,
         updated_at=_now(),
     )
     session.add(artifact)
@@ -1140,10 +1278,16 @@ async def regenerate_artifact(
             session, template_key, include_cross_template=True
         )
 
+    # Reuse a single model_dump for snapshot + source analysis_json when a fresh
+    # analysis is provided (same sharing rationale as create_artifact above).
+    analysis_dump: dict[str, Any] | None = None
+    if rubric_analysis is not None:
+        analysis_dump = rubric_analysis.model_dump(mode="json")
+        rubric_base: dict[str, Any] = {**analysis_dump, "template_key": template_key}
+    else:
+        rubric_base = artifact.rubric_snapshot_json
     rubric_snapshot = _with_template_command_catalog(
-        _rubric_snapshot(rubric_analysis, template_key)
-        if rubric_analysis is not None
-        else artifact.rubric_snapshot_json,
+        rubric_base,
         template_commands,
     )
     source_file_id = artifact.source_file_id
@@ -1155,7 +1299,7 @@ async def regenerate_artifact(
             file_id=source_file_id,
         )
         if source_file is not None:
-            source_file.analysis_json = rubric_analysis.model_dump(mode="json")
+            source_file.analysis_json = cast("dict[str, Any]", analysis_dump)
             source_file.updated_at = _now()
             session.add(source_file)
     generation_snapshot = dict(rubric_snapshot)
@@ -1172,11 +1316,18 @@ async def regenerate_artifact(
         rubric_snapshot=generation_snapshot,
         template_key=template_key,
     )
+    if (
+        status == TeacherJudgeScriptStatus.reviewed
+        and policy_check.get("approved") is True
+        and ai_review.get("approved") is True
+    ):
+        status = TeacherJudgeScriptStatus.approved
 
     if artifact.status == TeacherJudgeScriptStatus.approved:
         next_version = _next_artifact_version(session=session, artifact=artifact)
         next_artifact = TeacherJudgeScriptArtifact(
             teaching_class_id=teaching_class_id,
+            session_id=artifact.session_id,
             name=artifact.name,
             template_key=template_key,
             rubric_snapshot_json=rubric_snapshot,
@@ -1190,6 +1341,7 @@ async def regenerate_artifact(
             policy_check_result_json=cast("dict[str, Any]", policy_check),
             ai_review_result_json=cast("dict[str, Any]", ai_review),
             created_by=created_by,
+            approved_at=_now() if status == TeacherJudgeScriptStatus.approved else None,
             updated_at=_now(),
         )
         session.add(next_artifact)
@@ -1210,6 +1362,10 @@ async def regenerate_artifact(
     artifact.status = status
     artifact.policy_check_result_json = cast("dict[str, Any]", policy_check)
     artifact.ai_review_result_json = cast("dict[str, Any]", ai_review)
+    artifact.approved_by = None
+    artifact.approved_at = (
+        _now() if status == TeacherJudgeScriptStatus.approved else None
+    )
     artifact.updated_at = _now()
     session.add(artifact)
     session.commit()
@@ -1266,6 +1422,31 @@ def archive_artifact(
         artifact_id=artifact_id,
     )
     artifact.status = TeacherJudgeScriptStatus.archived
+    artifact.updated_at = _now()
+    session.add(artifact)
+    session.commit()
+    session.refresh(artifact)
+    return _artifact_to_public(artifact)
+
+
+def rename_artifact(
+    *,
+    session: Session,
+    teaching_class_id: uuid.UUID,
+    artifact_id: uuid.UUID,
+    name: str,
+) -> TeacherJudgeScriptArtifactPublic:
+    artifact = get_artifact(
+        session=session,
+        teaching_class_id=teaching_class_id,
+        artifact_id=artifact_id,
+    )
+    new_name = name.strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail=t("artifact.name_blank"))
+    if len(new_name) > 255:
+        raise HTTPException(status_code=400, detail=t("artifact.name_blank"))
+    artifact.name = new_name
     artifact.updated_at = _now()
     session.add(artifact)
     session.commit()

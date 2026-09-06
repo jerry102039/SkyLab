@@ -6,7 +6,7 @@ import json
 import uuid
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
-from sqlalchemy import case
+from sqlalchemy import case, func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, desc, select
 
@@ -47,12 +47,13 @@ from app.ai.teacher_judge.session_service import (
     fork_session_data,
     get_session,
     maybe_summarize,
-    message_attachments,
+    message_attachments_by_message_ids,
     message_public,
     redact_message_content,
     require_selected_file,
     selected_file_for_chat,
     session_public,
+    session_public_many,
     validate_selected_file,
 )
 from app.ai.teacher_judge.template_command_service import get_enabled_template_commands
@@ -144,7 +145,7 @@ def list_sessions(
         .offset(skip)
         .limit(limit)
     ).all()
-    return [session_public(session, row) for row in rows]
+    return session_public_many(session, list(rows))
 
 
 @router.post("/", response_model=TeacherJudgeSessionPublic)
@@ -320,14 +321,14 @@ async def upload_session_attachment(
     _access(session, teaching_class_id, current_user)
     item = get_session(session, teaching_class_id, session_id)
     ensure_active(item)
-    pending_count = len(
-        session.exec(
-            select(TeacherJudgeSessionAttachment).where(
-                TeacherJudgeSessionAttachment.session_id == item.id,
-                TeacherJudgeSessionAttachment.message_id.is_(None),
-            )
-        ).all()
-    )
+    pending_count = session.exec(
+        select(func.count())
+        .select_from(TeacherJudgeSessionAttachment)
+        .where(
+            TeacherJudgeSessionAttachment.session_id == item.id,
+            col(TeacherJudgeSessionAttachment.message_id).is_(None),
+        )
+    ).one()
     if pending_count >= MAX_ATTACHMENT_COUNT:
         raise HTTPException(
             status_code=400,
@@ -405,7 +406,13 @@ def list_messages(
         )
     )
     rows.reverse()
-    return [message_public(row, message_attachments(session, row.id)) for row in rows]
+    attachments_by_message_id = message_attachments_by_message_ids(
+        session, [row.id for row in rows]
+    )
+    return [
+        message_public(row, attachments_by_message_id.get(row.id, []))
+        for row in rows
+    ]
 
 
 @router.delete(
@@ -468,6 +475,11 @@ async def create_message(
     session.commit()
     session.refresh(user_message)
     try:
+        template_commands = get_enabled_template_commands(
+            session,
+            file.template_key if file else "linux",
+            include_cross_template=True,
+        )
         reply, proposal, metrics = await chat_with_rubric(
             bounded_history(
                 session,
@@ -477,11 +489,7 @@ async def create_message(
             json.dumps(file.analysis_json, ensure_ascii=False) if file else "{}",
             is_refine=payload.is_refine,
             template_key=file.template_key if file else "linux",
-            template_commands=get_enabled_template_commands(
-                session,
-                file.template_key if file else "linux",
-                include_cross_template=True,
-            ),
+            template_commands=template_commands,
             environment_keys=file.environment_keys if file else None,
             attachment_context=attachment_context(attachments),
         )
@@ -522,7 +530,7 @@ async def create_message(
     session.add_all([assistant, item])
     session.commit()
     session.refresh(assistant)
-    await maybe_summarize(session, item, file)
+    await maybe_summarize(session, item, file, template_commands=template_commands)
     return TeacherJudgeSessionChatResponse(
         user_message=message_public(user_message, attachments),
         assistant_message=message_public(assistant),

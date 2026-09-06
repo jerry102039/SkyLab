@@ -5,12 +5,17 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlmodel import Session, desc, func, select
+from sqlmodel import Session, col, desc, func, select
 
-from app.ai.teacher_judge.attachment_service import attachment_public, storage_path
+from app.ai.teacher_judge.attachment_service import (
+    attachment_context,
+    attachment_public,
+    storage_path,
+)
 from app.ai.teacher_judge.file_service import (
     FileDeleteStage,
     _stored_path,
@@ -39,6 +44,7 @@ from app.models.teacher_judge_session import (
     TeacherJudgeSessionMessage,
     TeacherJudgeSessionStatus,
 )
+from app.models.teacher_judge_template_command import TeacherJudgeTemplateCommand
 
 HISTORY_MESSAGE_LIMIT = 20
 HISTORY_CHARACTER_LIMIT = 24000
@@ -267,28 +273,14 @@ def validate_selected_file(
         )
 
 
-def session_public(db: Session, item: TeacherJudgeSession) -> TeacherJudgeSessionPublic:
-    file = (
-        db.get(TeacherJudgeFile, item.selected_file_id)
-        if item.selected_file_id
-        else None
-    )
-    message_count = db.exec(
-        select(func.count())
-        .select_from(TeacherJudgeSessionMessage)
-        .where(TeacherJudgeSessionMessage.session_id == item.id)
-    ).one()
-    script_count = db.exec(
-        select(func.count())
-        .select_from(TeacherJudgeScriptArtifact)
-        .where(TeacherJudgeScriptArtifact.session_id == item.id)
-    ).one()
-    run_count = db.exec(
-        select(func.count())
-        .select_from(TeacherJudgeScriptRun)
-        .join(TeacherJudgeScriptArtifact)
-        .where(TeacherJudgeScriptArtifact.session_id == item.id)
-    ).one()
+def _session_public(
+    item: TeacherJudgeSession,
+    *,
+    file: TeacherJudgeFile | None,
+    message_count: int,
+    script_count: int,
+    run_count: int,
+) -> TeacherJudgeSessionPublic:
     return TeacherJudgeSessionPublic(
         id=str(item.id),
         teaching_class_id=str(item.teaching_class_id),
@@ -316,6 +308,106 @@ def session_public(db: Session, item: TeacherJudgeSession) -> TeacherJudgeSessio
         last_activity_at=item.last_activity_at.isoformat(),
         pinned_at=item.pinned_at.isoformat() if item.pinned_at else None,
     )
+
+
+def session_public(db: Session, item: TeacherJudgeSession) -> TeacherJudgeSessionPublic:
+    """Build one public session without changing the existing response contract."""
+    file = (
+        db.get(TeacherJudgeFile, item.selected_file_id)
+        if item.selected_file_id
+        else None
+    )
+    message_count = db.exec(
+        select(func.count())
+        .select_from(TeacherJudgeSessionMessage)
+        .where(TeacherJudgeSessionMessage.session_id == item.id)
+    ).one()
+    script_count = db.exec(
+        select(func.count())
+        .select_from(TeacherJudgeScriptArtifact)
+        .where(TeacherJudgeScriptArtifact.session_id == item.id)
+    ).one()
+    run_count = db.exec(
+        select(func.count())
+        .select_from(TeacherJudgeScriptRun)
+        .join(TeacherJudgeScriptArtifact)
+        .where(TeacherJudgeScriptArtifact.session_id == item.id)
+    ).one()
+    return _session_public(
+        item,
+        file=file,
+        message_count=message_count,
+        script_count=script_count,
+        run_count=run_count,
+    )
+
+
+def session_public_many(
+    db: Session, items: Sequence[TeacherJudgeSession]
+) -> list[TeacherJudgeSessionPublic]:
+    """Build list responses with batched file and count lookups."""
+    if not items:
+        return []
+    session_ids = list(dict.fromkeys(item.id for item in items))
+    file_ids = list(
+        dict.fromkeys(
+            item.selected_file_id for item in items if item.selected_file_id is not None
+        )
+    )
+    files_by_id = {
+        row.id: row
+        for row in (
+            db.exec(
+                select(TeacherJudgeFile).where(col(TeacherJudgeFile.id).in_(file_ids))
+            ).all()
+            if file_ids
+            else []
+        )
+    }
+    message_counts = dict(
+        db.exec(
+            select(col(TeacherJudgeSessionMessage.session_id), func.count())
+            .where(col(TeacherJudgeSessionMessage.session_id).in_(session_ids))
+            .group_by(col(TeacherJudgeSessionMessage.session_id))
+        ).all()
+    )
+    script_counts = dict(
+        db.exec(
+            select(col(TeacherJudgeScriptArtifact.session_id), func.count())
+            .where(col(TeacherJudgeScriptArtifact.session_id).in_(session_ids))
+            .group_by(col(TeacherJudgeScriptArtifact.session_id))
+        ).all()
+    )
+    run_counts = dict(
+        db.exec(
+            select(
+                col(TeacherJudgeScriptArtifact.session_id),
+                func.count(col(TeacherJudgeScriptRun.id)),
+            )
+            .select_from(TeacherJudgeScriptRun)
+            .join(
+                TeacherJudgeScriptArtifact,
+                col(TeacherJudgeScriptRun.artifact_id)
+                == col(TeacherJudgeScriptArtifact.id),
+            )
+            .where(col(TeacherJudgeScriptArtifact.session_id).in_(session_ids))
+            .group_by(col(TeacherJudgeScriptArtifact.session_id))
+        ).all()
+    )
+    return [
+        _session_public(
+            item,
+            file=(
+                files_by_id.get(item.selected_file_id)
+                if item.selected_file_id is not None
+                else None
+            ),
+            message_count=message_counts.get(item.id, 0),
+            script_count=script_counts.get(item.id, 0),
+            run_count=run_counts.get(item.id, 0),
+        )
+        for item in items
+    ]
 
 
 def _fork_title(db: Session, class_id: uuid.UUID, title: str) -> str:
@@ -390,9 +482,36 @@ def message_attachments(
         db.exec(
             select(TeacherJudgeSessionAttachment)
             .where(TeacherJudgeSessionAttachment.message_id == message_id)
-            .order_by(TeacherJudgeSessionAttachment.created_at)
+            .order_by(
+                col(TeacherJudgeSessionAttachment.created_at),
+                col(TeacherJudgeSessionAttachment.id),
+            )
         )
     )
+
+
+def message_attachments_by_message_ids(
+    db: Session, message_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[TeacherJudgeSessionAttachment]]:
+    """Load message attachments in one query for list/history responses."""
+    unique_ids = list(dict.fromkeys(message_ids))
+    if not unique_ids:
+        return {}
+    rows = list(
+        db.exec(
+            select(TeacherJudgeSessionAttachment)
+            .where(col(TeacherJudgeSessionAttachment.message_id).in_(unique_ids))
+            .order_by(
+                col(TeacherJudgeSessionAttachment.created_at),
+                col(TeacherJudgeSessionAttachment.id),
+            )
+        )
+    )
+    grouped: dict[uuid.UUID, list[TeacherJudgeSessionAttachment]] = {}
+    for row in rows:
+        if row.message_id is not None:
+            grouped.setdefault(row.message_id, []).append(row)
+    return grouped
 
 
 def message_public(
@@ -417,15 +536,16 @@ def _message_context(
     row: TeacherJudgeSessionMessage,
     *,
     include_attachments: bool = True,
+    attachments: list[TeacherJudgeSessionAttachment] | None = None,
 ) -> str:
     if not include_attachments:
         return row.content
-    attachments = message_attachments(db, row.id)
-    if not attachments:
+    attachment_rows = (
+        attachments if attachments is not None else message_attachments(db, row.id)
+    )
+    if not attachment_rows:
         return row.content
-    from app.ai.teacher_judge.attachment_service import attachment_context
-
-    return f"{row.content}\n\n{attachment_context(attachments)}"
+    return f"{row.content}\n\n{attachment_context(attachment_rows)}"
 
 
 def bounded_history(
@@ -450,14 +570,24 @@ def bounded_history(
         )
     )
     rows.reverse()
+    attachments_by_message_id = message_attachments_by_message_ids(
+        db, [row.id for row in rows]
+    )
+    # Build each message's full content at most once. The trim pass and the
+    # response pass previously rebuilt the same attachment context strings,
+    # doubling join/slice work for every kept message.
+    content_by_id: dict[uuid.UUID, str] = {}
     kept: list[TeacherJudgeSessionMessage] = []
     size = 0
     for row in reversed(rows):
-        content = _message_context(
-            db,
-            row,
-            include_attachments=row.id != exclude_attachments_for_message_id,
-        )
+        if row.id not in content_by_id:
+            content_by_id[row.id] = _message_context(
+                db,
+                row,
+                include_attachments=row.id != exclude_attachments_for_message_id,
+                attachments=attachments_by_message_id.get(row.id, []),
+            )
+        content = content_by_id[row.id]
         if kept and size + len(content) > HISTORY_CHARACTER_LIMIT:
             break
         kept.append(row)
@@ -465,18 +595,18 @@ def bounded_history(
     return [
         TeacherJudgeRubricChatMessage(
             role=row.role.value,
-            content=_message_context(
-                db,
-                row,
-                include_attachments=row.id != exclude_attachments_for_message_id,
-            ),
+            content=content_by_id[row.id],
         )
         for row in reversed(kept)
     ]
 
 
 async def maybe_summarize(
-    db: Session, item: TeacherJudgeSession, file: TeacherJudgeFile | None
+    db: Session,
+    item: TeacherJudgeSession,
+    file: TeacherJudgeFile | None,
+    *,
+    template_commands: list[TeacherJudgeTemplateCommand] | None = None,
 ) -> None:
     assistant_count = db.exec(
         select(func.count())
@@ -501,14 +631,21 @@ async def maybe_summarize(
     try:
         rubric_context = json.dumps(file.analysis_json, ensure_ascii=False) if file else "{}"
         template_key = file.template_key if file else "linux"
+        # Reuse the chat request's catalog when provided so a summary turn does
+        # not issue the same enabled-commands query twice in one request.
+        resolved_commands = (
+            template_commands
+            if template_commands is not None
+            else get_enabled_template_commands(
+                db, template_key, include_cross_template=True
+            )
+        )
         reply, _, _ = await chat_with_rubric(
             messages,
             rubric_context,
             is_refine=False,
             template_key=template_key,
-            template_commands=get_enabled_template_commands(
-                db, template_key, include_cross_template=True
-            ),
+            template_commands=resolved_commands,
             environment_keys=file.environment_keys if file else None,
         )
     except Exception:

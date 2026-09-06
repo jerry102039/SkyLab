@@ -192,7 +192,7 @@ async def test_generate_script_content_sends_commands_feedback_and_safety_prompt
 
 
 @pytest.mark.asyncio
-async def test_create_artifact_saves_reviewed_managed_script(
+async def test_create_artifact_auto_approves_passed_managed_script(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session = _session()
@@ -224,20 +224,12 @@ async def test_create_artifact_saves_reviewed_managed_script(
         created_by=user_id,
     )
 
-    assert artifact.status == "reviewed"
+    assert artifact.status == "approved"
     assert artifact.script_language == "python"
     assert artifact.source == "ai_generated"
     assert artifact.rubric_snapshot_json["template_key"] == "n8n"
-
-    approved = script_artifact_service.approve_artifact(
-        session=session,
-        teaching_class_id=teaching_class_id,
-        artifact_id=uuid.UUID(artifact.id),
-        approved_by=user_id,
-    )
-
-    assert approved.status == "approved"
-    assert approved.approved_by == str(user_id)
+    assert artifact.approved_by is None
+    assert artifact.approved_at is not None
 
 
 @pytest.mark.asyncio
@@ -287,13 +279,13 @@ async def test_build_reviewed_script_retries_with_quality_feedback(
         lambda script_content: {
             "approved": script_content != "bad-script",
             "blocked": script_content == "bad-script",
-            "issues": ["不能用 stdout/stderr truthiness 直接判定 pass"]
+            "issues": ["工具缺失時應回傳 unknown，不可使用 warning"]
             if script_content == "bad-script"
             else [],
             "fix_hints": [
                 {
-                    "type": "remove_stdout_truthiness_check",
-                    "description": "不能用 stdout/stderr truthiness 直接判定 pass",
+                    "type": "fix_status_semantics",
+                    "description": "工具缺失時應回傳 unknown，不可使用 warning",
                 }
             ]
             if script_content == "bad-script"
@@ -322,11 +314,11 @@ async def test_build_reviewed_script_retries_with_quality_feedback(
     )
 
     assert script_content == SAFE_SCRIPT
-    assert status == TeacherJudgeScriptStatus.reviewed
+    assert status == TeacherJudgeScriptStatus.approved
     assert policy_check["quality_approved"] is True
     assert len(policy_check["review_attempts"]) == 1
     assert policy_check["review_attempts"][0]["quality_issues"] == [
-        "不能用 stdout/stderr truthiness 直接判定 pass"
+        "工具缺失時應回傳 unknown，不可使用 warning"
     ]
     assert ai_review["approved"] is True
     assert len(seen_snapshots) == 1
@@ -490,8 +482,194 @@ async def test_build_reviewed_script_re_reviews_after_ai_feedback_fix(
     assert '"summary": "fixed"' in script_content
     assert policy_check["approved"] is True
     assert ai_review["approved"] is True
-    assert status == TeacherJudgeScriptStatus.reviewed
+    assert status == TeacherJudgeScriptStatus.approved
     assert len(reviewed_scripts) == 2
+
+
+@pytest.mark.asyncio
+async def test_build_reviewed_script_stops_after_two_retries_of_same_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fix_calls = [0]
+    review_calls = [0]
+
+    async def fake_generate_script_content(*, rubric_snapshot, template_key):
+        return "same-error"
+
+    async def fake_fix_script_content(*, script_content, fix_hints):
+        fix_calls[0] += 1
+        return "same-error"
+
+    async def fake_review_script_with_ai(*, script_content, rubric_snapshot):
+        review_calls[0] += 1
+        return {"approved": True, "risk_level": "low", "issues": []}
+
+    monkeypatch.setattr(script_artifact_service, "generate_script_content", fake_generate_script_content)
+    monkeypatch.setattr(script_artifact_service, "fix_script_content", fake_fix_script_content)
+    monkeypatch.setattr(script_artifact_service, "review_script_with_ai", fake_review_script_with_ai)
+    monkeypatch.setattr(
+        script_artifact_service,
+        "check_script_policy",
+        lambda script_content: {
+            "approved": True,
+            "blocked": False,
+            "risk_level": "low",
+            "issues": [],
+            "fix_hints": [],
+        },
+    )
+    monkeypatch.setattr(
+        script_artifact_service,
+        "check_script_quality",
+        lambda script_content: {
+            "approved": False,
+            "blocked": True,
+            "risk_level": "high",
+            "issues": ["固定錯誤"],
+            "fix_hints": [{"type": "fixed_failure", "description": "固定錯誤"}],
+        },
+    )
+
+    _script, policy_check, _ai_review, status = await script_artifact_service.build_reviewed_script(
+        rubric_snapshot={"template_key": "linux", "items": []},
+        template_key="linux",
+    )
+
+    assert status == TeacherJudgeScriptStatus.review_failed
+    assert fix_calls[0] == 2
+    assert review_calls[0] == 0
+    assert policy_check["retry_summary"]["retry_count"] == 2
+    assert policy_check["retry_summary"]["stop_reason"] == "same_failure_limit"
+    assert len(policy_check["review_attempts"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_build_reviewed_script_stops_after_two_retries_of_same_ai_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fix_calls = [0]
+    review_calls = [0]
+
+    async def fake_generate_script_content(*, rubric_snapshot, template_key):
+        return "static-safe"
+
+    async def fake_fix_script_content(*, script_content, fix_hints):
+        fix_calls[0] += 1
+        return "static-safe"
+
+    async def fake_review_script_with_ai(*, script_content, rubric_snapshot):
+        review_calls[0] += 1
+        return {
+            "approved": False,
+            "risk_level": "high",
+            "issues": ["固定 AI 錯誤"],
+            "suggested_fix": "固定修正建議",
+        }
+
+    monkeypatch.setattr(
+        script_artifact_service,
+        "generate_script_content",
+        fake_generate_script_content,
+    )
+    monkeypatch.setattr(
+        script_artifact_service,
+        "fix_script_content",
+        fake_fix_script_content,
+    )
+    monkeypatch.setattr(
+        script_artifact_service,
+        "review_script_with_ai",
+        fake_review_script_with_ai,
+    )
+    monkeypatch.setattr(
+        script_artifact_service,
+        "check_script_policy",
+        lambda script_content: {
+            "approved": True,
+            "blocked": False,
+            "risk_level": "low",
+            "issues": [],
+            "fix_hints": [],
+        },
+    )
+    monkeypatch.setattr(
+        script_artifact_service,
+        "check_script_quality",
+        lambda script_content: {
+            "approved": True,
+            "blocked": False,
+            "risk_level": "low",
+            "issues": [],
+            "fix_hints": [],
+        },
+    )
+
+    _script, policy_check, ai_review, status = (
+        await script_artifact_service.build_reviewed_script(
+            rubric_snapshot={"template_key": "linux", "items": []},
+            template_key="linux",
+        )
+    )
+
+    assert status == TeacherJudgeScriptStatus.review_failed
+    assert ai_review["approved"] is False
+    assert fix_calls[0] == 2
+    assert review_calls[0] == 3
+    assert policy_check["retry_summary"]["retry_count"] == 2
+    assert policy_check["retry_summary"]["stop_reason"] == "same_failure_limit"
+    assert len(policy_check["review_attempts"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_build_reviewed_script_stops_after_four_total_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current_script = ["candidate-0"]
+    fix_calls = [0]
+
+    async def fake_generate_script_content(*, rubric_snapshot, template_key):
+        return current_script[0]
+
+    async def fake_fix_script_content(*, script_content, fix_hints):
+        fix_calls[0] += 1
+        current_script[0] = f"candidate-{fix_calls[0]}"
+        return current_script[0]
+
+    monkeypatch.setattr(script_artifact_service, "generate_script_content", fake_generate_script_content)
+    monkeypatch.setattr(script_artifact_service, "fix_script_content", fake_fix_script_content)
+    monkeypatch.setattr(
+        script_artifact_service,
+        "check_script_policy",
+        lambda script_content: {
+            "approved": True,
+            "blocked": False,
+            "risk_level": "low",
+            "issues": [],
+            "fix_hints": [],
+        },
+    )
+    monkeypatch.setattr(
+        script_artifact_service,
+        "check_script_quality",
+        lambda script_content: {
+            "approved": False,
+            "blocked": True,
+            "risk_level": "high",
+            "issues": [f"錯誤 {script_content}"],
+            "fix_hints": [{"type": f"failure_{script_content}"}],
+        },
+    )
+
+    _script, policy_check, _ai_review, status = await script_artifact_service.build_reviewed_script(
+        rubric_snapshot={"template_key": "linux", "items": []},
+        template_key="linux",
+    )
+
+    assert status == TeacherJudgeScriptStatus.review_failed
+    assert fix_calls[0] == 4
+    assert policy_check["retry_summary"]["retry_count"] == 4
+    assert policy_check["retry_summary"]["stop_reason"] == "total_retry_limit"
+    assert len(policy_check["review_attempts"]) == 5
 
 
 @pytest.mark.asyncio
@@ -575,30 +753,23 @@ async def test_regenerate_approved_artifact_creates_next_version(
         rubric_analysis=_analysis(),
         created_by=None,
     )
-    approved = script_artifact_service.approve_artifact(
-        session=session,
-        teaching_class_id=teaching_class_id,
-        artifact_id=uuid.UUID(first.id),
-        approved_by=None,
-    )
-
     regenerated = await script_artifact_service.regenerate_artifact(
         session=session,
         teaching_class_id=teaching_class_id,
-        artifact_id=uuid.UUID(approved.id),
+        artifact_id=uuid.UUID(first.id),
         rubric_analysis=None,
         created_by=None,
     )
 
-    assert regenerated.id != approved.id
+    assert regenerated.id != first.id
     assert regenerated.version == 2
     assert regenerated.source == "regenerated"
-    assert regenerated.status == "reviewed"
+    assert regenerated.status == "approved"
 
     regenerated_again = await script_artifact_service.regenerate_artifact(
         session=session,
         teaching_class_id=teaching_class_id,
-        artifact_id=uuid.UUID(approved.id),
+        artifact_id=uuid.UUID(first.id),
         rubric_analysis=None,
         created_by=None,
     )
@@ -677,7 +848,7 @@ async def test_regenerate_failed_artifact_passes_previous_review_feedback(
         created_by=None,
     )
 
-    assert regenerated.status == "reviewed"
+    assert regenerated.status == "approved"
     assert "previous_review_feedback" not in regenerated.rubric_snapshot_json
 
 

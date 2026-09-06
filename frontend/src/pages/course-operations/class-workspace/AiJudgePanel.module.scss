@@ -253,44 +253,6 @@
   color: var(--color-text-secondary);
 }
 
-.chipBtns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: $spacing-8;
-}
-
-.chipBtn,
-.chipBtnActive {
-  min-height: 32px;
-  padding: 4px $spacing-16;
-  border-radius: $radius-8;
-  font-size: $font-size-14;
-  cursor: pointer;
-  transition: background $transition-base, color $transition-base, border-color $transition-base;
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-}
-
-.chipBtn {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-
-  &:hover:not(:disabled) {
-    background: var(--color-hover);
-    color: var(--color-text-primary);
-  }
-}
-
-.chipBtnActive {
-  background: var(--color-primary);
-  border: 1px solid var(--color-primary);
-  color: var(--color-text-on-primary);
-}
-
 .uploaderWrap {
   @include flex-column;
   gap: $spacing-16;
@@ -399,7 +361,7 @@
   align-self: stretch;
 }
 
-/* ── 評分項目表格 ── */
+/* ── 檢查項目表格 ── */
 .rubricTableCard {
   overflow: hidden;
 
@@ -952,6 +914,54 @@
   @include text-truncate;
 }
 
+.scriptRenameForm {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  flex: 1 1 320px;
+  min-width: 0;
+  align-items: center;
+  gap: $spacing-8;
+  color: var(--color-text-primary);
+}
+
+.scriptRenameInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-primary);
+  border-radius: $radius-8;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: $font-size-16;
+  font-weight: $font-weight-700;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
+
+  &:focus {
+    border-color: var(--color-primary);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+
+  &::selection {
+    background: color-mix(in srgb, var(--color-primary) 24%, transparent);
+    color: var(--color-text-primary);
+  }
+}
+
+.scriptRenameError {
+  grid-column: 2 / -1;
+  color: var(--color-danger);
+  font-size: $font-size-12;
+  font-weight: $font-weight-500;
+}
+
 .reviewGrid {
   display: grid;
   grid-template-columns: 1fr;
@@ -1264,11 +1274,6 @@
   width: 100%;
   min-height: 42px;
   font-size: $font-size-14;
-}
-
-.sessionFilters {
-  display: flex;
-  gap: $spacing-8;
 }
 
 .sessionList {
@@ -1615,6 +1620,172 @@
 
 .sessionMain {
   min-width: 0;
+}
+
+.sessionMainFull {
+  @include flex-column;
+  gap: $spacing-16;
+  min-width: 0;
+}
+
+/* ── 檢查設定三欄同高（session／評分表／AI 聊天室） ── */
+.checkWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: $spacing-16;
+  align-items: start;
+
+  @include respond-to(xl) {
+    grid-template-columns: 230px minmax(0, 1.6fr) minmax(300px, 1fr);
+    align-items: stretch;
+  }
+}
+
+.checkSessionCol,
+.checkRubricCard,
+.checkChatCol {
+  min-width: 0;
+
+  @include respond-to(xl) {
+    // 三欄直接向下延伸到頁面底部：扣掉上方頁首＋面板標題＋間距；
+    // 超長內容仍以 max-height 截斷，改走欄內捲動
+    min-height: calc(100vh - 240px);
+    max-height: calc(100vh - 120px);
+  }
+}
+
+.checkSessionCol {
+  // 與右方兩卡共用 .card 的 24px 內距，讓三欄頂部對齊同一高度
+  @include respond-to(xl) {
+    overflow: hidden;
+  }
+
+  .newCheckButton {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .sessionList {
+    @include respond-to(xl) {
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none;
+      overflow-y: auto;
+    }
+  }
+}
+
+.checkRubricCol {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.checkRubricCard {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+
+  @include respond-to(xl) {
+    overflow: hidden;
+  }
+}
+
+.checkRubricBody {
+  flex: 1 1 auto;
+  min-height: 0;
+
+  @include respond-to(xl) {
+    overflow: auto;
+  }
+
+  // 三欄模式中間欄較窄，放寬表格最小寬度以減少橫向捲動
+  @include respond-to(xl) {
+    .rubricTable {
+      min-width: 640px;
+    }
+  }
+}
+
+.checkChatCol {
+  @include respond-to(xl) {
+    overflow: hidden;
+  }
+}
+
+.checkChatInner {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+
+  .chatPanel {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .chatMessages {
+    @include respond-to(xl) {
+      flex: 1 1 auto;
+      min-height: 240px;
+      max-height: none;
+    }
+  }
+
+  .proposalCard {
+    flex: 0 0 auto;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+}
+
+/* ── 執行結果／腳本總覽雙欄同高（沿用三欄設計語言） ── */
+.checkWorkspaceTwo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: $spacing-16;
+  align-items: start;
+
+  @include respond-to(xl) {
+    grid-template-columns: 230px minmax(0, 1fr);
+    align-items: stretch;
+  }
+}
+
+.checkContentCol {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: $spacing-16;
+}
+
+.checkTabsCard {
+  flex: 0 0 auto;
+  padding: $spacing-8 $spacing-16;
+}
+
+/* 檢查項目卡片頂部的頁籤條：維持與其他頁籤相同的固定大小 */
+.checkTabsWrap {
+  flex: 0 0 auto;
+  margin-bottom: $spacing-8;
+}
+
+/* 三欄頂部標頭統一高度：新增檢查／檢查項目／AI 聊天室對齊 */
+.checkHead {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-8;
+  min-height: 44px;
+  margin-bottom: $spacing-8;
+  padding-bottom: $spacing-8;
+  border-bottom: 1px solid var(--color-divider);
+
+  .cardTitle {
+    margin: 0;
+  }
 }
 
 .proposalCard {
