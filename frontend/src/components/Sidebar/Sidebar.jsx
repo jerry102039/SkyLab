@@ -41,7 +41,7 @@ const navGroups = [
     icon: "router",
     items: [
       { key: "firewall",      labelKey: "Sidebar.itemFirewall",     icon: "security" },
-      { key: "reverse-proxy", labelKey: "Sidebar.itemReverseProxy",   icon: "swap_horiz" },
+      /* 對外網址已併入「網域管理」（管理員）；使用者在資源詳情的「進階設定」設定自己的對外服務 */
     ],
   },
   {

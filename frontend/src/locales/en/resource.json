@@ -389,5 +389,7 @@
   "TemplatesPage.deleteConfirmDesc": "The template's disk on PVE will also be deleted; this action cannot be undone. If any machines were linked-cloned from this template, deletion will be refused.",
   "TemplatesPage.cancel": "Cancel",
   "TemplatesPage.deleting": "Deleting…",
-  "TemplatesPage.confirmDelete": "Confirm Delete"
+  "TemplatesPage.confirmDelete": "Confirm Delete",
+  "RequestReviewPage.specChangeExpiry": "Expiry {{from}} → {{to}}",
+  "RequestReviewPage.expiryUnlimited": "unlimited"
 }

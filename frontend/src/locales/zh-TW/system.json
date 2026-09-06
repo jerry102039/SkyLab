@@ -44,7 +44,6 @@
   "AdminPage.toastLoadFailed": "載入使用者失敗",
   "AdminPage.toastSaveFailed": "儲存失敗",
   "AdminPage.toastUpdated": "使用者已更新",
-
   "AuditPage.allActions": "全部操作",
   "AuditPage.allUsers": "全部使用者",
   "AuditPage.clear": "清除",
@@ -72,7 +71,6 @@
   "AuditPage.toastExportFailed": "匯出失敗",
   "AuditPage.toastExported": "已匯出 CSV",
   "AuditPage.toastLoadFailed": "載入稽核日誌失敗",
-
   "ConfigCodeEditor.lineCol": "行 {{line}}，欄 {{col}}",
   "ConfigCodeEditor.loadErrorHint": "請確認 Gateway VM 的 SSH 連線正常後重新載入；為避免覆蓋遠端檔案，已停用編輯與寫入。",
   "ConfigCodeEditor.loadErrorTitle": "無法讀取遠端設定檔",
@@ -86,7 +84,6 @@
   "ConfigCodeEditor.synced": "已同步",
   "ConfigCodeEditor.unwritten": "● 未寫入",
   "ConfigCodeEditor.unwrittenTitle": "尚未寫入",
-
   "DomainPage.accountLabel": "Account：",
   "DomainPage.addRecord": "新增紀錄",
   "DomainPage.apiTokenPastePlaceholder": "貼上 API Token",
@@ -147,7 +144,6 @@
   "DomainPage.toastSaveRecordFailed": "儲存 DNS 紀錄失敗",
   "DomainPage.ttlHint": "TTL 設 1 代表 Auto。",
   "DomainPage.zonesTitle": "Zones（{{count}}）",
-
   "GatewayPage.actionRestart": "重啟",
   "GatewayPage.actionStart": "啟動",
   "GatewayPage.actionStop": "停止",
@@ -212,7 +208,6 @@
   "GatewayPage.toastSshConnectFailed": "SSH 連線失敗",
   "GatewayPage.toastSshConnectSuccess": "SSH 連線成功",
   "GatewayPage.toastWriteConfigFailed": "寫入設定檔失敗",
-
   "GovernanceTab.alertCheckIntervalSeconds": "檢查間隔（秒）",
   "GovernanceTab.alertCooldownMinutes": "冷卻期（分鐘）",
   "GovernanceTab.alertCooldownMinutesHint": "同一目標同一指標在冷卻期內不重發警告",
@@ -272,7 +267,6 @@
   "GovernanceTab.workloadAdvisorEnabled": "啟用自動判斷",
   "GovernanceTab.workloadAdvisorEnabledHint": "停用後申請表單僅能手動選擇資源類型",
   "GovernanceTab.workloadAdvisorTitle": "VM / LXC 自動判斷",
-
   "IpManagementPage.colAllocatedAt": "分配時間",
   "IpManagementPage.colDescription": "備註",
   "IpManagementPage.colIpAddress": "IP 位址",
@@ -300,7 +294,6 @@
   "IpManagementPage.toastSaveSubnetFailed": "儲存子網設定失敗",
   "IpManagementPage.toastSubnetDeleted": "子網設定已刪除",
   "IpManagementPage.toastSubnetSaved": "子網設定已儲存",
-
   "JobsPage.allKinds": "全部類型",
   "JobsPage.allStatuses": "全部狀態",
   "JobsPage.colApplicant": "申請人",
@@ -331,7 +324,6 @@
   "JobsPage.statusPending": "等待中",
   "JobsPage.statusRunning": "執行中",
   "JobsPage.toastLoadFailed": "載入背景任務失敗",
-
   "LdapTab.adminGroupDn": "管理員群組 DN（選填）",
   "LdapTab.adminGroupDnHint": "使用者屬於此群組時建立為 admin 角色",
   "LdapTab.autoCreateUsers": "自動建立帳號",
@@ -372,7 +364,6 @@
   "LdapTab.userFilterTemplateHint": "{username} 會代入登入時輸入的帳號",
   "LdapTab.userFilterTemplatePlaceholder": "(sAMAccountName={username}) 或 (uid={username})",
   "LdapTab.userSearchBase": "使用者搜尋 Base DN",
-
   "MiningIncidentsPanel.ban": "停權",
   "MiningIncidentsPanel.banConfirmMessage": "VMID {{vmid}} 的擁有者帳號將被停用（無法登入），VM 維持暫停狀態以保留證據。此操作可由管理員在使用者管理中還原。",
   "MiningIncidentsPanel.banConfirmTitle": "確認停權帳號？",
@@ -408,7 +399,6 @@
   "MiningIncidentsPanel.toastDismissed": "已解除事件",
   "MiningIncidentsPanel.toastDismissedAndRecovered": "已解除事件並嘗試恢復 VM",
   "MiningIncidentsPanel.unknownError": "未知錯誤",
-
   "MonitoringPage.acknowledge": "確認",
   "MonitoringPage.acknowledged": "已確認",
   "MonitoringPage.activeAlertsDesc": "超過閾值的資源使用警告（每 30 秒更新）",
@@ -451,7 +441,6 @@
   "MonitoringPage.uptimeDaysHours": "{{days}} 天 {{hours}} 小時",
   "MonitoringPage.uptimeHoursMinutes": "{{hours}} 小時 {{minutes}} 分",
   "MonitoringPage.vmRunning": "VM 運行",
-
   "QuotasTab.addQuota": "新增配額",
   "QuotasTab.cancel": "取消",
   "QuotasTab.colActions": "操作",
@@ -492,7 +481,6 @@
   "QuotasTab.unlimited": "無限制",
   "QuotasTab.userLabel": "使用者",
   "QuotasTab.userSearchPlaceholder": "輸入姓名或 email 搜尋",
-
   "SettingsPage.addConnection": "新增連線",
   "SettingsPage.apiTimeoutSeconds": "API Timeout（秒）",
   "SettingsPage.apiUser": "API 使用者 *",
@@ -607,7 +595,6 @@
   "SettingsPage.userPriorityTitle": "使用者優先度",
   "SettingsPage.verifySslCert": "驗證 SSL 憑證",
   "SettingsPage.windowGracePeriodMinutes": "時段寬限（分）",
-
   "SubnetConfigForm.bridgeName": "Bridge 名稱 *",
   "SubnetConfigForm.bridgeNamePlaceholder": "例：vmbr1",
   "SubnetConfigForm.cancel": "取消",
@@ -630,5 +617,11 @@
   "SubnetConfigForm.gatewayVmIpHint": "不可與閘道 IP 相同。",
   "SubnetConfigForm.gatewayVmIpPlaceholder": "例：10.10.0.2",
   "SubnetConfigForm.saving": "儲存中...",
-  "SubnetConfigForm.updateConfig": "更新設定"
+  "SubnetConfigForm.updateConfig": "更新設定",
+  "DomainPage.tabDns": "DNS 紀錄",
+  "DomainPage.tabReverseProxy": "對外網址",
+  "DomainPage.managedBySystem": "本系統 · VM {{vmid}}",
+  "DomainPage.managedBySystemHint": "由本系統的對外網址功能建立（VM {{vmid}}）",
+  "DomainPage.externalRecord": "外部建立",
+  "DomainPage.externalRecordHint": "不是本系統建立的紀錄（在 Cloudflare 或其他地方手動加的）"
 }

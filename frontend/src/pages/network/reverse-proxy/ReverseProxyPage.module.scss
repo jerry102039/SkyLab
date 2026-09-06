@@ -13,6 +13,25 @@
   }
 }
 
+/* ── Panel（嵌在網域管理頁的分頁裡） ─────────────── */
+.panel {
+  @include flex-column;
+  gap: $spacing-16;
+  flex: 1;
+  min-height: 0;
+}
+
+.panelToolbar {
+  @include flex-between;
+  gap: $spacing-16;
+  flex-wrap: wrap;
+}
+
+.panelIntro {
+  font-size: $font-size-14;
+  color: var(--color-text-secondary);
+}
+
 /* ── Header ───────────────────────────────────────── */
 /* ── Buttons ──────────────────────────────────────── */
 .btnPrimary {

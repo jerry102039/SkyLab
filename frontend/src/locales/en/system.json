@@ -44,7 +44,6 @@
   "AdminPage.toastLoadFailed": "Failed to load users",
   "AdminPage.toastSaveFailed": "Save failed",
   "AdminPage.toastUpdated": "User updated",
-
   "AuditPage.allActions": "All Actions",
   "AuditPage.allUsers": "All Users",
   "AuditPage.clear": "Clear",
@@ -72,7 +71,6 @@
   "AuditPage.toastExportFailed": "Export failed",
   "AuditPage.toastExported": "CSV exported",
   "AuditPage.toastLoadFailed": "Failed to load audit log",
-
   "ConfigCodeEditor.lineCol": "Ln {{line}}, Col {{col}}",
   "ConfigCodeEditor.loadErrorHint": "Please verify the Gateway VM's SSH connection is working and reload; editing and saving are disabled to avoid overwriting the remote file.",
   "ConfigCodeEditor.loadErrorTitle": "Unable to read remote config file",
@@ -86,7 +84,6 @@
   "ConfigCodeEditor.synced": "Synced",
   "ConfigCodeEditor.unwritten": "● Unsaved",
   "ConfigCodeEditor.unwrittenTitle": "Not yet written",
-
   "DomainPage.accountLabel": "Account: ",
   "DomainPage.addRecord": "Add Record",
   "DomainPage.apiTokenPastePlaceholder": "Paste API Token",
@@ -147,7 +144,6 @@
   "DomainPage.toastSaveRecordFailed": "Failed to save DNS record",
   "DomainPage.ttlHint": "Setting TTL to 1 means Auto.",
   "DomainPage.zonesTitle": "Zones ({{count}})",
-
   "GatewayPage.actionRestart": "Restart",
   "GatewayPage.actionStart": "Start",
   "GatewayPage.actionStop": "Stop",
@@ -212,7 +208,6 @@
   "GatewayPage.toastSshConnectFailed": "SSH connection failed",
   "GatewayPage.toastSshConnectSuccess": "SSH connected successfully",
   "GatewayPage.toastWriteConfigFailed": "Failed to write config file",
-
   "GovernanceTab.alertCheckIntervalSeconds": "Check Interval (seconds)",
   "GovernanceTab.alertCooldownMinutes": "Cooldown (minutes)",
   "GovernanceTab.alertCooldownMinutesHint": "The same target/metric pair won't re-alert within the cooldown window",
@@ -272,7 +267,6 @@
   "GovernanceTab.workloadAdvisorEnabled": "Enable Auto-Detection",
   "GovernanceTab.workloadAdvisorEnabledHint": "When disabled, the request form only allows manually selecting the resource type",
   "GovernanceTab.workloadAdvisorTitle": "VM / LXC Auto-Detection",
-
   "IpManagementPage.colAllocatedAt": "Allocated At",
   "IpManagementPage.colDescription": "Description",
   "IpManagementPage.colIpAddress": "IP Address",
@@ -300,7 +294,6 @@
   "IpManagementPage.toastSaveSubnetFailed": "Failed to save subnet configuration",
   "IpManagementPage.toastSubnetDeleted": "Subnet configuration deleted",
   "IpManagementPage.toastSubnetSaved": "Subnet configuration saved",
-
   "JobsPage.allKinds": "All Types",
   "JobsPage.allStatuses": "All Statuses",
   "JobsPage.colApplicant": "Applicant",
@@ -331,7 +324,6 @@
   "JobsPage.statusPending": "Pending",
   "JobsPage.statusRunning": "Running",
   "JobsPage.toastLoadFailed": "Failed to load background tasks",
-
   "LdapTab.adminGroupDn": "Administrator Group DN (optional)",
   "LdapTab.adminGroupDnHint": "Users belonging to this group are created with the admin role",
   "LdapTab.autoCreateUsers": "Auto-create Accounts",
@@ -372,7 +364,6 @@
   "LdapTab.userFilterTemplateHint": "{username} will be substituted with the account entered at login",
   "LdapTab.userFilterTemplatePlaceholder": "(sAMAccountName={username}) or (uid={username})",
   "LdapTab.userSearchBase": "User Search Base DN",
-
   "MiningIncidentsPanel.ban": "Ban",
   "MiningIncidentsPanel.banConfirmMessage": "The account owning VMID {{vmid}} will be suspended (unable to sign in); the VM will remain suspended to preserve evidence. An administrator can restore this in User Management.",
   "MiningIncidentsPanel.banConfirmTitle": "Confirm account ban?",
@@ -408,7 +399,6 @@
   "MiningIncidentsPanel.toastDismissed": "Incident dismissed",
   "MiningIncidentsPanel.toastDismissedAndRecovered": "Incident dismissed and VM resume attempted",
   "MiningIncidentsPanel.unknownError": "Unknown error",
-
   "MonitoringPage.acknowledge": "Acknowledge",
   "MonitoringPage.acknowledged": "Acknowledged",
   "MonitoringPage.activeAlertsDesc": "Resource usage alerts exceeding thresholds (updated every 30 seconds)",
@@ -451,7 +441,6 @@
   "MonitoringPage.uptimeDaysHours": "{{days}}d {{hours}}h",
   "MonitoringPage.uptimeHoursMinutes": "{{hours}}h {{minutes}}m",
   "MonitoringPage.vmRunning": "VM Running",
-
   "QuotasTab.addQuota": "Add Quota",
   "QuotasTab.cancel": "Cancel",
   "QuotasTab.colActions": "Actions",
@@ -492,7 +481,6 @@
   "QuotasTab.unlimited": "Unlimited",
   "QuotasTab.userLabel": "User",
   "QuotasTab.userSearchPlaceholder": "Search by name or email",
-
   "SettingsPage.addConnection": "Add Connection",
   "SettingsPage.apiTimeoutSeconds": "API Timeout (seconds)",
   "SettingsPage.apiUser": "API User *",
@@ -607,7 +595,6 @@
   "SettingsPage.userPriorityTitle": "User priority",
   "SettingsPage.verifySslCert": "Verify SSL certificate",
   "SettingsPage.windowGracePeriodMinutes": "Window Grace Period (minutes)",
-
   "SubnetConfigForm.bridgeName": "Bridge Name *",
   "SubnetConfigForm.bridgeNamePlaceholder": "e.g. vmbr1",
   "SubnetConfigForm.cancel": "Cancel",
@@ -630,5 +617,11 @@
   "SubnetConfigForm.gatewayVmIpHint": "Must differ from the Gateway IP.",
   "SubnetConfigForm.gatewayVmIpPlaceholder": "e.g. 10.10.0.2",
   "SubnetConfigForm.saving": "Saving...",
-  "SubnetConfigForm.updateConfig": "Update Config"
+  "SubnetConfigForm.updateConfig": "Update Config",
+  "DomainPage.tabDns": "DNS records",
+  "DomainPage.tabReverseProxy": "Published URLs",
+  "DomainPage.managedBySystem": "This system · VM {{vmid}}",
+  "DomainPage.managedBySystemHint": "Created by this system's published URL feature (VM {{vmid}})",
+  "DomainPage.externalRecord": "External",
+  "DomainPage.externalRecordHint": "Not created by this system (added manually on Cloudflare or elsewhere)"
 }

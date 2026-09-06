@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
 import styles from "./ReverseProxyPage.module.scss";
 import useDialogPresence from "../../../hooks/useDialogPresence";
@@ -9,7 +10,6 @@ import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../hooks/useToast";
 import { ReverseProxyService } from "../../../services/reverseProxy";
 import ReverseProxyRuleModal from "../../../components/ReverseProxyRuleModal/ReverseProxyRuleModal";
-import PageHeader from "../../../components/PageHeader/PageHeader";
 
 function isAdminUser(user) {
   return user?.role === "admin" || user?.is_superuser === true;
@@ -202,8 +202,8 @@ function TraefikPanel() {
   );
 }
 
-/* ── Page ──────────────────────────────────────────── */
-export default function ReverseProxyPage() {
+/* ── Panel（嵌在網域管理頁的「對外網址」分頁；管理員總覽所有 VM 的對外網址） ── */
+export function ReverseProxyPanel() {
   const { t } = useTranslation("network");
   const { user } = useAuth();
   const toast = useToast();
@@ -293,9 +293,10 @@ export default function ReverseProxyPage() {
   }
 
   return (
-    <div className={styles.page}>
-      {/* Header */}
-      <PageHeader title={t("ReverseProxyPage.title")} subtitle={t("ReverseProxyPage.subtitle")}>
+    <div className={styles.panel}>
+      {/* Toolbar（頁首由網域管理頁提供） */}
+      <div className={styles.panelToolbar}>
+        <p className={styles.panelIntro}>{t("ReverseProxyPage.subtitle")}</p>
         <div className={styles.headerActions}>
           {isAdmin && (
             <button type="button" className={styles.btnSecondary} onClick={handleSync} disabled={syncing}>
@@ -308,7 +309,7 @@ export default function ReverseProxyPage() {
             {t("ReverseProxyPage.addDomain")}
           </button>
         </div>
-      </PageHeader>
+      </div>
 
       {setupBlocked && (
         <div className={styles.noticeDanger}>
@@ -427,4 +428,9 @@ export default function ReverseProxyPage() {
       )}
     </div>
   );
+}
+
+/* ── 舊網址：獨立頁已併入網域管理（管理員），直接導過去 ── */
+export default function ReverseProxyPage() {
+  return <Navigate to="/domain?tab=reverse-proxy" replace />;
 }

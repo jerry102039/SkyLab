@@ -9,6 +9,7 @@
 import logging
 import time
 import uuid
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Literal
 
@@ -111,6 +112,13 @@ def _describe_changes(request: Any) -> list[str]:
         )
     if request.requested_disk is not None:
         changes.append(f"Disk: {request.current_disk} -> {request.requested_disk}GB")
+    requested_expiry = getattr(request, "requested_expiry_date", None)
+    if requested_expiry is not None:
+        current_expiry = getattr(request, "current_expiry_date", None)
+        changes.append(
+            f"Expiry: {current_expiry.isoformat() if current_expiry else 'unlimited'} "
+            f"-> {requested_expiry.isoformat()}"
+        )
     return changes
 
 
@@ -133,6 +141,8 @@ def _to_public(
         requested_cpu=request.requested_cpu,
         requested_memory=request.requested_memory,
         requested_disk=request.requested_disk,
+        current_expiry_date=getattr(request, "current_expiry_date", None),
+        requested_expiry_date=getattr(request, "requested_expiry_date", None),
         status=request.status,
         reviewer_id=request.reviewer_id,
         review_comment=request.review_comment,
@@ -202,6 +212,52 @@ def _get_current_specs(
     return proxmox_service.get_current_specs(node, vmid, resource_type)
 
 
+# 到期日最多一次延到一年後，超過的交給管理員直接改
+EXPIRY_MAX_EXTENSION_DAYS = 366
+
+
+def _validate_expiry_request(
+    *, session: Session, vmid: int, request_in: SpecChangeRequestCreate
+) -> date | None:
+    """延期申請：要有日期、要在今天之後、要比目前到期日晚、不能超過上限。回傳目前到期日。"""
+    requested = request_in.requested_expiry_date
+    if requested is None:
+        raise BadRequestError(t("spec_change.expiry_value_required"))
+    resource = resource_repo.get_resource_by_vmid(session=session, vmid=vmid)
+    current_expiry = resource.expiry_date if resource else None
+    today = datetime.now(timezone.utc).date()
+    if requested <= today:
+        raise BadRequestError(t("spec_change.expiry_must_be_future"))
+    if current_expiry is not None and requested <= current_expiry:
+        raise BadRequestError(
+            t("spec_change.expiry_must_extend", current=current_expiry.isoformat())
+        )
+    if requested > today + timedelta(days=EXPIRY_MAX_EXTENSION_DAYS):
+        raise BadRequestError(
+            t("spec_change.expiry_too_far", days=EXPIRY_MAX_EXTENSION_DAYS)
+        )
+    return current_expiry
+
+
+def _apply_expiry_extension(session: Session, db_request: Any) -> None:
+    """核准即生效：改到期日、清掉 TTL 已發出的通知與刪除排程，讓治理重新起算。"""
+    from app.models import Resource  # noqa: PLC0415
+
+    resource = session.get(Resource, db_request.resource_vmid)
+    if resource is None:
+        raise BadRequestError(t("spec_change.resource_gone_review"))
+    resource.expiry_date = db_request.requested_expiry_date
+    resource.expiry_notified_at = None
+    resource.scheduled_deletion_at = None
+    if resource.auto_stop_reason == "ttl_expired":
+        resource.auto_stop_at = None
+        resource.auto_stop_reason = None
+    session.add(resource)
+    db_request.applied_at = datetime.now(timezone.utc)
+    db_request.apply_error = None
+    session.add(db_request)
+
+
 def create(
     *, session: Session, request_in: SpecChangeRequestCreate, user: Any
 ) -> SpecChangeRequestPublic:
@@ -223,6 +279,11 @@ def create(
 
     node = resource_info["node"]
     specs = _get_current_specs(node, vmid, _rtype(resource_info))
+
+    # 延長到期日：不動 Proxmox，只驗日期；核准時直接寫回 resources.expiry_date
+    current_expiry: date | None = None
+    if request_in.change_type == SpecChangeType.expiry:
+        current_expiry = _validate_expiry_request(session=session, vmid=vmid, request_in=request_in)
 
     # Validate requested changes
     if (
@@ -269,6 +330,12 @@ def create(
         requested_cpu=request_in.requested_cpu,
         requested_memory=request_in.requested_memory,
         requested_disk=request_in.requested_disk,
+        current_expiry_date=current_expiry,
+        requested_expiry_date=(
+            request_in.requested_expiry_date
+            if request_in.change_type == SpecChangeType.expiry
+            else None
+        ),
         commit=False,
     )
 
@@ -281,7 +348,8 @@ def create(
             f"Requested {request_in.change_type.value} change: "
             f"CPU={request_in.requested_cpu}, "
             f"Memory={request_in.requested_memory}MB, "
-            f"Disk={request_in.requested_disk}GB. "
+            f"Disk={request_in.requested_disk}GB, "
+            f"Expiry={request_in.requested_expiry_date}. "
             f"Reason: {request_in.reason}"
         ),
         commit=False,
@@ -420,8 +488,12 @@ def review(
             # 不能拿 vmid 直接去 Proxmox 找（會改到別人的機器）。
             if db_request.resource_vmid is None:
                 raise BadRequestError(t("spec_change.resource_gone_review"))
-            db_request = _refresh_current_specs(session, db_request, strict=False)
-            _check_quota_delta(session, db_request)
+            is_expiry = (
+                getattr(db_request, "change_type", None) == SpecChangeType.expiry
+            )
+            if not is_expiry:
+                db_request = _refresh_current_specs(session, db_request, strict=False)
+                _check_quota_delta(session, db_request)
             db_request = spec_request_repo.update_spec_change_request_status(
                 session=session,
                 request_id=request_id,
@@ -430,6 +502,9 @@ def review(
                 review_comment=review_data.review_comment,
                 commit=False,
             )
+            if is_expiry:
+                # 延期不需要動機器，核准當下就寫回到期日
+                _apply_expiry_extension(session, db_request)
             audit_service.log_action(
                 session=session,
                 user_id=reviewer.id,
@@ -438,7 +513,7 @@ def review(
                 details=(
                     f"Approved spec change request {request_id} "
                     f"({', '.join(_describe_changes(db_request))}); "
-                    "awaiting requester to apply"
+                    + ("applied immediately" if is_expiry else "awaiting requester to apply")
                 ),
                 commit=False,
             )

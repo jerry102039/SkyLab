@@ -18,6 +18,7 @@ from app.repositories import reverse_proxy as rp_repo
 from app.schemas import Message
 from app.schemas.firewall import ReverseProxyRulePublic
 from app.schemas.reverse_proxy import (
+    DomainAvailability,
     ReverseProxyRuleCreate,
     ReverseProxyRuleUpdate,
     ReverseProxyRuntimeSnapshot,
@@ -152,6 +153,25 @@ def list_reverse_proxy_rules(session: SessionDep, current_user: CurrentUser):
 @router.get("/setup-context", response_model=ReverseProxySetupContext)
 def get_setup_context(session: SessionDep, _: CurrentUser):
     return reverse_proxy_service.get_reverse_proxy_setup_context(session=session)
+
+
+@router.get("/domain-availability", response_model=DomainAvailability)
+def get_domain_availability(
+    domain: str,
+    session: SessionDep,
+    _current_user: CurrentUser,
+    exclude_rule_id: str | None = None,
+) -> DomainAvailability:
+    """表單即時檢查：這個網域是不是已經被用掉了（不管是不是本系統建的）。"""
+    exclude: uuid.UUID | None = None
+    if exclude_rule_id:
+        try:
+            exclude = uuid.UUID(exclude_rule_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=t("reverseProxy.invalidRuleId"))
+    return reverse_proxy_service.check_domain_availability(
+        session, domain, exclude_rule_id=exclude
+    )
 
 
 @router.post("/rules", response_model=Message)

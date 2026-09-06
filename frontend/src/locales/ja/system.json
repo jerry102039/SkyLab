@@ -44,7 +44,6 @@
   "AdminPage.toastLoadFailed": "ユーザーの読み込みに失敗しました",
   "AdminPage.toastSaveFailed": "保存に失敗しました",
   "AdminPage.toastUpdated": "ユーザーを更新しました",
-
   "AuditPage.allActions": "すべての操作",
   "AuditPage.allUsers": "すべてのユーザー",
   "AuditPage.clear": "クリア",
@@ -72,7 +71,6 @@
   "AuditPage.toastExportFailed": "エクスポートに失敗しました",
   "AuditPage.toastExported": "CSV をエクスポートしました",
   "AuditPage.toastLoadFailed": "監査ログの読み込みに失敗しました",
-
   "ConfigCodeEditor.lineCol": "行 {{line}}、列 {{col}}",
   "ConfigCodeEditor.loadErrorHint": "Gateway VM の SSH 接続が正常であることを確認してから再読み込みしてください。リモートファイルの上書きを防ぐため、編集と保存は無効化されています。",
   "ConfigCodeEditor.loadErrorTitle": "リモート設定ファイルを読み込めません",
@@ -86,7 +84,6 @@
   "ConfigCodeEditor.synced": "同期済み",
   "ConfigCodeEditor.unwritten": "● 未保存",
   "ConfigCodeEditor.unwrittenTitle": "未保存です",
-
   "DomainPage.accountLabel": "Account：",
   "DomainPage.addRecord": "レコードを追加",
   "DomainPage.apiTokenPastePlaceholder": "API トークンを貼り付け",
@@ -147,7 +144,6 @@
   "DomainPage.toastSaveRecordFailed": "DNS レコードの保存に失敗しました",
   "DomainPage.ttlHint": "TTL を 1 に設定すると Auto になります。",
   "DomainPage.zonesTitle": "Zone（{{count}}）",
-
   "GatewayPage.actionRestart": "再起動",
   "GatewayPage.actionStart": "起動",
   "GatewayPage.actionStop": "停止",
@@ -212,7 +208,6 @@
   "GatewayPage.toastSshConnectFailed": "SSH 接続に失敗しました",
   "GatewayPage.toastSshConnectSuccess": "SSH 接続に成功しました",
   "GatewayPage.toastWriteConfigFailed": "設定ファイルの保存に失敗しました",
-
   "GovernanceTab.alertCheckIntervalSeconds": "チェック間隔（秒）",
   "GovernanceTab.alertCooldownMinutes": "クールダウン（分）",
   "GovernanceTab.alertCooldownMinutesHint": "同一対象・同一指標はクールダウン期間中は再通知されません",
@@ -272,7 +267,6 @@
   "GovernanceTab.workloadAdvisorEnabled": "自動判定を有効化",
   "GovernanceTab.workloadAdvisorEnabledHint": "無効にすると申請フォームではリソース種別を手動選択のみ可能になります",
   "GovernanceTab.workloadAdvisorTitle": "VM / LXC 自動判定",
-
   "IpManagementPage.colAllocatedAt": "割り当て日時",
   "IpManagementPage.colDescription": "備考",
   "IpManagementPage.colIpAddress": "IP アドレス",
@@ -300,7 +294,6 @@
   "IpManagementPage.toastSaveSubnetFailed": "サブネット設定の保存に失敗しました",
   "IpManagementPage.toastSubnetDeleted": "サブネット設定を削除しました",
   "IpManagementPage.toastSubnetSaved": "サブネット設定を保存しました",
-
   "JobsPage.allKinds": "すべての種別",
   "JobsPage.allStatuses": "すべての状態",
   "JobsPage.colApplicant": "申請者",
@@ -331,7 +324,6 @@
   "JobsPage.statusPending": "待機中",
   "JobsPage.statusRunning": "実行中",
   "JobsPage.toastLoadFailed": "バックグラウンドタスクの読み込みに失敗しました",
-
   "LdapTab.adminGroupDn": "管理者グループ DN（任意）",
   "LdapTab.adminGroupDnHint": "このグループに属するユーザーは admin ロールとして作成されます",
   "LdapTab.autoCreateUsers": "アカウントを自動作成",
@@ -372,7 +364,6 @@
   "LdapTab.userFilterTemplateHint": "{username} にはログイン時に入力されたアカウントが代入されます",
   "LdapTab.userFilterTemplatePlaceholder": "(sAMAccountName={username}) または (uid={username})",
   "LdapTab.userSearchBase": "ユーザー検索 Base DN",
-
   "MiningIncidentsPanel.ban": "停権",
   "MiningIncidentsPanel.banConfirmMessage": "VMID {{vmid}} の所有者アカウントは停止され（サインイン不可）、VM は証拠保全のため一時停止状態を維持します。この操作はユーザー管理画面から管理者が元に戻せます。",
   "MiningIncidentsPanel.banConfirmTitle": "アカウントを停権しますか？",
@@ -408,7 +399,6 @@
   "MiningIncidentsPanel.toastDismissed": "事件を解除しました",
   "MiningIncidentsPanel.toastDismissedAndRecovered": "事件を解除し、VM の復旧を試みました",
   "MiningIncidentsPanel.unknownError": "不明なエラー",
-
   "MonitoringPage.acknowledge": "確認",
   "MonitoringPage.acknowledged": "確認済み",
   "MonitoringPage.activeAlertsDesc": "しきい値を超えたリソース使用アラート（30 秒ごとに更新）",
@@ -451,7 +441,6 @@
   "MonitoringPage.uptimeDaysHours": "{{days}} 日 {{hours}} 時間",
   "MonitoringPage.uptimeHoursMinutes": "{{hours}} 時間 {{minutes}} 分",
   "MonitoringPage.vmRunning": "VM 稼働中",
-
   "QuotasTab.addQuota": "クォータを追加",
   "QuotasTab.cancel": "キャンセル",
   "QuotasTab.colActions": "操作",
@@ -492,7 +481,6 @@
   "QuotasTab.unlimited": "無制限",
   "QuotasTab.userLabel": "ユーザー",
   "QuotasTab.userSearchPlaceholder": "氏名または email で検索",
-
   "SettingsPage.addConnection": "接続を追加",
   "SettingsPage.apiTimeoutSeconds": "API タイムアウト（秒）",
   "SettingsPage.apiUser": "API ユーザー *",
@@ -607,7 +595,6 @@
   "SettingsPage.userPriorityTitle": "ユーザー優先度",
   "SettingsPage.verifySslCert": "SSL 証明書を検証",
   "SettingsPage.windowGracePeriodMinutes": "時間帯の猶予（分）",
-
   "SubnetConfigForm.bridgeName": "Bridge 名 *",
   "SubnetConfigForm.bridgeNamePlaceholder": "例：vmbr1",
   "SubnetConfigForm.cancel": "キャンセル",
@@ -630,5 +617,11 @@
   "SubnetConfigForm.gatewayVmIpHint": "ゲートウェイ IP と同じにはできません。",
   "SubnetConfigForm.gatewayVmIpPlaceholder": "例：10.10.0.2",
   "SubnetConfigForm.saving": "保存中...",
-  "SubnetConfigForm.updateConfig": "設定を更新"
+  "SubnetConfigForm.updateConfig": "設定を更新",
+  "DomainPage.tabDns": "DNS レコード",
+  "DomainPage.tabReverseProxy": "公開 URL",
+  "DomainPage.managedBySystem": "本システム · VM {{vmid}}",
+  "DomainPage.managedBySystemHint": "本システムの公開 URL 機能が作成（VM {{vmid}}）",
+  "DomainPage.externalRecord": "外部で作成",
+  "DomainPage.externalRecordHint": "本システム以外で作成されたレコード（Cloudflare などで手動追加）"
 }

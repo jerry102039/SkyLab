@@ -224,7 +224,11 @@ function App() {
               <Route path="/gateway"        element={<GatewayPage />} />
             </>
           )}
-          <Route path="/reverse-proxy"  element={<ReverseProxyPage />} />
+          {/* 反向代理頁已併入網域管理（管理員）；一般使用者請到資源詳情的進階設定 */}
+          <Route
+            path="/reverse-proxy"
+            element={<Navigate to={isAdmin ? "/domain?tab=reverse-proxy" : "/my-resources"} replace />}
+          />
 
           {/* fallback */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

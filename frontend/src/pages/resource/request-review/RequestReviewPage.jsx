@@ -99,6 +99,12 @@ function specChangeLabel(request, t) {
     request.requested_disk
       ? t("RequestReviewPage.specChangeDisk", { from: request.current_disk ?? "-", to: request.requested_disk })
       : "",
+    request.requested_expiry_date
+      ? t("RequestReviewPage.specChangeExpiry", {
+          from: request.current_expiry_date ?? t("RequestReviewPage.expiryUnlimited"),
+          to: request.requested_expiry_date,
+        })
+      : "",
   ].filter(Boolean);
   return parts.join(" / ") || request.change_type || "-";
 }

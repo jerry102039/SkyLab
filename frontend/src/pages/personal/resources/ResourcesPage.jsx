@@ -284,6 +284,18 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
               ? <button type="button" className={styles.nameLink} onClick={() => navigate(`/my-resources/${resource.vmid}`)}>{resource.name}</button>
               : <strong>{resource.name}</strong>}
             <small>{t(type.labelKey)}{showVmid && resource.vmid > 0 ? t("ResourceRow.vmidSuffix", { vmid: resource.vmid }) : ""}</small>
+            {(resource.access_role === "shared" || (resource.tags ?? []).length > 0) && (
+              <div className={styles.rowChips}>
+                {resource.access_role === "shared" && (
+                  <span className={`${styles.badge} ${styles.badge_info}`} title={t("ResourceRow.sharedByHint", { email: resource.owner_email ?? "—" })}>
+                    <MIcon name="group" size={11} /> {t("ResourceRow.sharedBadge")}
+                  </span>
+                )}
+                {(resource.tags ?? []).map((tag) => (
+                  <span key={tag} className={styles.tagChip}>{tag}</span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </td>
@@ -299,7 +311,7 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
           </button>
           {actionLoading && <MIcon name="hourglass_empty" size={16} />}
           <div className={styles.menuWrap}>
-            {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onDeleteClick={() => { closeMenu(); setDeleteConfirm(true); }} onClose={closeMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
+            {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onDeleteClick={resource.can_delete === false ? undefined : () => { closeMenu(); setDeleteConfirm(true); }} onClose={closeMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
             <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)} title={t("ResourceRow.moreActions")}><MIcon name="more_vert" size={18} /></button>
           </div>
         </div> : <span className={styles.deletedNote}>{STATUS_MAP[resource.status]?.labelKey ? t(STATUS_MAP[resource.status].labelKey) : resource.status}</span>}
@@ -486,6 +498,7 @@ export default function ResourcesPage() {
   const [pending, setPending]     = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(false);
+  const [tagFilter, setTagFilter] = useState("");
   const pendingSigRef = useRef(null);
 
   /** silent = true 時不觸發 skeleton / error state，供背景同步使用 */
@@ -547,11 +560,14 @@ export default function ResourcesPage() {
 
   // 建立中申請會同時出現在 pending 與資源 API；先移除 placeholder，避免重複列。
   const pendingRequestIds = new Set(pending.map((request) => String(request.id)));
+  // 標籤篩選：Proxmox 上的 tags，由資源詳情的「標籤與備註」設定
+  const allTags = [...new Set(resources.flatMap((resource) => resource.tags ?? []))].sort();
+  const activeTag = allTags.includes(tagFilter) ? tagFilter : "";
   const resourcesForDisplay = resources.filter((resource) => !(
     resource.is_placeholder
     && resource.request_id != null
     && pendingRequestIds.has(String(resource.request_id))
-  ));
+  )).filter((resource) => !activeTag || (resource.tags ?? []).includes(activeTag));
   const environmentGroups = buildEnvironmentGroups(resourcesForDisplay, quickSessions);
   const grouped = groupedResourceKeys(environmentGroups);
   const visibleResources = resourcesForDisplay.filter((resource) => (
@@ -584,6 +600,32 @@ export default function ResourcesPage() {
 
       {/* 我的配額用量（模組 E） */}
       <QuotaUsageBar />
+
+      {allTags.length > 0 && (
+        <div className={styles.filterBar} data-guide="resource-tag-filter">
+          <span className={styles.filterLabel}>
+            <MIcon name="label" size={14} />
+            {t("ResourcesPage.tagFilterLabel")}
+          </span>
+          <button
+            type="button"
+            className={`${styles.filterChip} ${!activeTag ? styles.filterChipActive : ""}`}
+            onClick={() => setTagFilter("")}
+          >
+            {t("ResourcesPage.tagFilterAll")}
+          </button>
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              className={`${styles.filterChip} ${activeTag === tag ? styles.filterChipActive : ""}`}
+              onClick={() => setTagFilter(activeTag === tag ? "" : tag)}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className={styles.content}>
         {error ? (

@@ -64,6 +64,7 @@ from .quota_config import QuotaConfig
 from .resource import Resource
 from .resource_network import ResourceNetwork
 from .resource_quota import ResourceQuota
+from .resource_share import ResourceShare
 from .reverse_proxy_rule import ReverseProxyRule
 from .spec_change_request import (
     SpecChangeRequest,
@@ -143,6 +144,7 @@ __all__ = [
     "Resource",
     "ResourceNetwork",
     "ResourceQuota",
+    "ResourceShare",
     "QuotaConfig",
     # VM Request
     "VMProvisioningStatus",

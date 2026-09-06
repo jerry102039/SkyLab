@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import ColumnElement, and_, or_
 from sqlalchemy.orm import selectinload
@@ -21,6 +21,8 @@ def create_spec_change_request(
     requested_cpu: int | None = None,
     requested_memory: int | None = None,
     requested_disk: int | None = None,
+    current_expiry_date: date | None = None,
+    requested_expiry_date: date | None = None,
     commit: bool = True,
 ) -> SpecChangeRequest:
     db_request = SpecChangeRequest(
@@ -35,6 +37,8 @@ def create_spec_change_request(
         requested_cpu=requested_cpu,
         requested_memory=requested_memory,
         requested_disk=requested_disk,
+        current_expiry_date=current_expiry_date,
+        requested_expiry_date=requested_expiry_date,
         status=SpecChangeRequestStatus.pending,
         created_at=datetime.now(timezone.utc),
     )

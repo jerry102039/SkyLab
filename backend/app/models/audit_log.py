@@ -117,6 +117,11 @@ class AuditAction(str, enum.Enum):
     # 規格直改
     spec_direct_update = "spec_direct_update"
 
+    # 資源進階設定（憑證重設 / 共享 / 轉移）
+    credential_update = "credential_update"
+    resource_share_update = "resource_share_update"
+    resource_transfer = "resource_transfer"
+
     # AI API 憑證
     ai_api_credential_rotate = "ai_api_credential_rotate"
     ai_api_credential_delete = "ai_api_credential_delete"

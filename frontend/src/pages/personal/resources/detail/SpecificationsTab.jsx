@@ -104,6 +104,7 @@ export default function SpecificationsTab({ vmid }) {
   const [specFixed, setSpecFixed] = useState(false);
   const [cores, setCores] = useState(1);
   const [memory, setMemory] = useState(512);
+  const [disk, setDisk] = useState(0);
   const [reason, setReason] = useState("");
   const [reasonInvalid, setReasonInvalid] = useState(false);
   const reasonRef = useRef(null);
@@ -114,10 +115,12 @@ export default function SpecificationsTab({ vmid }) {
 
   const loadConfig = useCallback(async () => {
     try {
-      const c = await ResourcesService.getConfig(vmid);
+      /* /specs 回的是實際生效值（cpu_cores / memory_mb / disk_gb），不是 Proxmox 原始 config */
+      const c = await ResourcesService.getSpecs(vmid);
       setConfig(c);
       setCores(c.cpu_cores || 1);
       setMemory(c.memory_mb || 512);
+      setDisk(c.disk_gb || 0);
     } catch {
       setError(true);
       return;
@@ -201,15 +204,29 @@ export default function SpecificationsTab({ vmid }) {
     }
   };
 
+  const currentDisk = config?.disk_gb ?? 0;
+  const diskChanged = currentDisk > 0 && disk !== currentDisk;
+
   const handleSubmit = async () => {
-    const hasChanges = cores !== config.cpu_cores || memory !== config.memory_mb;
+    const hasChanges = cores !== config.cpu_cores || memory !== config.memory_mb || diskChanged;
+
+    /* 磁碟只能放大：Proxmox resize 只接受增量，縮小會弄壞檔案系統 */
+    if (diskChanged && disk < currentDisk) {
+      toast.error(t("SpecificationsTab.diskShrinkNotAllowed", { current: currentDisk }));
+      return;
+    }
 
     if (isAdmin) {
+      if (!hasChanges) {
+        toast.error(t("SpecificationsTab.noChanges"));
+        return;
+      }
       setBusy(true);
       try {
         await ResourcesService.updateSpecDirect(vmid, {
           cores: cores !== config.cpu_cores ? cores : undefined,
           memory: memory !== config.memory_mb ? memory : undefined,
+          disk_size: diskChanged ? `+${disk - currentDisk}G` : undefined,
         });
         toast.success(t("SpecificationsTab.updateSuccess"));
         await loadConfig();
@@ -239,6 +256,7 @@ export default function SpecificationsTab({ vmid }) {
         reason,
         requested_cpu: cores !== config.cpu_cores ? cores : undefined,
         requested_memory: memory !== config.memory_mb ? memory : undefined,
+        requested_disk: diskChanged ? disk : undefined,
       });
       setOpenRequest(created);
       toast.success(t("SpecificationsTab.requestSubmitted"));
@@ -319,6 +337,24 @@ export default function SpecificationsTab({ vmid }) {
                 onChange={(e) => setMemory(Number.parseInt(e.target.value, 10) || 512)}
               />
               <span className={styles.fieldHint}>{t("SpecificationsTab.currentMemoryLabel", { value: config.memory_mb })}</span>
+            </div>
+            <div className={styles.field}>
+              <label htmlFor="spec-disk">{t("SpecificationsTab.diskLabel")}</label>
+              <input
+                id="spec-disk"
+                type="number"
+                min={currentDisk || 1}
+                max={1000}
+                step={1}
+                value={disk}
+                disabled={inputsDisabled || !currentDisk}
+                onChange={(e) => setDisk(Number.parseInt(e.target.value, 10) || currentDisk)}
+              />
+              <span className={styles.fieldHint}>
+                {currentDisk
+                  ? t("SpecificationsTab.currentDiskLabel", { value: currentDisk })
+                  : t("SpecificationsTab.diskUnknown")}
+              </span>
             </div>
           </div>
 

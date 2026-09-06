@@ -333,6 +333,27 @@ def update_config(
     _resource_api(node, vmid, resource_type).config.put(**params)
 
 
+def list_storage_content(
+    node: str, storage: str, content: str | None = None
+) -> list[dict]:
+    """GET /nodes/{node}/storage/{storage}/content（可用 content=iso 過濾）"""
+    api = get_proxmox_api_for_node(node).nodes(node).storage(storage).content
+    items = api.get(content=content) if content else api.get()
+    return list(items or [])
+
+
+def list_iso_images(node: str) -> list[dict]:
+    """列出該節點 ISO 儲存區上的 ISO 映像（儲存區取自該節點所屬連線的設定）。"""
+    iso_storage = get_proxmox_settings_for_node(node).iso_storage
+    if not iso_storage:
+        return []
+    return [
+        item
+        for item in list_storage_content(node, iso_storage, "iso")
+        if str(item.get("content") or "iso") == "iso"
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Control (start / stop / reboot / shutdown / reset)
 # ---------------------------------------------------------------------------
