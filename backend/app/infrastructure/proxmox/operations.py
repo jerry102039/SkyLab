@@ -603,8 +603,16 @@ def get_vm_templates() -> list[dict]:
 
 _TEMPLATE_NODE_MAP_TTL_SECONDS = 60.0
 _template_node_map: dict[str, set[str]] = {}
-_template_node_map_at = 0.0
 _template_node_map_lock = threading.Lock()
+
+
+class _TemplateNodeMapCacheMeta:
+    """快取最後刷新時間（集中在物件上，避免 global 重新指派）。"""
+
+    refreshed_at: float = 0.0
+
+
+_template_node_map_meta = _TemplateNodeMapCacheMeta()
 
 
 def get_lxc_template_node_map() -> dict[str, set[str]]:
@@ -613,10 +621,11 @@ def get_lxc_template_node_map() -> dict[str, set[str]]:
     vztmpl 存在與否是節點層事實（各連線 iso_storage 未必共享到每個節點），
     placement 與模板清單都以此判斷。個別節點查詢失敗視為該節點沒有模板。
     """
-    global _template_node_map_at
     now = time.monotonic()
     with _template_node_map_lock:
-        if (now - _template_node_map_at) < _TEMPLATE_NODE_MAP_TTL_SECONDS:
+        if (
+            now - _template_node_map_meta.refreshed_at
+        ) < _TEMPLATE_NODE_MAP_TTL_SECONDS:
             return {volid: set(nodes) for volid, nodes in _template_node_map.items()}
 
     mapping: dict[str, set[str]] = {}
@@ -641,7 +650,7 @@ def get_lxc_template_node_map() -> dict[str, set[str]]:
     with _template_node_map_lock:
         _template_node_map.clear()
         _template_node_map.update(mapping)
-        _template_node_map_at = time.monotonic()
+        _template_node_map_meta.refreshed_at = time.monotonic()
     return {volid: set(nodes) for volid, nodes in mapping.items()}
 
 

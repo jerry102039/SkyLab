@@ -1207,7 +1207,10 @@ def _resize_clone_disk_if_needed(
             proxmox_service.find_vm_template(template_id)
         )
     except Exception:
-        pass
+        # 查不到範本磁碟大小時略過下限檢查（PVE 端會再驗證）
+        logger.debug(
+            "Unable to determine template %s disk size", template_id, exc_info=True
+        )
     if template_gb and int(disk_size) <= template_gb:
         logger.info(
             "Skip disk resize for VM %d: requested %dG <= template %dG",
