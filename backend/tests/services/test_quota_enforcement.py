@@ -78,7 +78,8 @@ def test_spec_change_review_blocked_by_quota(monkeypatch: pytest.MonkeyPatch) ->
     reviewer = SimpleNamespace(id=uuid.uuid4(), email="admin@campus.edu")
 
     class _S:
-        def rollback(self) -> None: ...
+        def rollback(self) -> None:
+            """測試替身：不需實作。"""
 
     with pytest.raises(ConflictError):
         spec_change_service.review(

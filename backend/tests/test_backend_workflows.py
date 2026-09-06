@@ -1,5 +1,4 @@
 import random
-import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -29,7 +28,6 @@ from app.models import (
     SubnetConfig,
     User,
     UserRole,
-    VMProvisioningStatus,
     VMRequest,
     VMRequestStatus,
     VMTemplate,
@@ -47,8 +45,6 @@ from app.schemas import (
     VMRequestReview,
 )
 from app.services.proxmox import gpu_service, provisioning_service
-from app.services.scheduling import support as scheduling_support
-from app.services.scheduling import vm_request_schedule_service
 from app.services.user import user_service
 from app.services.vm import (
     spec_change_service,
