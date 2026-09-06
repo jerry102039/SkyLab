@@ -1,0 +1,19 @@
+{
+  "quota.violation.cpu": "CPUがクォータを超過しています（現在 {used} + 追加 {delta} > 上限 {limit} cores）",
+  "quota.violation.memory": "メモリがクォータを超過しています（現在 {used} + 追加 {delta} > 上限 {limit} MB）",
+  "quota.violation.disk": "ディスクがクォータを超過しています（現在 {used} + 追加 {delta} > 上限 {limit} GB）",
+  "quota.violation.instances": "インスタンス数がクォータを超過しています（現在 {used} + 追加 {delta} > 上限 {limit} 台）",
+  "recommendation.usageLabel.coursework": "授業課題",
+  "recommendation.usageLabel.teaching": "教育サービス",
+  "recommendation.usageLabel.research": "研究用途",
+  "recommendation.usageLabel.general": "一般用途",
+  "recommendation.scopeLabel.personal": "個人利用",
+  "recommendation.scopeLabel.shared": "共有利用",
+  "recommendation.submissionReason": "{env} を申請して {service} を実行し、{scope}の{usage}に使用します。{cores} vCPU、{memory} MB RAM、{disk} GB Disk を構成し、現在の機能要件に合わせてリソースの無駄を避けます。",
+  "recommendation.gpuCandidateReason": "この GPU には現在利用可能な空き容量があり、デフォルトの推奨として適しています。",
+  "recommendation.gpuReasonSelected": "AI が現在利用可能な GPU とノードの状況に基づき最適なマッピングを選択しました。",
+  "recommendation.gpuReasonInsufficient": "ユーザーが GPU を明示的に必要としていますが、現在利用可能な GPU 容量が不足しています。",
+  "recommendation.recommendedPathWhy": "AI が要件と利用可能なデバイスに基づいて推奨パスを計画しました。",
+  "recommendation.environmentReason.vm": "オペレーティングシステムまたは環境要件を満たすため VM を使用します。",
+  "recommendation.environmentReason.lxc": "より軽量なサービス展開を実現するため LXC を使用します。"
+}

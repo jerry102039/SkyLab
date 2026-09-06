@@ -1,23 +1,24 @@
+import { useTranslation } from "react-i18next";
 import MIcon from "../MIcon";
 import styles from "./Jobs.module.scss";
 
 /** 任務類型顯示名稱（與 JobsPage 的 KIND_LABELS 對齊，popover 用短版） */
-export const JOB_KIND_LABEL = {
-  migration:     "遷移",
-  vm_request:    "開機申請",
-  spec_change:   "規格變更",
-  deletion:      "刪除",
-  template:      "範本",
+export const JOB_KIND_LABEL_KEYS = {
+  migration:     "JobRow.kindMigration",
+  vm_request:    "JobRow.kindVmRequest",
+  spec_change:   "JobRow.kindSpecChange",
+  deletion:      "JobRow.kindDeletion",
+  template:      "JobRow.kindTemplate",
 };
 
 /** 狀態顯示名稱 + MIcon 名稱 + 色調 class key */
-export const JOB_STATUS_META = {
-  pending:   { label: "等待中", icon: "pause",         tone: "toneMuted" },
-  running:   { label: "執行中", icon: "autorenew",     tone: "toneInfo", spin: true },
-  completed: { label: "已完成", icon: "check_circle",  tone: "toneSuccess" },
-  failed:    { label: "失敗",   icon: "cancel",        tone: "toneDanger" },
-  blocked:   { label: "受阻",   icon: "error_outline", tone: "tonePending" },
-  cancelled: { label: "已取消", icon: "cancel",        tone: "toneMuted" },
+export const JOB_STATUS_META_KEYS = {
+  pending:   { labelKey: "JobRow.statusPending",   icon: "pause",         tone: "toneMuted" },
+  running:   { labelKey: "JobRow.statusRunning",   icon: "autorenew",     tone: "toneInfo", spin: true },
+  completed: { labelKey: "JobRow.statusCompleted", icon: "check_circle",  tone: "toneSuccess" },
+  failed:    { labelKey: "JobRow.statusFailed",    icon: "cancel",        tone: "toneDanger" },
+  blocked:   { labelKey: "JobRow.statusBlocked",   icon: "error_outline", tone: "tonePending" },
+  cancelled: { labelKey: "JobRow.statusCancelled", icon: "cancel",        tone: "toneMuted" },
 };
 
 function fmtTime(iso) {
@@ -34,7 +35,8 @@ function fmtTime(iso) {
 }
 
 export function JobRow({ job, onClick }) {
-  const meta = JOB_STATUS_META[job.status] ?? JOB_STATUS_META.pending;
+  const { t } = useTranslation("components");
+  const meta = JOB_STATUS_META_KEYS[job.status] ?? JOB_STATUS_META_KEYS.pending;
   const showProgress =
     job.progress !== null &&
     job.status !== "completed" &&
@@ -54,7 +56,7 @@ export function JobRow({ job, onClick }) {
       </span>
       <span className={styles.jobRowBody}>
         <span className={styles.jobRowHead}>
-          <span className={styles.jobKindChip}>{JOB_KIND_LABEL[job.kind] ?? job.kind}</span>
+          <span className={styles.jobKindChip}>{JOB_KIND_LABEL_KEYS[job.kind] ? t(JOB_KIND_LABEL_KEYS[job.kind]) : job.kind}</span>
           <span className={styles.jobRowTitle} title={job.title}>{job.title}</span>
         </span>
         {job.message && (
@@ -69,7 +71,7 @@ export function JobRow({ job, onClick }) {
           </span>
         )}
         <span className={styles.jobRowFoot}>
-          <span>{meta.label}</span>
+          <span>{t(meta.labelKey)}</span>
           <span>{fmtTime(job.updated_at)}</span>
         </span>
       </span>
@@ -86,6 +88,7 @@ const REMINDER_TONE_CLASS = {
 
 /** 提醒列：機器期限、審核結果與近期課堂任務，樣式與 JobRow 一致 */
 export function ReminderRow({ reminder, unread = false, onClick }) {
+  const { t } = useTranslation("components");
   const tone = REMINDER_TONE_CLASS[reminder.tone] ?? "toneInfo";
 
   return (
@@ -96,7 +99,7 @@ export function ReminderRow({ reminder, unread = false, onClick }) {
       <span className={styles.jobRowBody}>
         <span className={styles.jobRowHead}>
           <span className={styles.jobRowTitle} title={reminder.title}>{reminder.title}</span>
-          {unread && <span className={styles.unreadDot} aria-label="未讀" />}
+          {unread && <span className={styles.unreadDot} aria-label={t("JobRow.unread")} />}
         </span>
         {reminder.description && (
           <span className={styles.jobRowMessage} title={reminder.description}>
@@ -104,7 +107,7 @@ export function ReminderRow({ reminder, unread = false, onClick }) {
           </span>
         )}
         <span className={styles.jobRowFoot}>
-          <span>{unread ? "未讀" : "已讀"}</span>
+          <span>{unread ? t("JobRow.unread") : t("JobRow.read")}</span>
           <span>{reminder.time_label}</span>
         </span>
       </span>
@@ -112,22 +115,24 @@ export function ReminderRow({ reminder, unread = false, onClick }) {
   );
 }
 
-export function JobEmpty({ message = "目前沒有任務" }) {
+export function JobEmpty({ message }) {
+  const { t } = useTranslation("components");
   return (
     <div className={styles.jobEmpty}>
       <MIcon name="auto_awesome" size={24} />
-      <span>{message}</span>
+      <span>{message ?? t("JobRow.noJobs")}</span>
     </div>
   );
 }
 
 export function JobLoading() {
+  const { t } = useTranslation("components");
   return (
     <div className={styles.jobLoading}>
       <span className={styles.spin}>
         <MIcon name="refresh" size={16} />
       </span>
-      <span>載入中…</span>
+      <span>{t("JobRow.loading")}</span>
     </div>
   );
 }

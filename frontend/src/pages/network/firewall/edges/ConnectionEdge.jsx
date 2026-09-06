@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { EdgeLabelRenderer, getBezierPath } from "@xyflow/react";
+import { useTranslation } from "react-i18next";
 import styles from "../FirewallPage.module.scss";
 import MIcon from "../../../../components/MIcon";
 
@@ -17,6 +18,7 @@ export default function ConnectionEdge(props) {
     sourcePosition, targetPosition, data,
   } = props;
 
+  const { t } = useTranslation("network");
   const [hovered, setHovered] = useState(false);
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX, sourceY, sourcePosition,
@@ -89,7 +91,7 @@ export default function ConnectionEdge(props) {
               type="button"
               className={styles.edgeDeleteBtn}
               onClick={() => data.onDelete(data.edge)}
-              title="刪除連線"
+              title={t("ConnectionEdge.deleteConnection")}
             >
               <MIcon name="close" size={12} />
             </button>

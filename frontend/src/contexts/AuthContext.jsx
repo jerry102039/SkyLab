@@ -5,6 +5,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { AuthStorage, loginLdap } from "../services/auth";
 import { apiPost, apiPostForm, refreshTokens } from "../services/api";
 import {
@@ -28,6 +29,7 @@ const INITIAL_SESSION = {
 };
 
 export function AuthProvider({ children }) {
+  const { t } = useTranslation("common");
   const [session, setSession] = useState(INITIAL_SESSION);
   const expiryTimerRef = useRef(null);
   const refreshGenerationRef = useRef(0);
@@ -82,8 +84,8 @@ export function AuthProvider({ children }) {
       user: null,
       error: null,
     });
-    toast.error("登入已過期，請重新登入");
-  }, [cancelSessionCheck, clearExpiryTimer]);
+    toast.error(t("AuthContext.sessionExpired"));
+  }, [cancelSessionCheck, clearExpiryTimer, t]);
 
   /**
    * 依 access token 的 exp 排程 refresh。
@@ -125,12 +127,12 @@ export function AuthProvider({ children }) {
       }
 
       if (!AuthStorage.isLoggedIn()) return;
-      toast.warning("連線暫時中斷，系統會自動重試登入驗證", {
+      toast.warning(t("AuthContext.connectionInterrupted"), {
         id: REFRESH_WARNING_ID,
       });
       scheduleTokenRefresh(REFRESH_RETRY_MS);
     }, delay);
-  }, [clearExpiryTimer, finishExpiredSession]);
+  }, [clearExpiryTimer, finishExpiredSession, t]);
 
   /** 驗證 localStorage 中的 session；暫時性錯誤會進 unavailable，不會刪 token。 */
   const verifyStoredSession = useCallback(async ({ showChecking = true } = {}) => {
@@ -245,10 +247,10 @@ export function AuthProvider({ children }) {
   const completeLogin = useCallback(async () => {
     const result = await verifyStoredSession({ showChecking: false });
     if (result?.status === AuthSessionStatus.ANONYMOUS) {
-      throw { status: 401, message: "登入驗證失敗，請重新登入" };
+      throw { status: 401, message: t("AuthContext.loginVerificationFailed") };
     }
     return result;
-  }, [verifyStoredSession]);
+  }, [verifyStoredSession, t]);
 
   const login = useCallback(async (username, password) => {
     const tokens = await apiPostForm("/api/v1/login/access-token", {

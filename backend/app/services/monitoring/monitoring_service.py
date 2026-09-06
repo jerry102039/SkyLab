@@ -11,6 +11,7 @@ from typing import Any, Literal
 from sqlmodel import Session
 
 from app.core.authorizers import require_resource_access
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError
 from app.models import User
 from app.repositories import proxmox_node as proxmox_node_repo
@@ -26,7 +27,7 @@ RRD_TIMEFRAMES = {"hour", "day", "week"}
 def _validate_timeframe(timeframe: str) -> str:
     if timeframe not in RRD_TIMEFRAMES:
         raise BadRequestError(
-            f"timeframe must be one of {sorted(RRD_TIMEFRAMES)}"
+            t("monitoring.invalid_timeframe", allowed=sorted(RRD_TIMEFRAMES))
         )
     return timeframe
 
@@ -144,7 +145,7 @@ def get_vm_rrd(
     _validate_timeframe(timeframe)
     resource = resource_repo.get_resource_by_vmid(session=session, vmid=vmid)
     if resource is None:
-        raise NotFoundError(f"Resource {vmid} not found")
+        raise NotFoundError(t("monitoring.resource_not_found", vmid=vmid))
     require_resource_access(user, resource.user_id)
     info = proxmox_service.find_resource(vmid)
     resource_type: Literal["qemu", "lxc"] = (

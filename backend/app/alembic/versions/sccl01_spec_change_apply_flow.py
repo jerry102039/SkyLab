@@ -11,7 +11,7 @@ chain. The enum value cannot be removed on downgrade (PostgreSQL has no
 DROP VALUE); it is harmless to leave in place.
 
 Revision ID: sccl01_spec_change_apply_flow
-Revises: tplcat02_drop_student_requestable
+Revises: tjatt01_msg_attachments
 Create Date: 2026-09-05
 """
 
@@ -21,7 +21,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "sccl01_spec_change_apply_flow"
-down_revision = "tplcat02_drop_student_requestable"
+down_revision = "tjatt01_msg_attachments"
 branch_labels = None
 depends_on = None
 

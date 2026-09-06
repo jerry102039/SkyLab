@@ -2,10 +2,11 @@
 
 from app.main import app
 from app.models import SQLModel
+from tests.utils.routes import iter_api_routes, registered_paths
 
 
 def test_retired_group_pair_routes_are_not_registered() -> None:
-    paths = {route.path for route in app.routes}
+    paths = registered_paths(app.routes)
 
     assert not any(path.startswith("/api/v1/groups") for path in paths)
     assert not any(path.startswith("/api/v1/pair-sessions") for path in paths)
@@ -14,9 +15,11 @@ def test_retired_group_pair_routes_are_not_registered() -> None:
 
 def test_ai_pve_is_registered_as_a_standalone_admin_tool() -> None:
     pve_routes = [
-        route for route in app.routes if route.path.startswith("/api/v1/ai/pve-log")
+        (path, route)
+        for path, route in iter_api_routes(app.routes)
+        if path.startswith("/api/v1/ai/pve-log")
     ]
-    paths = {route.path for route in pve_routes}
+    paths = {path for path, _ in pve_routes}
 
     assert "/api/v1/ai/pve-log/chat" in paths
     assert "/api/v1/ai/pve-log/ssh/confirm" in paths
@@ -26,12 +29,12 @@ def test_ai_pve_is_registered_as_a_standalone_admin_tool() -> None:
             getattr(dependency.call, "__name__", "")
             for dependency in route.dependant.dependencies
         }
-        for route in pve_routes
+        for _, route in pve_routes
     )
 
 
 def test_teacher_judge_routes_are_owned_by_formal_classes() -> None:
-    paths = {route.path for route in app.routes}
+    paths = registered_paths(app.routes)
 
     assert "/api/v1/teaching-classes/{teaching_class_id}/judge/files/" in paths
     assert "/api/v1/teaching-classes/{teaching_class_id}/judge/scripts/" in paths

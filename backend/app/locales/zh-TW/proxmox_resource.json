@@ -1,0 +1,16 @@
+{
+  "provisioning.gpu_no_available_quota": "GPU {mapping_id} 已無可用額度 (used={used}/{capacity})",
+  "provisioning.gpu_profile_not_found": "GPU {mapping_id} 沒有 vGPU 規格 '{profile}'",
+  "provisioning.gpu_profile_not_creatable": "vGPU 規格 '{profile}' 目前 GPU 記憶體不足，無法建立",
+  "provisioning.gpu_memory_full": "GPU {mapping_id} 記憶體已滿，目前無法建立任何 vGPU",
+  "provisioning.gpu_verification_failed": "無法驗證 GPU '{mapping_id}'：{error}",
+  "provisioning.gpu_fallback_node_incompatible": "跨節點克隆到 '{target_node}' 失敗，且範本節點 '{template_node}' 不具備 GPU mapping '{mapping_id}'，無法退回範本節點建立。",
+  "provisioning.template_node_unavailable": "節點 '{node}' 無法存取範本 '{template}'（模板僅存在於：{nodes}）。",
+  "provisioning.lxc_template_node_unavailable": "節點 '{node}' 無法存取 LXC 範本 '{template}'（模板僅存在於：{nodes}）。",
+  "provisioning.no_nodes_available": "無任何節點",
+  "provisioning.lxc_network_incomplete": "網路設定不完整，無法建立 LXC VMID={vmid}（allocated_ip={allocated_ip}, net_cfg={net_cfg}）。請確認 IP 管理子網設定。",
+  "provisioning.vm_network_incomplete": "網路設定不完整，無法建立 VM VMID={vmid}。請確認 IP 管理子網設定。",
+  "reset.init_snapshot_exists": "初始快照 skylab-init 已存在",
+  "reset.no_init_snapshot": "此資源沒有 skylab-init 初始快照，無法重置；請老師或管理員先補建",
+  "quota.exceeded": "配額不足：{violations}"
+}

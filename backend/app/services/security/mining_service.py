@@ -17,6 +17,7 @@ from typing import Any, Literal
 from sqlmodel import Session, select
 
 from app.core.db import engine
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError
 from app.models import (
     AlertEvent,
@@ -340,7 +341,7 @@ def _get_open_incident_for_review(
 ) -> MiningIncident:
     incident = mining_repo.get_incident(session=session, incident_id=incident_id)
     if incident.status not in _OPEN_STATUSES:
-        raise BadRequestError("Incident is already closed")
+        raise BadRequestError(t("mining.incident_already_closed"))
     return incident
 
 
@@ -351,7 +352,7 @@ def ban_incident(
     incident = _get_open_incident_for_review(session, incident_id)
     owner = _get_user(session, incident.user_id)
     if owner is None:
-        raise NotFoundError("Incident owner no longer exists")
+        raise NotFoundError(t("mining.incident_owner_missing"))
     owner.is_active = False
     session.add(owner)
     incident.status = MiningIncidentStatus.banned

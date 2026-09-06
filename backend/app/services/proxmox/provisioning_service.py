@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 from sqlmodel import Session, select
 
+from app.core.i18n import t
 from app.core.security import decrypt_value, encrypt_value
 from app.domain.placement import advisor as placement_advisor
 from app.exceptions import ProxmoxError
@@ -138,8 +139,12 @@ def _build_gpu_hostpci(mapping_id: str, mdev_profile: str | None) -> str:
         gpu_detail = gpu_service.get_gpu_mapping(mapping_id)
         if gpu_detail.available_count <= 0:
             raise ProxmoxError(
-                f"GPU {mapping_id} 已無可用額度 "
-                f"(used={gpu_detail.used_count}/{gpu_detail.capacity_count})"
+                t(
+                    "provisioning.gpu_no_available_quota",
+                    mapping_id=mapping_id,
+                    used=gpu_detail.used_count,
+                    capacity=gpu_detail.capacity_count,
+                )
             )
         if mdev_profile:
             match = next(
@@ -148,12 +153,18 @@ def _build_gpu_hostpci(mapping_id: str, mdev_profile: str | None) -> str:
             )
             if gpu_detail.profiles and match is None:
                 raise ProxmoxError(
-                    f"GPU {mapping_id} 沒有 vGPU 規格 '{mdev_profile}'"
+                    t(
+                        "provisioning.gpu_profile_not_found",
+                        mapping_id=mapping_id,
+                        profile=mdev_profile,
+                    )
                 )
             if match is not None and not match.creatable:
                 raise ProxmoxError(
-                    f"vGPU 規格 '{match.name or mdev_profile}' "
-                    "目前 GPU 記憶體不足，無法建立"
+                    t(
+                        "provisioning.gpu_profile_not_creatable",
+                        profile=match.name or mdev_profile,
+                    )
                 )
         elif gpu_detail.profiles:
             creatable = [
@@ -161,7 +172,7 @@ def _build_gpu_hostpci(mapping_id: str, mdev_profile: str | None) -> str:
             ]
             if not creatable:
                 raise ProxmoxError(
-                    f"GPU {mapping_id} 記憶體已滿，目前無法建立任何 vGPU"
+                    t("provisioning.gpu_memory_full", mapping_id=mapping_id)
                 )
             auto = min(creatable, key=lambda p: p.vram_mb)
             logger.info(
@@ -173,7 +184,9 @@ def _build_gpu_hostpci(mapping_id: str, mdev_profile: str | None) -> str:
         raise
     except Exception as e:
         logger.error("GPU 可用性檢查失敗 (%s): %s", mapping_id, e)
-        raise ProxmoxError(f"無法驗證 GPU '{mapping_id}'：{e}")
+        raise ProxmoxError(
+            t("provisioning.gpu_verification_failed", mapping_id=mapping_id, error=e)
+        )
 
     if mdev_profile:
         return f"mapping={mapping_id},mdev={mdev_profile}"
@@ -186,6 +199,27 @@ def _gpu_mapping_nodes(mapping_id: str | None) -> set[str]:
 
     mapping = gpu_service.get_gpu_mapping(str(mapping_id))
     return {str(item.node).strip() for item in mapping.maps if str(item.node).strip()}
+
+
+def _template_node_accepts_gpu(plan: dict, template_node: str) -> bool:
+    """範本節點能否承接這次建機的 GPU 需求（退回範本節點前的最後把關）。
+
+    不需要 GPU 時一律放行。查詢 mapping 失敗時回 False —— 無法確認就不退回，
+    寧可讓建機明確失敗，也不要建出一台掛不上 GPU 的機器。
+    """
+    mapping_id = plan.get("gpu_mapping_id")
+    if not mapping_id:
+        return True
+    try:
+        return str(template_node) in _gpu_mapping_nodes(str(mapping_id))
+    except Exception as exc:
+        logger.warning(
+            "Unable to verify GPU mapping '%s' on template node %s: %s",
+            mapping_id,
+            template_node,
+            exc,
+        )
+        return False
 
 
 def _select_request_placement(
@@ -208,9 +242,16 @@ def _select_request_placement(
             or getattr(db_request, "template_id", None)
             or "unknown"
         )
+        nodes_text = ", ".join(sorted(template_nodes)) or t(
+            "provisioning.no_nodes_available"
+        )
         return ProxmoxError(
-            f"Node '{node}' cannot access template '{template_label}'"
-            f"（模板僅存在於：{', '.join(sorted(template_nodes)) or '無任何節點'}）。"
+            t(
+                "provisioning.template_node_unavailable",
+                node=node,
+                template=template_label,
+                nodes=nodes_text,
+            )
         )
 
     pinned_node = getattr(db_request, "desired_node", None) or getattr(
@@ -369,9 +410,15 @@ def create_lxc(
     user_id: uuid.UUID,
     batch_job_id: uuid.UUID | None = None,
     ip_reservation_key: str | None = None,
+    target_node: str | None = None,
 ) -> LXCCreateResponse:
+    """建立 LXC。
+
+    ``target_node`` 由呼叫端指定時優先採用 —— 課堂機器以此把整班鎖在同一個
+    叢集內（預設的 pick_target_node 會在所有連線間自由挑選）。
+    """
     vmid = proxmox_service.next_vmid()
-    target_node = _get_lxc_target_node()
+    target_node = target_node or _get_lxc_target_node()
     target_storage = _resolve_managed_storage(
         session=session,
         node=target_node,
@@ -789,10 +836,16 @@ def plan_provision(*, session: Session, db_request) -> dict:
             and target_node
             not in template_node_map.get(str(db_request.ostemplate), set())
         ):
+            nodes_text = ", ".join(
+                sorted(template_node_map.get(str(db_request.ostemplate), set()))
+            ) or t("provisioning.no_nodes_available")
             raise ProxmoxError(
-                f"Node '{target_node}' cannot access LXC template "
-                f"'{db_request.ostemplate}'（模板僅存在於："
-                f"{', '.join(sorted(template_node_map.get(str(db_request.ostemplate), set()))) or '無任何節點'}）。"
+                t(
+                    "provisioning.lxc_template_node_unavailable",
+                    node=target_node,
+                    template=db_request.ostemplate,
+                    nodes=nodes_text,
+                )
             )
         plan["target_storage"] = _resolve_managed_storage(
             session=session,
@@ -857,9 +910,12 @@ def execute_provision(plan: dict) -> tuple[int, str]:
         if resource_type == "lxc":
             if not allocated_ip or not net_cfg or not net_cfg.get("bridge_name"):
                 raise ProxmoxError(
-                    f"網路設定不完整，無法建立 LXC VMID={new_vmid}（"
-                    f"allocated_ip={allocated_ip!r}, net_cfg={net_cfg!r}）。"
-                    "請確認 IP 管理子網設定。"
+                    t(
+                        "provisioning.lxc_network_incomplete",
+                        vmid=new_vmid,
+                        allocated_ip=repr(allocated_ip),
+                        net_cfg=repr(net_cfg),
+                    )
                 )
             net0_parts = (
                 f"name=eth0,bridge={net_cfg['bridge_name']},"
@@ -966,7 +1022,19 @@ def execute_provision(plan: dict) -> tuple[int, str]:
                         **clone_config,
                     )
                     actual_node = target_node
-                except Exception:
+                except Exception as exc:
+                    # 退回範本節點會繞過 _select_request_placement 做過的 GPU
+                    # 節點相容性檢查：範本節點未必有這張卡。與其建出一台掛不上
+                    # GPU 的機器，不如讓這次建機明確失敗。
+                    if not _template_node_accepts_gpu(plan, template_node):
+                        raise ProxmoxError(
+                            t(
+                                "provisioning.gpu_fallback_node_incompatible",
+                                target_node=target_node,
+                                template_node=template_node,
+                                mapping_id=plan.get("gpu_mapping_id"),
+                            )
+                        ) from exc
                     logger.warning(
                         "Cross-node clone failed for VMID %s; falling back to template node %s",
                         new_vmid,
@@ -1008,8 +1076,7 @@ def execute_provision(plan: dict) -> tuple[int, str]:
                     config_updates["nameserver"] = net_cfg["dns_servers"]
             else:
                 raise ProxmoxError(
-                    f"網路設定不完整，無法建立 VM VMID={new_vmid}。"
-                    "請確認 IP 管理子網設定。"
+                    t("provisioning.vm_network_incomplete", vmid=new_vmid)
                 )
             if plan.get("gpu_mapping_id"):
                 config_updates["hostpci0"] = _build_gpu_hostpci(

@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app.ai.teacher_judge import file_service, session_service
+from app.ai.teacher_judge import attachment_service, file_service, session_service
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionCreateRequest,
@@ -377,6 +377,55 @@ async def test_message_without_rubric_is_saved_and_uses_general_chat(
     assert result.assistant_message.content == "可以，先描述目標環境。"
     assert result.rubric_proposal is None
     assert len(db.exec(select(TeacherJudgeSessionMessage)).all()) == 2
+
+
+@pytest.mark.asyncio
+async def test_message_can_send_parsed_attachment_without_text(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    db = _session()
+    class_id = uuid.uuid4()
+    item = TeacherJudgeSession(teaching_class_id=class_id, title="Attachment chat")
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
+    monkeypatch.setattr(attachment_service, "ATTACHMENT_ROOT", tmp_path)
+    attachment = attachment_service.create_attachment(
+        db,
+        session_id=item.id,
+        uploaded_by=None,
+        filename="requirements.md",
+        media_type="text/markdown",
+        file_bytes=b"# Requirements\nExpose port 8080.",
+    )
+
+    async def fake_chat(messages, rubric_context, **kwargs):
+        assert messages[-1].content == ""
+        assert "requirements.md" in kwargs["attachment_context"]
+        assert "port 8080" in kwargs["attachment_context"]
+        return "已讀取附件。", None, {}
+
+    monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
+    monkeypatch.setattr(
+        teacher_judge_sessions, "get_enabled_template_commands", lambda *args, **kwargs: []
+    )
+
+    result = await teacher_judge_sessions.create_message(
+        class_id,
+        item.id,
+        TeacherJudgeSessionMessageCreateRequest(attachment_ids=[attachment.id]),
+        db,
+        SimpleNamespace(id=uuid.uuid4()),
+    )
+
+    assert result.user_message.content == ""
+    assert [row.original_filename for row in result.user_message.attachments] == [
+        "requirements.md"
+    ]
+    db.refresh(attachment)
+    assert attachment.message_id == uuid.UUID(result.user_message.id)
 
 
 @pytest.mark.asyncio

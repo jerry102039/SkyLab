@@ -11,12 +11,12 @@
  */
 
 import { AuthStorage } from "./auth";
+import i18n from "../i18n";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "";
 const REFRESH_PATH = "/api/v1/login/refresh-token";
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_AUTH_RETRIES = 1;
-const AUTH_RECOVERY_MESSAGE = "登入驗證服務暫時無法連線，請稍後重試";
 
 /** 進行中的 refresh 請求；同一個 refresh token 的多個 401 共用一次請求。 */
 let refreshPromise = null;
@@ -127,6 +127,8 @@ function buildHeaders(extra = {}, isFormData = false, accessToken = AuthStorage.
     ? { ...extra }
     : { "Content-Type": "application/json", ...extra };
   if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+  // 讓後端依目前介面語言回傳對應語系的錯誤訊息
+  headers["Accept-Language"] = i18n.language ?? "zh-TW";
   return headers;
 }
 
@@ -156,7 +158,7 @@ function invalidateCurrentSession(snapshot) {
 function authRecoveryError(outcome) {
   return {
     status: outcome.status ?? 0,
-    message: outcome.message ?? AUTH_RECOVERY_MESSAGE,
+    message: outcome.message ?? i18n.t("api.authRecoveryMessage", { ns: "services" }),
     authUnavailable: true,
     retryable: true,
   };
@@ -169,7 +171,7 @@ function assertResponseSession(snapshot) {
   ) {
     throw {
       status: 409,
-      message: "登入狀態已變更，已忽略舊 session 的回應",
+      message: i18n.t("api.sessionChangedIgnored", { ns: "services" }),
       sessionChanged: true,
       unknownOutcome: true,
       retryable: false,
@@ -378,7 +380,10 @@ export function apiPost(path, body, options = {}) {
 export async function apiPostForm(path, params) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Accept-Language": i18n.language ?? "zh-TW",
+    },
     body: new URLSearchParams(params).toString(),
   });
   if (res.ok) return res.status === 204 ? null : res.json();
@@ -394,8 +399,13 @@ export async function apiPostForm(path, params) {
 }
 
 /** POST（multipart/form-data，檔案上傳用；formData 為 FormData 實例） */
-export function apiPostMultipart(path, formData) {
-  return request(path, { method: "POST", body: formData });
+export function apiPostMultipart(path, formData, options = {}) {
+  return request(path, {
+    method: "POST",
+    body: formData,
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
+  });
 }
 
 /** PATCH */

@@ -21,6 +21,7 @@ from app.ai.template_recommendation.schemas import (
     RecommendationRequest,
 )
 from app.ai.utils import apply_thinking_control, safe_int
+from app.core.i18n import t
 from app.infrastructure.ai.template_recommendation import client
 
 MIN_VM_DISK_GB = 20
@@ -208,16 +209,25 @@ def _build_submission_reason(
     disk_gb: int,
 ) -> str:
     usage_label = {
-        "coursework": "課程作業",
-        "teaching": "教學服務",
-        "research": "研究用途",
-    }.get(request.course_context, "一般用途")
-    scope_label = "個人使用" if request.sharing_scope == "personal" else "共享使用"
+        "coursework": t("recommendation.usageLabel.coursework"),
+        "teaching": t("recommendation.usageLabel.teaching"),
+        "research": t("recommendation.usageLabel.research"),
+    }.get(request.course_context, t("recommendation.usageLabel.general"))
+    scope_label = (
+        t("recommendation.scopeLabel.personal")
+        if request.sharing_scope == "personal"
+        else t("recommendation.scopeLabel.shared")
+    )
     env_label = "LXC" if resource_type == "lxc" else "VM"
-    return (
-        f"申請 {env_label} 執行 {service_name}，供{scope_label}的{usage_label}使用，"
-        f"配置 {cores} vCPU、{memory_mb} MB RAM、{disk_gb} GB Disk，"
-        "以符合目前功能需求並避免資源浪費。"
+    return t(
+        "recommendation.submissionReason",
+        env=env_label,
+        service=service_name,
+        scope=scope_label,
+        usage=usage_label,
+        cores=cores,
+        memory=memory_mb,
+        disk=disk_gb,
     )
 
 
@@ -226,7 +236,7 @@ async def extract_intent_from_chat(request: ChatRequest) -> ExtractedIntent:
     if not model_name:
         raise HTTPException(
             status_code=503,
-            detail="AI model binding is missing in config/system-ai.json.",
+            detail=t("templateRec.modelBindingMissing"),
         )
 
     recent_messages = request.messages[-10:]
@@ -261,7 +271,9 @@ async def extract_intent_from_chat(request: ChatRequest) -> ExtractedIntent:
         data = await client.create_chat_completion(payload)
         return ExtractedIntent(**json.loads(data["choices"][0]["message"]["content"]))
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"AI extraction failed: {exc}") from exc
+        raise HTTPException(
+            status_code=502, detail=t("templateRec.extractionFailed", error=exc)
+        ) from exc
 
 
 async def generate_ai_plan(
@@ -274,7 +286,7 @@ async def generate_ai_plan(
     if not model_name:
         raise HTTPException(
             status_code=503,
-            detail="AI model binding is missing in config/system-ai.json.",
+            detail=t("templateRec.modelBindingMissing"),
         )
 
     user_context = {
@@ -381,7 +393,9 @@ async def generate_ai_plan(
         }
         return json.loads(data["choices"][0]["message"]["content"]), metrics
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"AI planning failed: {exc}") from exc
+        raise HTTPException(
+            status_code=502, detail=t("templateRec.planningFailed", error=exc)
+        ) from exc
 
 
 def normalize_ai_result(
@@ -491,13 +505,13 @@ def normalize_ai_result(
                 {
                     "mapping_id": str(option.get("mapping_id") or "").strip(),
                     "label": _gpu_option_label(option),
-                    "reason": "此 GPU 目前有可用額度，適合作為預設推薦。",
+                    "reason": t("recommendation.gpuCandidateReason"),
                 }
             )
         if selected_gpu:
-            gpu_reason = "AI 依目前可用 GPU 與節點狀況挑選最適合的映射。"
+            gpu_reason = t("recommendation.gpuReasonSelected")
         elif request.requires_gpu:
-            gpu_reason = "使用者明確需要 GPU，但目前可用 GPU 不足。"
+            gpu_reason = t("recommendation.gpuReasonInsufficient")
 
     selected_gpu_mapping_id = ""
     selected_gpu_label = ""
@@ -604,7 +618,7 @@ def normalize_ai_result(
         },
         "recommended_path": {
             "fit": "ai-generated plan",
-            "why": ["AI 依需求與可用設備規劃推薦路徑。"],
+            "why": [t("recommendation.recommendedPathWhy")],
             "upgrade_when": str(ai_result.get("upgrade_when") or "").strip(),
         },
         "final_plan": {
@@ -614,7 +628,11 @@ def normalize_ai_result(
                 "execution_environment": resource_type,
                 "environment_reason": str(
                     ai_result.get("application_target", {}).get("environment_reason")
-                    or ("使用 VM 以符合作業系統或環境需求。" if resource_type == "vm" else "使用 LXC 以提供較精簡的服務部署方式。")
+                    or (
+                        t("recommendation.environmentReason.vm")
+                        if resource_type == "vm"
+                        else t("recommendation.environmentReason.lxc")
+                    )
                 ).strip(),
             },
             "form_prefill": form_prefill,

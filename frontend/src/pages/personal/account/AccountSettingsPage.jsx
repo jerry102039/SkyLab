@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import styles from "./AccountSettingsPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import Avatar from "../../../components/Avatar/Avatar";
@@ -7,20 +8,22 @@ import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../hooks/useToast";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import { AccountService } from "../../../services/account";
+import { focusInvalidField } from "../../../utils/focusField";
 import { downscaleImage } from "../../../utils/image/downscaleImage";
 import AppearanceTab from "./AppearanceTab";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
 const TABS = [
-  { key: "profile",    label: "個人資料", icon: "person" },
-  { key: "password",   label: "密碼",     icon: "lock" },
-  { key: "appearance", label: "外觀",     icon: "palette" },
-  { key: "danger",     label: "危險區域", icon: "warning" },
+  { key: "profile",    labelKey: "AccountSettingsPage.tabProfile", icon: "person" },
+  { key: "password",   labelKey: "AccountSettingsPage.tabPassword", icon: "lock" },
+  { key: "appearance", labelKey: "AccountSettingsPage.tabAppearance", icon: "palette" },
+  { key: "danger",     labelKey: "AccountSettingsPage.tabDanger", icon: "warning" },
 ];
 
 /* ── 個人資料 ───────────────────────────────────────── */
 
 function ProfileTab() {
+  const { t } = useTranslation("personal");
   const { user, updateUser } = useAuth();
   const toast = useToast();
   const [editMode, setEditMode] = useState(false);
@@ -48,9 +51,9 @@ function ProfileTab() {
       const updated = await AccountService.uploadAvatar(blob);
       updateUser(updated);
       setForm((prev) => ({ ...prev, avatar_url: updated?.avatar_url ?? "" }));
-      toast.success("頭像已更新");
+      toast.success(t("ProfileTab.avatarUpdated"));
     } catch (err) {
-      toast.error(err?.message ?? "頭像上傳失敗");
+      toast.error(err?.message ?? t("ProfileTab.avatarUploadFailed"));
     } finally {
       setUploading(false);
     }
@@ -85,10 +88,10 @@ function ProfileTab() {
     try {
       const updated = await AccountService.update(payload);
       updateUser(updated);
-      toast.success("個人資料已更新");
+      toast.success(t("ProfileTab.profileUpdated"));
       setEditMode(false);
     } catch (err) {
-      toast.error(err?.message ?? "更新失敗");
+      toast.error(err?.message ?? t("ProfileTab.updateFailed"));
     } finally {
       setSaving(false);
     }
@@ -98,14 +101,14 @@ function ProfileTab() {
 
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>個人資料</h2>
+      <h2 className={styles.cardTitle}>{t("ProfileTab.title")}</h2>
 
       <form className={styles.form} onSubmit={handleSubmit}>
         <div className={styles.avatarRow}>
           <Avatar user={user} src={previewAvatarUrl} size={56} />
           <div className={styles.avatarHint}>
-            <p className={styles.rowName}>頭像</p>
-            <p className={styles.rowMeta}>上傳圖片或貼上圖片網址，留空則顯示姓名縮寫</p>
+            <p className={styles.rowName}>{t("ProfileTab.avatarLabel")}</p>
+            <p className={styles.rowMeta}>{t("ProfileTab.avatarHint")}</p>
           </div>
           <input
             ref={avatarFileRef}
@@ -121,26 +124,26 @@ function ProfileTab() {
             disabled={uploading}
           >
             <MIcon name="upload" size={16} />
-            {uploading ? "上傳中..." : "上傳圖片"}
+            {uploading ? t("ProfileTab.uploading") : t("ProfileTab.uploadImage")}
           </button>
         </div>
 
         <label className={styles.field}>
-          <span>姓名</span>
+          <span>{t("ProfileTab.nameLabel")}</span>
           {editMode ? (
             <input
               value={form.full_name}
               onChange={(e) => set("full_name", e.target.value)}
               maxLength={30}
-              placeholder="你的顯示名稱"
+              placeholder={t("ProfileTab.namePlaceholder")}
             />
           ) : (
-            <p className={styles.readValue}>{user?.full_name || "未設定"}</p>
+            <p className={styles.readValue}>{user?.full_name || t("ProfileTab.notSet")}</p>
           )}
         </label>
 
         <label className={styles.field}>
-          <span>Email</span>
+          <span>{t("ProfileTab.emailLabel")}</span>
           {editMode ? (
             <input
               type="email"
@@ -154,7 +157,7 @@ function ProfileTab() {
         </label>
 
         <label className={styles.field}>
-          <span>頭像網址</span>
+          <span>{t("ProfileTab.avatarUrlLabel")}</span>
           {editMode ? (
             <input
               type="url"
@@ -163,7 +166,7 @@ function ProfileTab() {
               placeholder="https://example.com/avatar.png"
             />
           ) : (
-            <p className={styles.readValue}>{user?.avatar_url || "未設定"}</p>
+            <p className={styles.readValue}>{user?.avatar_url || t("ProfileTab.notSet")}</p>
           )}
         </label>
 
@@ -171,16 +174,16 @@ function ProfileTab() {
           {editMode ? (
             <>
               <button type="button" className={styles.btnSecondary} onClick={cancelEdit} disabled={saving}>
-                取消
+                {t("ProfileTab.cancel")}
               </button>
               <button type="submit" className={styles.btnPrimary} disabled={saving}>
-                {saving ? "儲存中..." : "儲存"}
+                {saving ? t("ProfileTab.saving") : t("ProfileTab.save")}
               </button>
             </>
           ) : (
             <button type="button" className={styles.btnPrimary} onClick={startEdit}>
               <MIcon name="edit" size={16} />
-              編輯
+              {t("ProfileTab.edit")}
             </button>
           )}
         </div>
@@ -192,28 +195,41 @@ function ProfileTab() {
 /* ── 密碼 ───────────────────────────────────────────── */
 
 function PasswordTab() {
+  const { t } = useTranslation("personal");
   const toast = useToast();
   const [form, setForm] = useState({ current: "", next: "", confirm: "" });
   const [saving, setSaving] = useState(false);
+  const [invalid, setInvalid] = useState({});
+  const fieldRefs = { current: useRef(null), next: useRef(null), confirm: useRef(null) };
 
   function set(name, value) {
     setForm((prev) => ({ ...prev, [name]: value }));
+    setInvalid((prev) => ({ ...prev, [name]: false }));
   }
 
   const mismatch = form.confirm.length > 0 && form.next !== form.confirm;
   const tooShort = form.next.length > 0 && form.next.length < 8;
-  const canSubmit = form.current && form.next.length >= 8 && form.next === form.confirm;
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!canSubmit) return;
+    const missing = {
+      current: !form.current,
+      next: form.next.length < 8,
+      confirm: !form.confirm || form.next !== form.confirm,
+    };
+    if (missing.current || missing.next || missing.confirm) {
+      setInvalid(missing);
+      const key = ["current", "next", "confirm"].find((name) => missing[name]);
+      focusInvalidField(fieldRefs[key].current);
+      return;
+    }
     setSaving(true);
     try {
       await AccountService.updatePassword(form.current, form.next);
-      toast.success("密碼已更新");
+      toast.success(t("PasswordTab.passwordUpdated"));
       setForm({ current: "", next: "", confirm: "" });
     } catch (err) {
-      toast.error(err?.message ?? "密碼更新失敗");
+      toast.error(err?.message ?? t("PasswordTab.updateFailed"));
     } finally {
       setSaving(false);
     }
@@ -221,47 +237,50 @@ function PasswordTab() {
 
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>變更密碼</h2>
+      <h2 className={styles.cardTitle}>{t("PasswordTab.title")}</h2>
 
       <form className={styles.form} onSubmit={handleSubmit}>
         <label className={styles.field}>
-          <span>目前密碼</span>
+          <span>{t("PasswordTab.currentLabel")}</span>
           <input
+            ref={fieldRefs.current}
+            className={invalid.current ? styles.fieldInvalid : undefined}
             type="password"
             value={form.current}
             onChange={(e) => set("current", e.target.value)}
             placeholder="••••••••"
-            required
           />
         </label>
 
         <label className={styles.field}>
-          <span>新密碼</span>
+          <span>{t("PasswordTab.newLabel")}</span>
           <input
+            ref={fieldRefs.next}
+            className={invalid.next ? styles.fieldInvalid : undefined}
             type="password"
             value={form.next}
             onChange={(e) => set("next", e.target.value)}
-            placeholder="至少 8 個字元"
-            required
+            placeholder={t("PasswordTab.newPlaceholder")}
           />
-          {tooShort && <em className={styles.fieldError}>新密碼至少需要 8 個字元</em>}
+          {tooShort && <em className={styles.fieldError}>{t("PasswordTab.newTooShort")}</em>}
         </label>
 
         <label className={styles.field}>
-          <span>確認新密碼</span>
+          <span>{t("PasswordTab.confirmLabel")}</span>
           <input
+            ref={fieldRefs.confirm}
+            className={invalid.confirm ? styles.fieldInvalid : undefined}
             type="password"
             value={form.confirm}
             onChange={(e) => set("confirm", e.target.value)}
-            placeholder="再輸入一次新密碼"
-            required
+            placeholder={t("PasswordTab.confirmPlaceholder")}
           />
-          {mismatch && <em className={styles.fieldError}>兩次輸入的密碼不一致</em>}
+          {mismatch && <em className={styles.fieldError}>{t("PasswordTab.mismatch")}</em>}
         </label>
 
         <div className={styles.formActions}>
-          <button type="submit" className={styles.btnPrimary} disabled={!canSubmit || saving}>
-            {saving ? "更新中..." : "更新密碼"}
+          <button type="submit" className={styles.btnPrimary} disabled={saving}>
+            {saving ? t("PasswordTab.updating") : t("PasswordTab.updatePassword")}
           </button>
         </div>
       </form>
@@ -272,21 +291,23 @@ function PasswordTab() {
 /* ── 危險區域 ───────────────────────────────────────── */
 
 function DangerZoneTab() {
+  const { t } = useTranslation("personal");
   const { logout } = useAuth();
   const toast = useToast();
   const [showConfirm, setShowConfirm] = useState(false);
   const confirmDialog = useDialogPresence(showConfirm);
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const confirmWord = t("DangerZoneTab.confirmWord");
 
   async function handleDelete() {
     setDeleting(true);
     try {
       await AccountService.delete();
-      toast.success("帳號已刪除");
+      toast.success(t("DangerZoneTab.accountDeleted"));
       logout();
     } catch (err) {
-      toast.error(err?.message ?? "刪除失敗");
+      toast.error(err?.message ?? t("DangerZoneTab.deleteFailed"));
       setDeleting(false);
     }
   }
@@ -294,14 +315,14 @@ function DangerZoneTab() {
   return (
     <>
       <div className={`${styles.card} ${styles.dangerCard}`}>
-        <h2 className={styles.cardTitle}>刪除帳號</h2>
+        <h2 className={styles.cardTitle}>{t("DangerZoneTab.title")}</h2>
         <p className={styles.dangerDesc}>
-          你的帳號與所有相關資料將被<strong>永久刪除</strong>，此操作無法復原。若你仍持有已開通的資源，系統會拒絕刪除，請先清除資源。
+          {t("DangerZoneTab.descPart1")}<strong>{t("DangerZoneTab.descBold")}</strong>{t("DangerZoneTab.descPart2")}
         </p>
         <div className={styles.formActions}>
           <button type="button" className={styles.btnDanger} onClick={() => setShowConfirm(true)}>
             <MIcon name="delete_forever" size={16} />
-            刪除帳號
+            {t("DangerZoneTab.deleteAccount")}
           </button>
         </div>
       </div>
@@ -318,15 +339,15 @@ function DangerZoneTab() {
             <div className={styles.confirmIcon}>
               <MIcon name="warning" size={24} />
             </div>
-            <h2>確定要刪除帳號嗎？</h2>
+            <h2>{t("DangerZoneTab.confirmTitle")}</h2>
             <p>
-              此操作<strong>無法復原</strong>。請輸入 <code>刪除</code> 以確認。
+              {t("DangerZoneTab.confirmDescPart1")}<strong>{t("DangerZoneTab.confirmDescBold")}</strong>{t("DangerZoneTab.confirmDescPart2")} <code>{confirmWord}</code> {t("DangerZoneTab.confirmDescPart3")}
             </p>
             <input
               className={styles.confirmInput}
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
-              placeholder="輸入「刪除」以確認"
+              placeholder={t("DangerZoneTab.confirmPlaceholder", { word: confirmWord })}
               disabled={deleting}
             />
             <div className={styles.modalActions}>
@@ -336,15 +357,15 @@ function DangerZoneTab() {
                 onClick={() => setShowConfirm(false)}
                 disabled={deleting}
               >
-                取消
+                {t("DangerZoneTab.cancel")}
               </button>
               <button
                 type="button"
                 className={styles.btnDanger}
-                disabled={confirmText !== "刪除" || deleting}
+                disabled={confirmText !== confirmWord || deleting}
                 onClick={handleDelete}
               >
-                {deleting ? "刪除中..." : "確定刪除"}
+                {deleting ? t("DangerZoneTab.deleting") : t("DangerZoneTab.confirmDelete")}
               </button>
             </div>
           </div>
@@ -358,11 +379,12 @@ function DangerZoneTab() {
 /* ── Page ───────────────────────────────────────────── */
 
 export default function AccountSettingsPage() {
+  const { t } = useTranslation("personal");
   const [activeTab, setActiveTab] = useState("profile");
 
   return (
     <div className={styles.page}>
-      <PageHeader title="帳號設定" subtitle="管理你的個人資料、密碼、外觀與帳號安全" />
+      <PageHeader title={t("AccountSettingsPage.title")} subtitle={t("AccountSettingsPage.subtitle")} />
 
       <div className={styles.tabs}>
         {TABS.map((tab) => (
@@ -373,7 +395,7 @@ export default function AccountSettingsPage() {
             onClick={() => setActiveTab(tab.key)}
           >
             <MIcon name={tab.icon} size={16} />
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>

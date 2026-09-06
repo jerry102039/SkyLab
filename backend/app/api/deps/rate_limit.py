@@ -12,6 +12,7 @@ from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, Request, status
 
+from app.core.i18n import t
 from app.infrastructure.redis import check_rate_limit_by_key, get_redis
 from app.models import User
 
@@ -65,9 +66,10 @@ def rate_limit_by_ip(
             retry_after = info.get("window_seconds", window_seconds)
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=(
-                    f"Too many requests from {ip}. "
-                    f"Retry after {retry_after} seconds."
+                detail=t(
+                    "rate_limit.ip_too_many_requests",
+                    ip=ip,
+                    retry_after=retry_after,
                 ),
                 headers={"Retry-After": str(retry_after)},
             )
@@ -107,8 +109,9 @@ def rate_limit_by_user(
             retry_after = info.get("window_seconds", window_seconds)
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=(
-                    f"Too many requests. Retry after {retry_after} seconds."
+                detail=t(
+                    "rate_limit.user_too_many_requests",
+                    retry_after=retry_after,
                 ),
                 headers={"Retry-After": str(retry_after)},
             )

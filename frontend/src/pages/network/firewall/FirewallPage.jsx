@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ReactFlow,
   useNodesState,
@@ -50,6 +51,7 @@ const toDialogKey = (nodeId) => (nodeId === GATEWAY_KEY ? "internet" : String(no
 
 /* ─── 主頁面 ─────────────────────────────────────────────── */
 export default function FirewallPage() {
+  const { t } = useTranslation("network");
   const { theme } = useTheme();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -87,11 +89,11 @@ export default function FirewallPage() {
       const data = await getTopology({ signal });
       setTopology(data ?? { nodes: [], edges: [] });
     } catch (err) {
-      if (!silent) setError(err?.message ?? "載入拓撲失敗");
+      if (!silent) setError(err?.message ?? t("FirewallPage.loadTopologyFailed"));
     } finally {
       if (!silent && !signal?.aborted) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!topology) return;
@@ -209,14 +211,14 @@ export default function FirewallPage() {
       setDeleteEdge(null);
       fetchTopology();
     } catch (err) {
-      alert(err?.message ?? "刪除失敗");
+      alert(err?.message ?? t("FirewallPage.deleteFailed"));
     }
   };
 
   return (
     <div className={styles.page}>
       {/* ── Header ── */}
-      <PageHeader title="防火牆" subtitle="管理 VM 之間與對外的網路連線規則">
+      <PageHeader title={t("FirewallPage.title")} subtitle={t("FirewallPage.subtitle")}>
         <div className={styles.headerActions}>
           <button
             type="button"
@@ -225,7 +227,7 @@ export default function FirewallPage() {
             data-guide="firewall-create"
           >
             <MIcon name="add" size={16} />
-            新增連線
+            {t("FirewallPage.addConnection")}
           </button>
         </div>
       </PageHeader>
@@ -239,7 +241,7 @@ export default function FirewallPage() {
                 <div key={i} className={styles.topoNode} style={{ "--i": i }} />
               ))}
             </div>
-            <span className={styles.loadingTitle}>載入拓撲中…</span>
+            <span className={styles.loadingTitle}>{t("FirewallPage.loadingTopology")}</span>
           </div>
         )}
 
@@ -248,7 +250,7 @@ export default function FirewallPage() {
             <MIcon name="error_outline" size={36} />
             <span>{error}</span>
             <button type="button" className={styles.btnSecondary} onClick={fetchTopology}>
-              重試
+              {t("FirewallPage.retry")}
             </button>
           </div>
         )}
@@ -283,8 +285,8 @@ export default function FirewallPage() {
                 <Panel position="top-center">
                   <div className={styles.emptyTopology}>
                     <MIcon name="security" size={23} />
-                    <strong>目前沒有可顯示的防火牆資源</strong>
-                    <span>建立 VM 後，機器與連線規則會出現在這張圖上。</span>
+                    <strong>{t("FirewallPage.emptyTitle")}</strong>
+                    <span>{t("FirewallPage.emptyDesc")}</span>
                   </div>
                 </Panel>
               )}
@@ -297,7 +299,7 @@ export default function FirewallPage() {
                     onClick={autoArrange}
                   >
                     <MIcon name="dashboard" size={16} />
-                    自動排列
+                    {t("FirewallPage.autoArrange")}
                   </button>
                   <button
                     type="button"
@@ -305,7 +307,7 @@ export default function FirewallPage() {
                     onClick={() => setShowLabels((v) => !v)}
                   >
                     <MIcon name={showLabels ? "label" : "label_off"} size={16} />
-                    連線標籤
+                    {t("FirewallPage.connectionLabels")}
                   </button>
                   <button
                     type="button"
@@ -313,14 +315,14 @@ export default function FirewallPage() {
                     onClick={() => setShowMiniMap((v) => !v)}
                   >
                     <MIcon name="map" size={16} />
-                    地圖
+                    {t("FirewallPage.miniMap")}
                   </button>
                 </div>
               </Panel>
 
               <Panel position="bottom-left" style={{ marginLeft: 60 }}>
                 <p className={styles.hint}>
-                  拖拉節點移動位置；從節點右側拖拉到另一個節點建立連線；點擊節點聚焦；再次點擊或點空白處取消
+                  {t("FirewallPage.hint")}
                 </p>
               </Panel>
             </ReactFlow>
@@ -355,16 +357,16 @@ export default function FirewallPage() {
           onClick={() => setDeleteEdge(null)}
         >
           <div className={styles.confirmDialog} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.confirmTitle}>刪除連線</h3>
+            <h3 className={styles.confirmTitle}>{t("FirewallPage.deleteConnectionTitle")}</h3>
             <p className={styles.confirmMsg}>
-              確定要刪除此連線嗎？
+              {t("FirewallPage.deleteConnectionConfirm")}
               {deleteConfirm.item.ports?.length > 0 && (
                 <><br /><small>{portLabel(deleteConfirm.item.ports)}</small></>
               )}
             </p>
             <div className={styles.confirmActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setDeleteEdge(null)}>取消</button>
-              <button type="button" className={styles.btnDanger} onClick={confirmDeleteEdge}>刪除</button>
+              <button type="button" className={styles.btnSecondary} onClick={() => setDeleteEdge(null)}>{t("FirewallPage.cancel")}</button>
+              <button type="button" className={styles.btnDanger} onClick={confirmDeleteEdge}>{t("FirewallPage.delete")}</button>
             </div>
           </div>
         </div>

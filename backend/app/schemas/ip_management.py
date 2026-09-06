@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
+from app.core.i18n import t
+
 
 class SubnetConfigCreate(BaseModel):
     """設定/更新子網配置"""
@@ -22,9 +24,9 @@ class SubnetConfigCreate(BaseModel):
         try:
             net = ipaddress.IPv4Network(v, strict=False)
         except (ipaddress.AddressValueError, ValueError) as e:
-            raise ValueError(f"無效的 CIDR 格式: {e}") from e
+            raise ValueError(t("ip.invalid_cidr", error=str(e))) from e
         if net.prefixlen == 32:
-            raise ValueError("子網遮罩不可為 /32")
+            raise ValueError(t("ip.cidr_no_slash32"))
         return str(net)
 
     @field_validator("gateway", "gateway_vm_ip")
@@ -33,7 +35,7 @@ class SubnetConfigCreate(BaseModel):
         try:
             ipaddress.IPv4Address(v)
         except (ipaddress.AddressValueError, ValueError) as e:
-            raise ValueError(f"無效的 IP 位址: {e}") from e
+            raise ValueError(t("ip.invalid_ip", error=str(e))) from e
         return v
 
     @field_validator("extra_blocked_subnets", mode="before")
@@ -60,7 +62,9 @@ class SubnetConfigCreate(BaseModel):
                 else:
                     parsed = str(ipaddress.IPv4Address(item))
             except (ipaddress.AddressValueError, ValueError) as e:
-                raise ValueError(f"無效的封鎖網段/IP '{item}': {e}") from e
+                raise ValueError(
+                    t("ip.invalid_blocked_subnet", item=item, error=str(e))
+                ) from e
             if parsed not in seen:
                 seen.add(parsed)
                 normalized.append(parsed)

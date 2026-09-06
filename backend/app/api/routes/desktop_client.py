@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, SessionDep
 from app.core.config import settings
+from app.core.i18n import t
 from app.schemas.wireguard import (
     WireGuardConnectRequest,
     WireGuardConnectResponse,
@@ -110,11 +111,13 @@ def approve_device_code(
     _cleanup_expired()
     entry = _device_codes.get(body.device_code)
     if entry is None:
-        raise HTTPException(status_code=404, detail="Device code not found or expired")
+        raise HTTPException(
+            status_code=404, detail=t("desktop.device_code_not_found")
+        )
 
     if time.time() - entry["created_at"] > _DEVICE_CODE_TTL:
         del _device_codes[body.device_code]
-        raise HTTPException(status_code=410, detail="Device code expired")
+        raise HTTPException(status_code=410, detail=t("desktop.device_code_expired"))
 
     # Generate a long-lived access token for the desktop client (8 hours)
     token = create_access_token(
@@ -131,7 +134,9 @@ def poll_device_code(code: str) -> DevicePollResponse:
     _cleanup_expired()
     entry = _device_codes.get(code)
     if entry is None:
-        raise HTTPException(status_code=404, detail="Device code not found or expired")
+        raise HTTPException(
+            status_code=404, detail=t("desktop.device_code_not_found")
+        )
 
     if entry["token"] is not None:
         token = entry["token"]
@@ -240,8 +245,11 @@ def _find_local_download_asset() -> Path | None:
 
 
 @router.get("/download")
-def download_desktop_client(session: SessionDep, current_user: CurrentUser):
+def download_desktop_client():
     """Return the desktop client installer or archive.
+
+    The installer is intentionally public so a normal browser download can
+    follow the redirect without exposing an API access token.
 
     If DESKTOP_CLIENT_DOWNLOAD_URL is set, redirects to that URL (e.g. a
     GitHub Releases asset). Otherwise serves a local file from static/downloads/
@@ -259,10 +267,7 @@ def download_desktop_client(session: SessionDep, current_user: CurrentUser):
         )
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Desktop client installer not found. Build desktop-client or set "
-                "DESKTOP_CLIENT_DOWNLOAD_URL."
-            ),
+            detail=t("desktop.installer_not_found"),
         )
 
     media_type = (

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./SettingsPage.module.scss";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import { GovernanceService } from "../../../services/governance";
@@ -9,94 +10,97 @@ import { useToast } from "../../../hooks/useToast";
  * 反挖礦 / 快照治理 / 克隆併發。單一儲存鍵送出全部欄位。
  */
 
-const SECTIONS = [
-  {
-    title: "資源警告",
-    desc: "超過閾值時建立警告事件並通知管理員（站內 + Email）。",
-    toggles: [
-      { key: "alerts_enabled", label: "啟用警告", hint: "定期檢查叢集/節點/VM 資源使用率" },
-      { key: "alert_email_enabled", label: "Email 通知", hint: "警告建立時寄送 Email 給管理員" },
-    ],
-    fields: [
-      { key: "alert_cpu_threshold", label: "CPU 閾值（%）", min: 50, max: 100, step: 0.5 },
-      { key: "alert_memory_threshold", label: "記憶體閾值（%）", min: 50, max: 100, step: 0.5 },
-      { key: "alert_disk_threshold", label: "磁碟閾值（%）", min: 50, max: 100, step: 0.5 },
-      { key: "alert_cooldown_minutes", label: "冷卻期（分鐘）", min: 1, max: 1440, hint: "同一目標同一指標在冷卻期內不重發警告" },
-      { key: "alert_check_interval_seconds", label: "檢查間隔（秒）", min: 15, max: 3600 },
-    ],
-  },
-  {
-    title: "TTL 生命週期",
-    desc: "資源到期後漸進回收：到期前通知 → 到期關機 → 寬限期滿進入刪除佇列。",
-    toggles: [
-      { key: "ttl_enabled", label: "啟用 TTL 回收", hint: "依資源到期日自動通知、關機與排入刪除" },
-    ],
-    fields: [
-      { key: "expiry_warn_days", label: "到期前通知（天）", min: 1, max: 30 },
-      { key: "expiry_grace_delete_days", label: "刪除寬限期（天）", min: 0, max: 90, hint: "到期關機後保留幾天才排入刪除佇列" },
-    ],
-  },
-  {
-    title: "閒置偵測",
-    desc: "CPU 長期低於閾值的資源先通知擁有者，寬限期滿自動關機（不刪除）。",
-    toggles: [
-      { key: "idle_detection_enabled", label: "啟用閒置偵測", hint: "偵測長期低 CPU 的運行中資源" },
-    ],
-    fields: [
-      { key: "idle_cpu_threshold_percent", label: "閒置 CPU 閾值（%）", min: 0.1, max: 20, step: 0.1 },
-      { key: "idle_window_hours", label: "觀察視窗（小時）", min: 1, max: 720 },
-      { key: "idle_grace_hours", label: "關機寬限期（小時）", min: 1, max: 720, hint: "通知後仍閒置達此時數才自動關機" },
-      { key: "idle_scan_batch_size", label: "每輪掃描台數", min: 1, max: 200 },
-    ],
-  },
-  {
-    title: "VM / LXC 自動判斷",
-    desc: "申請資源時提供「自動判斷」模式，由規則引擎依工作負載建議 VM 或 LXC。",
-    toggles: [
-      { key: "workload_advisor_enabled", label: "啟用自動判斷", hint: "停用後申請表單僅能手動選擇資源類型" },
-    ],
-    fields: [],
-  },
-  {
-    title: "反挖礦偵測",
-    desc: "CPU 長期滿載的資源自動存證快照、暫停並通知；帳號停權由管理員在「資源監控 → 挖礦事件」人工確認。",
-    toggles: [
-      { key: "mining_detection_enabled", label: "啟用挖礦偵測", hint: "定期掃描運行中資源的 CPU 特徵" },
-      { key: "mining_auto_suspend", label: "自動存證並暫停", hint: "關閉後僅建立事件與通知，暫停由管理員手動執行" },
-    ],
-    fields: [
-      { key: "mining_cpu_threshold_percent", label: "CPU 閾值（%）", min: 50, max: 100, step: 0.5 },
-      { key: "mining_window_hours", label: "觀察視窗（小時）", min: 1, max: 72, hint: "平均 CPU 持續高於閾值達此時數才判定" },
-      { key: "mining_scan_batch_size", label: "每輪掃描台數", min: 1, max: 200 },
-    ],
-  },
-  {
-    title: "快照治理",
-    desc: "定期清理過期的學生快照（skylab-init 初始快照永不清理），並限制每台 VM 的學生快照數量。",
-    toggles: [
-      { key: "snapshot_cleanup_enabled", label: "啟用快照自動清理", hint: "超過保留天數的非保護快照將被排程刪除" },
-    ],
-    fields: [
-      { key: "snapshot_retention_days", label: "保留天數", min: 1, max: 90 },
-      { key: "student_snapshot_max_count", label: "學生快照上限", min: 1, max: 10, hint: "不含 skylab-init；達上限需先刪舊快照" },
-    ],
-  },
-  {
-    title: "克隆併發",
-    desc: "同時執行的 VM/LXC 克隆數上限（克隆為 PVE 磁碟 I/O 重活，過高會拖垮儲存）。變更於下一個排程週期生效。",
-    toggles: [],
-    fields: [{ key: "provision_max_concurrency", label: "併發上限", min: 1, max: 16 }],
-  },
-];
-
-/** 所有可編輯欄位（送出時用） */
-const ALL_KEYS = SECTIONS.flatMap((s) => [
-  ...s.toggles.map((t) => t.key),
-  ...s.fields.map((f) => f.key),
-]);
+function useSections(t) {
+  return useMemo(() => [
+    {
+      title: t("GovernanceTab.alertsTitle"),
+      desc: t("GovernanceTab.alertsDesc"),
+      toggles: [
+        { key: "alerts_enabled", label: t("GovernanceTab.alertsEnabled"), hint: t("GovernanceTab.alertsEnabledHint") },
+        { key: "alert_email_enabled", label: t("GovernanceTab.alertEmailEnabled"), hint: t("GovernanceTab.alertEmailEnabledHint") },
+      ],
+      fields: [
+        { key: "alert_cpu_threshold", label: t("GovernanceTab.alertCpuThreshold"), min: 50, max: 100, step: 0.5 },
+        { key: "alert_memory_threshold", label: t("GovernanceTab.alertMemoryThreshold"), min: 50, max: 100, step: 0.5 },
+        { key: "alert_disk_threshold", label: t("GovernanceTab.alertDiskThreshold"), min: 50, max: 100, step: 0.5 },
+        { key: "alert_cooldown_minutes", label: t("GovernanceTab.alertCooldownMinutes"), min: 1, max: 1440, hint: t("GovernanceTab.alertCooldownMinutesHint") },
+        { key: "alert_check_interval_seconds", label: t("GovernanceTab.alertCheckIntervalSeconds"), min: 15, max: 3600 },
+      ],
+    },
+    {
+      title: t("GovernanceTab.ttlTitle"),
+      desc: t("GovernanceTab.ttlDesc"),
+      toggles: [
+        { key: "ttl_enabled", label: t("GovernanceTab.ttlEnabled"), hint: t("GovernanceTab.ttlEnabledHint") },
+      ],
+      fields: [
+        { key: "expiry_warn_days", label: t("GovernanceTab.expiryWarnDays"), min: 1, max: 30 },
+        { key: "expiry_grace_delete_days", label: t("GovernanceTab.expiryGraceDeleteDays"), min: 0, max: 90, hint: t("GovernanceTab.expiryGraceDeleteDaysHint") },
+      ],
+    },
+    {
+      title: t("GovernanceTab.idleTitle"),
+      desc: t("GovernanceTab.idleDesc"),
+      toggles: [
+        { key: "idle_detection_enabled", label: t("GovernanceTab.idleDetectionEnabled"), hint: t("GovernanceTab.idleDetectionEnabledHint") },
+      ],
+      fields: [
+        { key: "idle_cpu_threshold_percent", label: t("GovernanceTab.idleCpuThresholdPercent"), min: 0.1, max: 20, step: 0.1 },
+        { key: "idle_window_hours", label: t("GovernanceTab.idleWindowHours"), min: 1, max: 720 },
+        { key: "idle_grace_hours", label: t("GovernanceTab.idleGraceHours"), min: 1, max: 720, hint: t("GovernanceTab.idleGraceHoursHint") },
+        { key: "idle_scan_batch_size", label: t("GovernanceTab.idleScanBatchSize"), min: 1, max: 200 },
+      ],
+    },
+    {
+      title: t("GovernanceTab.workloadAdvisorTitle"),
+      desc: t("GovernanceTab.workloadAdvisorDesc"),
+      toggles: [
+        { key: "workload_advisor_enabled", label: t("GovernanceTab.workloadAdvisorEnabled"), hint: t("GovernanceTab.workloadAdvisorEnabledHint") },
+      ],
+      fields: [],
+    },
+    {
+      title: t("GovernanceTab.miningTitle"),
+      desc: t("GovernanceTab.miningDesc"),
+      toggles: [
+        { key: "mining_detection_enabled", label: t("GovernanceTab.miningDetectionEnabled"), hint: t("GovernanceTab.miningDetectionEnabledHint") },
+        { key: "mining_auto_suspend", label: t("GovernanceTab.miningAutoSuspend"), hint: t("GovernanceTab.miningAutoSuspendHint") },
+      ],
+      fields: [
+        { key: "mining_cpu_threshold_percent", label: t("GovernanceTab.miningCpuThresholdPercent"), min: 50, max: 100, step: 0.5 },
+        { key: "mining_window_hours", label: t("GovernanceTab.miningWindowHours"), min: 1, max: 72, hint: t("GovernanceTab.miningWindowHoursHint") },
+        { key: "mining_scan_batch_size", label: t("GovernanceTab.miningScanBatchSize"), min: 1, max: 200 },
+      ],
+    },
+    {
+      title: t("GovernanceTab.snapshotTitle"),
+      desc: t("GovernanceTab.snapshotDesc"),
+      toggles: [
+        { key: "snapshot_cleanup_enabled", label: t("GovernanceTab.snapshotCleanupEnabled"), hint: t("GovernanceTab.snapshotCleanupEnabledHint") },
+      ],
+      fields: [
+        { key: "snapshot_retention_days", label: t("GovernanceTab.snapshotRetentionDays"), min: 1, max: 90 },
+        { key: "student_snapshot_max_count", label: t("GovernanceTab.studentSnapshotMaxCount"), min: 1, max: 10, hint: t("GovernanceTab.studentSnapshotMaxCountHint") },
+      ],
+    },
+    {
+      title: t("GovernanceTab.cloneConcurrencyTitle"),
+      desc: t("GovernanceTab.cloneConcurrencyDesc"),
+      toggles: [],
+      fields: [{ key: "provision_max_concurrency", label: t("GovernanceTab.provisionMaxConcurrency"), min: 1, max: 16 }],
+    },
+  ], [t]);
+}
 
 export default function GovernanceTab() {
+  const { t } = useTranslation("system");
   const toast = useToast();
+  const SECTIONS = useSections(t);
+  /** 所有可編輯欄位（送出時用） */
+  const ALL_KEYS = useMemo(() => SECTIONS.flatMap((s) => [
+    ...s.toggles.map((tg) => tg.key),
+    ...s.fields.map((f) => f.key),
+  ]), [SECTIONS]);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -109,11 +113,11 @@ export default function GovernanceTab() {
         for (const key of ALL_KEYS) next[key] = config[key];
         setForm(next);
       })
-      .catch((err) => toast.error(err?.message ?? "載入治理設定失敗"));
+      .catch((err) => toast.error(err?.message ?? t("GovernanceTab.toastLoadFailed")));
     return () => {
       cancelled = true;
     };
-  }, [toast]);
+  }, [toast, t, ALL_KEYS]);
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -125,15 +129,15 @@ export default function GovernanceTab() {
       const next = {};
       for (const key of ALL_KEYS) next[key] = updated[key];
       setForm(next);
-      toast.success("治理設定已儲存");
+      toast.success(t("GovernanceTab.toastSaved"));
     } catch (err) {
-      toast.error(`儲存失敗：${err?.message ?? "未知錯誤"}`);
+      toast.error(t("GovernanceTab.toastSaveFailed", { message: err?.message ?? t("GovernanceTab.unknownError") }));
     } finally {
       setSaving(false);
     }
   }
 
-  if (!form) return <LoadingState text="載入治理設定..." />;
+  if (!form) return <LoadingState text={t("GovernanceTab.loading")} />;
 
   return (
     <form className={styles.panelStack} onSubmit={handleSave}>
@@ -178,7 +182,7 @@ export default function GovernanceTab() {
 
       <div className={styles.cardActions}>
         <button type="submit" className={styles.btnPrimary} disabled={saving}>
-          {saving ? "儲存中..." : "儲存治理設定"}
+          {saving ? t("GovernanceTab.saving") : t("GovernanceTab.saveConfig")}
         </button>
       </div>
     </form>

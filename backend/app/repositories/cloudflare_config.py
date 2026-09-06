@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from cryptography.fernet import InvalidToken
 from sqlmodel import Session
 
+from app.core.i18n import t
 from app.core.security import decrypt_value, encrypt_value
 from app.exceptions import AppError
 from app.models.cloudflare_config import CloudflareConfig
@@ -69,7 +70,7 @@ def get_decrypted_api_token(config: CloudflareConfig) -> str:
         return decrypt_value(config.encrypted_api_token)
     except InvalidToken as e:
         raise AppError(
-            "無法解密儲存的 Cloudflare API Token：加密金鑰已變更，請重新儲存 Cloudflare 設定",
+            t("cloudflare.decrypt_token_failed"),
             status_code=400,
         ) from e
 

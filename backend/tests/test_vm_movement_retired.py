@@ -6,10 +6,11 @@ from app.schemas.jobs import JobKind
 from app.schemas.proxmox_config import ProxmoxConfigPublic, ProxmoxConfigUpdate
 from app.schemas.vm_request import VMRequestPublic
 from app.services.scheduling import coordinator
+from tests.utils.routes import registered_paths
 
 
 def test_retired_routes_are_not_registered() -> None:
-    paths = {route.path for route in api_router.routes}
+    paths = registered_paths(api_router.routes)
     assert not any(path.startswith("/migration-jobs") for path in paths)
 
 

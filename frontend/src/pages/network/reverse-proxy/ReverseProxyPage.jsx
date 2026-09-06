@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import styles from "./ReverseProxyPage.module.scss";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import MIcon from "../../../components/MIcon";
@@ -16,30 +17,31 @@ function isAdminUser(user) {
 
 /* ── How it works（靜態說明） ───────────────────────── */
 function HowItWorks() {
+  const { t } = useTranslation("network");
   const [open, setOpen] = useState(false);
 
   const STEPS = [
     {
       num: "1",
-      title: "設定網址",
-      desc: "幫網址取個開頭、選一個結尾，並指定要綁定的 VM 和服務的 Port。",
+      title: t("ReverseProxyPage.howItWorks.step1Title"),
+      desc: t("ReverseProxyPage.howItWorks.step1Desc"),
     },
     {
       num: "2",
-      title: "系統自動設定",
-      desc: "剩下的交給系統自動完成，開啟安全連線（https）時還會自動申請免費憑證。",
+      title: t("ReverseProxyPage.howItWorks.step2Title"),
+      desc: t("ReverseProxyPage.howItWorks.step2Desc"),
     },
     {
       num: "3",
-      title: "直接訪問",
-      desc: "任何人都可以透過這個網址直接訪問你 VM 裡跑的網站或 API。",
+      title: t("ReverseProxyPage.howItWorks.step3Title"),
+      desc: t("ReverseProxyPage.howItWorks.step3Desc"),
     },
   ];
 
   const PREREQS = [
-    "你的 VM 裡需要有一個正在執行的網站或 API 服務",
-    "你需要知道服務跑在哪個 Port（Node.js 預設 3000、Flask 預設 5000、Nginx 預設 80）",
-    "管理員需要先在 Cloudflare 域名管理設定預設 A/CNAME 指向與可用 Zone",
+    t("ReverseProxyPage.howItWorks.prereq1"),
+    t("ReverseProxyPage.howItWorks.prereq2"),
+    t("ReverseProxyPage.howItWorks.prereq3"),
   ];
 
   return (
@@ -53,7 +55,7 @@ function HowItWorks() {
       >
         <span className={styles.infoToggleLeft}>
           <MIcon name="help_outline" size={16} />
-          這是什麼？反向代理怎麼運作？
+          {t("ReverseProxyPage.howItWorks.toggle")}
         </span>
         <span className={`${styles.infoChevron} ${open ? styles.open : ""}`}>
           <MIcon name="expand_more" size={18} />
@@ -77,7 +79,7 @@ function HowItWorks() {
           <div className={styles.prereqBox}>
             <span className={styles.prereqTitle}>
               <MIcon name="checklist" size={15} />
-              前置作業
+              {t("ReverseProxyPage.howItWorks.prereqTitle")}
             </span>
             <ul className={styles.prereqList}>
               {PREREQS.map((p) => (
@@ -93,6 +95,7 @@ function HowItWorks() {
 
 /* ── Traefik Runtime（Admin） ───────────────────────── */
 function TraefikPanel() {
+  const { t } = useTranslation("network");
   const [open, setOpen] = useState(false);
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -102,9 +105,9 @@ function TraefikPanel() {
     setLoading(true);
     ReverseProxyService.runtime()
       .then(setSnapshot)
-      .catch(() => setSnapshot({ runtime_error: "無法連線 Traefik API" }))
+      .catch(() => setSnapshot({ runtime_error: t("ReverseProxyPage.traefik.connectFailed") }))
       .finally(() => setLoading(false));
-  }, [open, snapshot]);
+  }, [open, snapshot, t]);
 
   const sections = snapshot
     ? [
@@ -124,7 +127,7 @@ function TraefikPanel() {
       >
         <span className={styles.adminToggleLeft}>
           <MIcon name="security" size={16} />
-          管理員工具 — Traefik Runtime
+          {t("ReverseProxyPage.traefik.toggle")}
           <span className={styles.adminBadge}>Admin</span>
         </span>
         <span className={`${styles.infoChevron} ${open ? styles.open : ""}`}>
@@ -135,7 +138,7 @@ function TraefikPanel() {
       {open && (
         <div className={styles.adminBody}>
           {loading ? (
-            <LoadingState text="載入 Traefik 狀態..." />
+            <LoadingState text={t("ReverseProxyPage.traefik.loading")} />
           ) : snapshot?.runtime_error ? (
             <div className={styles.adminMeta}>
               <span className={`${styles.statusPill} ${styles.unknown}`}>
@@ -201,6 +204,7 @@ function TraefikPanel() {
 
 /* ── Page ──────────────────────────────────────────── */
 export default function ReverseProxyPage() {
+  const { t } = useTranslation("network");
   const { user } = useAuth();
   const toast = useToast();
   const isAdmin = isAdminUser(user);
@@ -223,11 +227,11 @@ export default function ReverseProxyPage() {
       setRules(rulesRes ?? []);
       if (ctxRes) setSetupContext(ctxRes);
     } catch (err) {
-      toast.error(err?.message ?? "載入網址清單失敗");
+      toast.error(err?.message ?? t("ReverseProxyPage.loadListFailed"));
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     fetchData();
@@ -239,15 +243,15 @@ export default function ReverseProxyPage() {
     try {
       if (modal?.rule) {
         await ReverseProxyService.updateRule(modal.rule.id, payload);
-        toast.success("網址已更新，系統會自動同步相關設定");
+        toast.success(t("ReverseProxyPage.updateSuccess"));
       } else {
         await ReverseProxyService.createRule(payload);
-        toast.success("網址建立成功，系統正在自動完成設定");
+        toast.success(t("ReverseProxyPage.createSuccess"));
       }
       setModal(null);
       fetchData();
     } catch (err) {
-      toast.error(err?.message ?? "儲存網址失敗");
+      toast.error(err?.message ?? t("ReverseProxyPage.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -258,11 +262,11 @@ export default function ReverseProxyPage() {
     setSaving(true);
     try {
       await ReverseProxyService.deleteRule(modal.rule.id);
-      toast.success("網址已刪除");
+      toast.success(t("ReverseProxyPage.deleteSuccess"));
       setModal(null);
       fetchData();
     } catch (err) {
-      toast.error(err?.message ?? "刪除失敗");
+      toast.error(err?.message ?? t("ReverseProxyPage.deleteFailed"));
     } finally {
       setSaving(false);
     }
@@ -272,9 +276,9 @@ export default function ReverseProxyPage() {
     setSyncing(true);
     try {
       const res = await ReverseProxyService.syncRules();
-      toast.success(res?.message ?? "已重新同步路由");
+      toast.success(res?.message ?? t("ReverseProxyPage.syncSuccess"));
     } catch (err) {
-      toast.error(err?.message ?? "同步失敗");
+      toast.error(err?.message ?? t("ReverseProxyPage.syncFailed"));
     } finally {
       setSyncing(false);
     }
@@ -282,7 +286,7 @@ export default function ReverseProxyPage() {
 
   function openCreate() {
     if (setupBlocked) {
-      toast.error(setupContext?.reasons?.[0] ?? "這個功能目前暫時無法使用");
+      toast.error(setupContext?.reasons?.[0] ?? t("ReverseProxyPage.featureDisabled"));
       return;
     }
     setModal({ kind: "rule" });
@@ -291,25 +295,25 @@ export default function ReverseProxyPage() {
   return (
     <div className={styles.page}>
       {/* Header */}
-      <PageHeader title="反向代理" subtitle="讓別人透過一個好記的網址來訪問你 VM 裡的網站或服務">
+      <PageHeader title={t("ReverseProxyPage.title")} subtitle={t("ReverseProxyPage.subtitle")}>
         <div className={styles.headerActions}>
           {isAdmin && (
             <button type="button" className={styles.btnSecondary} onClick={handleSync} disabled={syncing}>
               <MIcon name="sync" size={16} />
-              {syncing ? "同步中..." : "重新同步"}
+              {syncing ? t("ReverseProxyPage.syncing") : t("ReverseProxyPage.resync")}
             </button>
           )}
           <button type="button" className={styles.btnPrimary} onClick={openCreate} data-guide="proxy-create">
             <MIcon name="add" size={16} />
-            新增網址
+            {t("ReverseProxyPage.addDomain")}
           </button>
         </div>
       </PageHeader>
 
       {setupBlocked && (
         <div className={styles.noticeDanger}>
-          <p><strong>這個功能目前暫時無法使用</strong></p>
-          <p>{(setupContext?.reasons ?? []).join("；") || "請先完成必要設定"}</p>
+          <p><strong>{t("ReverseProxyPage.featureDisabled")}</strong></p>
+          <p>{(setupContext?.reasons ?? []).join("；") || t("ReverseProxyPage.setupIncomplete")}</p>
         </div>
       )}
 
@@ -319,11 +323,11 @@ export default function ReverseProxyPage() {
       {/* Route list / empty */}
       <div className={styles.content} data-guide="proxy-list">
         {loading ? (
-          <LoadingState text="載入網址清單..." />
+          <LoadingState text={t("ReverseProxyPage.loadingList")} />
         ) : rules.length === 0 ? (
           <EmptyState
             icon="swap_horiz"
-            title="還沒有任何網址"
+            title={t("ReverseProxyPage.emptyTitle")}
           />
         ) : (
           <>
@@ -336,7 +340,7 @@ export default function ReverseProxyPage() {
                 <div className={styles.rowMain}>
                   <span className={styles.rowName}>{rule.domain}</span>
                   <span className={styles.rowMeta}>
-                    VM {rule.vmid}（{rule.vm_ip}）· Port {rule.internal_port}
+                    {t("ReverseProxyPage.rowMeta", { vmid: rule.vmid, ip: rule.vm_ip, port: rule.internal_port })}
                     {rule.enable_https && (
                       <span className={styles.badge}>
                         <MIcon name="lock" size={11} /> HTTPS
@@ -351,13 +355,13 @@ export default function ReverseProxyPage() {
                   rel="noreferrer"
                 >
                   <MIcon name="open_in_new" size={14} />
-                  開啟
+                  {t("ReverseProxyPage.open")}
                 </a>
                 <div className={styles.rowActions}>
                   <button
                     type="button"
                     className={styles.actionBtn}
-                    title="編輯"
+                    title={t("ReverseProxyPage.edit")}
                     onClick={() => setModal({ kind: "rule", rule })}
                   >
                     <MIcon name="edit" size={16} />
@@ -365,7 +369,7 @@ export default function ReverseProxyPage() {
                   <button
                     type="button"
                     className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-                    title="刪除"
+                    title={t("ReverseProxyPage.delete")}
                     onClick={() => setModal({ kind: "delete", rule })}
                   >
                     <MIcon name="delete" size={16} />
@@ -401,17 +405,21 @@ export default function ReverseProxyPage() {
             <div className={styles.confirmIcon}>
               <MIcon name="warning" size={24} />
             </div>
-            <h2>刪除網址</h2>
+            <h2>{t("ReverseProxyPage.deleteDomainTitle")}</h2>
             <p>
-              確定要刪除 <strong>{modalPresence.item.rule.domain}</strong> 嗎？刪除後這個網址會立刻失效，
-              相關設定也會一併清除。
+              <Trans
+                i18nKey="ReverseProxyPage.deleteDomainConfirm"
+                ns="network"
+                values={{ domain: modalPresence.item.rule.domain }}
+                components={{ strong: <strong /> }}
+              />
             </p>
             <div className={styles.modalActions}>
               <button type="button" className={styles.btnSecondary} onClick={() => setModal(null)}>
-                取消
+                {t("ReverseProxyPage.cancel")}
               </button>
               <button type="button" className={styles.btnDanger} disabled={saving} onClick={handleDeleteRule}>
-                {saving ? "刪除中..." : "刪除"}
+                {saving ? t("ReverseProxyPage.deleting") : t("ReverseProxyPage.delete")}
               </button>
             </div>
           </div>

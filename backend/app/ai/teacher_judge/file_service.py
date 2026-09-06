@@ -24,6 +24,7 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
 )
 from app.ai.teacher_judge.template_command_service import SUPPORTED_TEMPLATE_KEYS
+from app.core.i18n import t
 from app.models.teacher_judge_file import TeacherJudgeFile, TeacherJudgeFileStatus
 from app.models.teacher_judge_script_artifact import TeacherJudgeScriptArtifact
 from app.models.teacher_judge_session import TeacherJudgeSession
@@ -91,7 +92,7 @@ def _unlink_if_exists(path: Path) -> None:
 def _raise_name_conflict(existing: TeacherJudgeFile | None = None) -> None:
     detail: dict[str, str] = {
         "code": "teacher_judge_file_name_conflict",
-        "message": "已有同名評分表。",
+        "message": t("file.name_conflict"),
     }
     if existing is not None:
         detail["file_id"] = str(existing.id)
@@ -186,7 +187,7 @@ def _copy_filename(
         candidate = f"{stem} ({index}){suffix}"
         if candidate not in existing:
             return candidate
-    raise HTTPException(status_code=409, detail="無法建立同名副本，請重新命名檔案。")
+    raise HTTPException(status_code=409, detail=t("file.copy_name_exhausted"))
 
 
 def _file_snapshot(file: TeacherJudgeFile | None) -> dict[str, Any]:
@@ -224,7 +225,7 @@ def get_file(
 ) -> TeacherJudgeFile:
     file = session.get(TeacherJudgeFile, file_id)
     if file is None or file.teaching_class_id != teaching_class_id:
-        raise HTTPException(status_code=404, detail="找不到評分表來源。")
+        raise HTTPException(status_code=404, detail=t("file.not_found"))
     return file
 
 
@@ -236,10 +237,12 @@ def get_file_download(
 ) -> tuple[Path, str]:
     file = get_file(session=session, teaching_class_id=teaching_class_id, file_id=file_id)
     if file.source_type == "created" or not file.original_filename:
-        raise HTTPException(status_code=409, detail="這份評分表是系統建立的，沒有原始文件可下載。")
+        raise HTTPException(
+            status_code=409, detail=t("file.created_no_document")
+        )
     path = _stored_path(file.id, file.original_filename)
     if not path.is_file():
-        raise HTTPException(status_code=404, detail="原始評分表檔案不存在。")
+        raise HTTPException(status_code=404, detail=t("file.original_missing"))
     return path, file.original_filename
 
 
@@ -255,23 +258,31 @@ def prepare_file_payload(
     if suffix not in allowed_suffixes:
         raise HTTPException(
             status_code=415,
-            detail=f"不支援的格式 '{suffix}'，目前接受：{', '.join(sorted(allowed_suffixes))}",
+            detail=t(
+                "file.unsupported_format",
+                suffix=suffix,
+                allowed=", ".join(sorted(allowed_suffixes)),
+            ),
         )
     if len(file_bytes) > max_upload_size_bytes:
         file_size_mb = len(file_bytes) / (1024 * 1024)
         max_size_mb = max_upload_size_bytes / (1024 * 1024)
         raise HTTPException(
             status_code=413,
-            detail=f"檔案大小 {file_size_mb:.1f}MB 超過限制（最大 {max_size_mb:.0f}MB）",
+            detail=t(
+                "file.size_exceeded",
+                size=f"{file_size_mb:.1f}",
+                max_size=f"{max_size_mb:.0f}",
+            ),
         )
     if not file_bytes:
-        raise HTTPException(status_code=400, detail="上傳的檔案是空的。")
+        raise HTTPException(status_code=400, detail=t("file.empty_upload"))
     file_hash = hashlib.sha256(file_bytes).hexdigest()
     raw_text = parse_document(original_filename, file_bytes)
     if not raw_text.strip():
         raise HTTPException(
             status_code=422,
-            detail="無法從文件中提取任何文字，請確認文件不是掃描版 PDF。",
+            detail=t("file.no_extractable_text"),
         )
     return original_filename, file_hash, raw_text
 
@@ -397,13 +408,15 @@ def update_file_analysis(
 ) -> TeacherJudgeFilePublic:
     file = get_file(session=session, teaching_class_id=teaching_class_id, file_id=file_id)
     if file.status != TeacherJudgeFileStatus.active:
-        raise HTTPException(status_code=409, detail="這份評分表已被取代，請先選擇進行中的來源。")
+        raise HTTPException(
+            status_code=409, detail=t("file.replaced_choose_active")
+        )
     if expected_revision is not None and file.analysis_revision != expected_revision:
         raise HTTPException(
             status_code=409,
             detail={
                 "code": "teacher_judge_analysis_revision_conflict",
-                "message": "評分表已被其他變更更新，請重新載入後再套用。",
+                "message": t("file.revision_conflict"),
                 "analysis_revision": file.analysis_revision,
             },
         )
@@ -433,9 +446,11 @@ def create_blank_file(
     name = display_name.strip()
     normalized = list(dict.fromkeys(key.strip().lower() for key in environment_keys if key.strip()))
     if not name:
-        raise HTTPException(status_code=422, detail="評分表名稱不可為空白。")
+        raise HTTPException(status_code=422, detail=t("file.blank_name"))
     if not normalized or any(key not in SUPPORTED_TEMPLATE_KEYS for key in normalized):
-        raise HTTPException(status_code=422, detail="至少選擇一個評分環境。")
+        raise HTTPException(
+            status_code=422, detail=t("file.no_environment_selected")
+        )
     analysis = TeacherJudgeRubricAnalysis()
     item = TeacherJudgeFile(
         teaching_class_id=teaching_class_id,
@@ -465,7 +480,9 @@ def update_file_metadata(
 ) -> TeacherJudgeFilePublic:
     file = get_file(session=session, teaching_class_id=teaching_class_id, file_id=file_id)
     if file.status != TeacherJudgeFileStatus.active:
-        raise HTTPException(status_code=409, detail="這份評分表已被取代，無法編輯。")
+        raise HTTPException(
+            status_code=409, detail=t("file.replaced_cannot_edit")
+        )
     if payload.display_name is not None:
         file.display_name = payload.display_name
     if payload.environment_keys is not None:
@@ -474,7 +491,9 @@ def update_file_metadata(
             file.template_key = payload.environment_keys[0]
     if payload.template_key is not None:
         if payload.template_key not in (file.environment_keys or [payload.template_key]):
-            raise HTTPException(status_code=422, detail="主要評分環境必須包含在候選環境中。")
+            raise HTTPException(
+                status_code=422, detail=t("file.template_key_not_in_candidates")
+            )
         file.template_key = payload.template_key
     file.updated_at = _now()
     session.add(file)
@@ -496,15 +515,19 @@ def clone_file_asset(
     staged file is removed if writing fails, so a fork cannot leave a half-file.
     """
     if source.teaching_class_id != teaching_class_id:
-        raise HTTPException(status_code=404, detail="找不到評分表來源。")
+        raise HTTPException(status_code=404, detail=t("file.not_found"))
     copied_filename: str | None = None
     source_path: Path | None = None
     if source.source_type == "uploaded":
         if not source.original_filename or not source.file_hash:
-            raise HTTPException(status_code=409, detail="原始評分表資訊不完整，無法複製。")
+            raise HTTPException(
+                status_code=409, detail=t("file.clone_info_incomplete")
+            )
         source_path = _stored_path(source.id, source.original_filename)
         if not source_path.is_file():
-            raise HTTPException(status_code=404, detail="原始評分表檔案不存在，無法複製。")
+            raise HTTPException(
+                status_code=404, detail=t("file.clone_original_missing")
+            )
         copied_filename = _copy_filename(
             session=session,
             teaching_class_id=teaching_class_id,
@@ -654,5 +677,7 @@ def parse_conflict_strategy(value: str | None) -> ConflictStrategy | None:
         return None
     normalized = value.strip().lower()
     if normalized not in {"overwrite", "copy"}:
-        raise HTTPException(status_code=400, detail="未知的同名檔案處理方式。")
+        raise HTTPException(
+            status_code=400, detail=t("file.unknown_conflict_strategy")
+        )
     return cast("ConflictStrategy", normalized)

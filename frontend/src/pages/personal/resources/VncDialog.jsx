@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { VncScreen } from "react-vnc";
 import { AuthStorage } from "../../../services/auth";
 import { ResourcesService } from "../../../services/resources";
@@ -11,6 +12,7 @@ import styles from "./ConsoleDialog.module.scss";
 const CONSOLE_INFO_TIMEOUT_MS = 15000;
 
 export default function VncDialog({ resource, onClose }) {
+  const { t } = useTranslation("personal");
   const vncRef      = useRef(null);
   const dialogRef   = useRef(null);
   const requestSeq  = useRef(0);
@@ -50,7 +52,7 @@ export default function VncDialog({ resource, onClose }) {
 
     const timeoutId = window.setTimeout(() => {
       if (cancelled || requestSeq.current !== seq || !mountedRef.current) return;
-      setError("取得控制台資訊逾時，請稍後再試。");
+      setError(t("VncDialog.timeoutError"));
     }, CONSOLE_INFO_TIMEOUT_MS);
 
     ResourcesService.getConsole(resource.vmid)
@@ -63,7 +65,7 @@ export default function VncDialog({ resource, onClose }) {
         const ticket = data.ticket ?? "";
         const port   = data.port   ?? "";
         if (!ticket) {
-          setError("無法建立遠端畫面連線，請稍後再試");
+          setError(t("VncDialog.connectFailed"));
           return;
         }
         let url = `${proto}//${apiUrl.host}/ws/vnc/${resource.vmid}?token=${encodeURIComponent(token)}&vnc_ticket=${encodeURIComponent(ticket)}`;
@@ -74,7 +76,7 @@ export default function VncDialog({ resource, onClose }) {
       .catch((e) => {
         if (cancelled || requestSeq.current !== seq || !mountedRef.current) return;
         window.clearTimeout(timeoutId);
-        setError(e.message ?? "無法取得控制台資訊");
+        setError(e.message ?? t("VncDialog.fetchInfoFailed"));
       });
 
     return () => {
@@ -110,9 +112,9 @@ export default function VncDialog({ resource, onClose }) {
         <div className={styles.header}>
           <span className={styles.headerIcon}><MIcon name="desktop_windows" size={18} /></span>
           <span className={styles.headerTitleGroup}>
-            <span className={styles.headerTitle}>控制台 — {resource.name}</span>
+            <span className={styles.headerTitle}>{t("VncDialog.titlePrefix", { name: resource.name })}</span>
             <span className={`${styles.statusDot} ${connected ? styles.dot_connected : styles.dot_connecting}`} />
-            <span className={styles.statusText}>{connected ? "已連接" : "連接中"}</span>
+            <span className={styles.statusText}>{connected ? t("VncDialog.statusConnected") : t("VncDialog.statusConnecting")}</span>
           </span>
           {connected && (
             <>
@@ -120,12 +122,12 @@ export default function VncDialog({ resource, onClose }) {
                 <MIcon name="keyboard" size={16} />
                 <span style={{ fontSize: 11 }}>Ctrl+Alt+Del</span>
               </button>
-              <button type="button" className={styles.headerBtn} title="貼上剪貼簿" onClick={handleClipboard}>
+              <button type="button" className={styles.headerBtn} title={t("VncDialog.pasteClipboard")} onClick={handleClipboard}>
                 <MIcon name="content_paste" size={16} />
               </button>
             </>
           )}
-          <button type="button" className={styles.headerBtn} title={isFullscreen ? "離開全螢幕" : "全螢幕"} onClick={() => toggleFullscreen(dialogRef.current)}>
+          <button type="button" className={styles.headerBtn} title={isFullscreen ? t("VncDialog.exitFullscreen") : t("VncDialog.fullscreen")} onClick={() => toggleFullscreen(dialogRef.current)}>
             <MIcon name={isFullscreen ? "fullscreen_exit" : "fullscreen"} size={16} />
           </button>
           <button type="button" className={styles.closeBtn} onClick={handleClose}>
@@ -141,7 +143,7 @@ export default function VncDialog({ resource, onClose }) {
 
         {!error && !wsUrl && (
           <div className={styles.statusBanner}>
-            <MIcon name="hourglass_empty" size={16} />取得控制台資訊中…
+            <MIcon name="hourglass_empty" size={16} />{t("VncDialog.fetchingInfo")}
           </div>
         )}
 

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from cryptography.fernet import InvalidToken
 from sqlmodel import Session
 
+from app.core.i18n import t
 from app.core.security import decrypt_value, encrypt_value
 from app.exceptions import AppError
 from app.models.gateway_config import GatewayConfig
@@ -70,7 +71,7 @@ def get_decrypted_private_key(config: GatewayConfig) -> str:
         return decrypt_value(config.encrypted_private_key)
     except InvalidToken as e:
         raise AppError(
-            "無法解密儲存的 SSH 私鑰：加密金鑰已變更，請重新產生並儲存 Gateway SSH 金鑰對",
+            t("gateway.decrypt_private_key_failed"),
             status_code=400,
         ) from e
 

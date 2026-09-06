@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -8,6 +9,7 @@ import MIcon from "../../../components/MIcon";
 import styles from "./ConsoleDialog.module.scss";
 
 export default function TerminalDialog({ resource, onClose }) {
+  const { t } = useTranslation("personal");
   const [status, setStatus]       = useState("connecting");
   const [error, setError]         = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -102,8 +104,8 @@ export default function TerminalDialog({ resource, onClose }) {
       }
     };
 
-    ws.onerror = () => { if (isAlive) { setStatus("error"); setError("無法建立連線，請稍後再試"); } };
-    ws.onclose = (e) => { if (isAlive) { setStatus("disconnected"); setError(e.code === 1000 ? "連接已關閉" : "連接中斷，請重新整理後再試"); } };
+    ws.onerror = () => { if (isAlive) { setStatus("error"); setError(t("TerminalDialog.connectFailed")); } };
+    ws.onclose = (e) => { if (isAlive) { setStatus("disconnected"); setError(e.code === 1000 ? t("TerminalDialog.connectionClosed") : t("TerminalDialog.connectionLost")); } };
 
     term.onData((d) => {
       if (ws.readyState === WebSocket.OPEN && isReady) {
@@ -141,21 +143,21 @@ export default function TerminalDialog({ resource, onClose }) {
         <div className={styles.header}>
           <span className={styles.headerIcon}><MIcon name="terminal" size={18} /></span>
           <span className={styles.headerTitleGroup}>
-            <span className={styles.headerTitle}>終端機 — {resource.name}</span>
+            <span className={styles.headerTitle}>{t("TerminalDialog.titlePrefix", { name: resource.name })}</span>
             <span className={`${styles.statusDot} ${styles[`dot_${status}`]}`} />
-            <span className={styles.statusText}>{STATUS_LABEL[status]}</span>
+            <span className={styles.statusText}>{t(STATUS_LABEL[status])}</span>
           </span>
           {status === "connected" && (
             <>
-              <button type="button" className={`${styles.headerBtn} ${styles.headerBtnDanger}`} title="清除" onClick={() => termRef.current?.clear()}>
+              <button type="button" className={`${styles.headerBtn} ${styles.headerBtnDanger}`} title={t("TerminalDialog.clear")} onClick={() => termRef.current?.clear()}>
                 <MIcon name="delete_sweep" size={16} />
               </button>
-              <button type="button" className={`${styles.headerBtn} ${styles.headerBtnDanger}`} title="重置" onClick={() => termRef.current?.reset()}>
+              <button type="button" className={`${styles.headerBtn} ${styles.headerBtnDanger}`} title={t("TerminalDialog.reset")} onClick={() => termRef.current?.reset()}>
                 <MIcon name="restart_alt" size={16} />
               </button>
             </>
           )}
-          <button type="button" className={styles.headerBtn} title={isFullscreen ? "離開全螢幕" : "全螢幕"} onClick={toggleFullscreen}>
+          <button type="button" className={styles.headerBtn} title={isFullscreen ? t("TerminalDialog.exitFullscreen") : t("TerminalDialog.fullscreen")} onClick={toggleFullscreen}>
             <MIcon name={isFullscreen ? "fullscreen_exit" : "fullscreen"} size={16} />
           </button>
           <button type="button" className={styles.closeBtn} onClick={handleClose}>
@@ -170,21 +172,21 @@ export default function TerminalDialog({ resource, onClose }) {
               {status === "connecting" && (
                 <>
                   <span className={styles.terminalOverlayIcon}><MIcon name="terminal" size={40} /></span>
-                  <span className={styles.terminalOverlayTitle}>正在連接</span>
-                  <span className={styles.terminalOverlayDesc}>正在建立終端連線至 {resource.name}…</span>
+                  <span className={styles.terminalOverlayTitle}>{t("TerminalDialog.connecting")}</span>
+                  <span className={styles.terminalOverlayDesc}>{t("TerminalDialog.connectingDesc", { name: resource.name })}</span>
                 </>
               )}
               {status === "error" && (
                 <>
                   <span className={`${styles.terminalOverlayIcon} ${styles.terminalOverlayIconError}`}><MIcon name="error_outline" size={40} /></span>
-                  <span className={styles.terminalOverlayTitle}>連線失敗</span>
+                  <span className={styles.terminalOverlayTitle}>{t("TerminalDialog.connectFailedTitle")}</span>
                   <span className={styles.terminalOverlayDesc}>{error}</span>
                 </>
               )}
               {status === "disconnected" && (
                 <>
                   <span className={`${styles.terminalOverlayIcon} ${styles.terminalOverlayIconMuted}`}><MIcon name="link_off" size={40} /></span>
-                  <span className={styles.terminalOverlayTitle}>連線已中斷</span>
+                  <span className={styles.terminalOverlayTitle}>{t("TerminalDialog.disconnectedTitle")}</span>
                   <span className={styles.terminalOverlayDesc}>{error}</span>
                 </>
               )}
@@ -197,8 +199,8 @@ export default function TerminalDialog({ resource, onClose }) {
 }
 
 const STATUS_LABEL = {
-  connecting:   "連接中",
-  connected:    "已連接",
-  disconnected: "已中斷",
-  error:        "錯誤",
+  connecting:   "TerminalDialog.statusConnecting",
+  connected:    "TerminalDialog.statusConnected",
+  disconnected: "TerminalDialog.statusDisconnected",
+  error:        "TerminalDialog.statusError",
 };

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../../../../contexts/AuthContext";
 import styles from "./ResourceDetailPage.module.scss";
 import MIcon from "../../../../components/MIcon";
@@ -8,12 +9,13 @@ import { downloadBlob } from "../../../../services/api";
 import { useToast } from "../../../../hooks/useToast";
 
 const STATUS_BADGE = {
-  running: { label: "執行中", cls: "badge_ok" },
-  stopped: { label: "已關機", cls: "badge_muted" },
-  paused:  { label: "已暫停", cls: "badge_muted" },
+  running: { labelKey: "OverviewTab.statusRunning", cls: "badge_ok" },
+  stopped: { labelKey: "OverviewTab.statusStopped", cls: "badge_muted" },
+  paused:  { labelKey: "OverviewTab.statusPaused", cls: "badge_muted" },
 };
 
 export default function OverviewTab({ vmid }) {
+  const { t } = useTranslation("personal");
   const toast = useToast();
   const { user } = useAuth();
   /* VMID 是系統內部編號，僅管理員／老師看得到 */
@@ -55,7 +57,7 @@ export default function OverviewTab({ vmid }) {
       const blob = await ResourcesService.downloadTemplateManual(vmid, attachment.id);
       downloadBlob(blob, attachment.filename);
     } catch (e) {
-      toast.error(e?.message ?? "下載失敗");
+      toast.error(e?.message ?? t("OverviewTab.downloadFailed"));
     } finally {
       setDownloadingId(null);
     }
@@ -67,14 +69,15 @@ export default function OverviewTab({ vmid }) {
       setCopied(label);
       setTimeout(() => setCopied(""), 2000);
     } catch {
-      toast.error("複製失敗");
+      toast.error(t("OverviewTab.copyFailed"));
     }
   };
 
-  if (error) return <p className={styles.stateText}>無法載入資源資訊</p>;
+  if (error) return <p className={styles.stateText}>{t("OverviewTab.loadFailed")}</p>;
   if (!resource) return <LoadingState />;
 
   const badge = STATUS_BADGE[resource.status] ?? {
+    labelKey: null,
     label: resource.status,
     cls: "badge_muted",
   };
@@ -88,10 +91,10 @@ export default function OverviewTab({ vmid }) {
             <div>
               <h2 className={styles.cardTitle}>
                 <MIcon name="description" size={18} />
-                使用手冊
+                {t("OverviewTab.manualTitle")}
               </h2>
               <p className={styles.cardDesc}>
-                來自範本「{manual.template_name}」的說明文件
+                {t("OverviewTab.manualDesc", { name: manual.template_name })}
               </p>
             </div>
           </div>
@@ -108,7 +111,7 @@ export default function OverviewTab({ vmid }) {
                     onClick={() => downloadManual(a)}
                   >
                     <MIcon name="download" size={15} />
-                    {downloadingId === a.id ? "下載中…" : "下載"}
+                    {downloadingId === a.id ? t("OverviewTab.downloading") : t("OverviewTab.download")}
                   </button>
                 </div>
               ))}
@@ -123,37 +126,37 @@ export default function OverviewTab({ vmid }) {
           <div>
             <h2 className={styles.cardTitle}>
               <MIcon name="dns" size={18} />
-              基本資訊
+              {t("OverviewTab.basicInfoTitle")}
             </h2>
-            <p className={styles.cardDesc}>資源的識別與所在位置</p>
+            <p className={styles.cardDesc}>{t("OverviewTab.basicInfoDesc")}</p>
           </div>
         </div>
         <div className={`${styles.cardBody} ${styles.factGrid}`}>
           {showVmid && (
             <div className={styles.fact}>
-              <span className={styles.factLabel}>編號</span>
+              <span className={styles.factLabel}>{t("OverviewTab.idLabel")}</span>
               <span className={styles.factValue}>{resource.vmid}</span>
             </div>
           )}
           <div className={styles.fact}>
-            <span className={styles.factLabel}>名稱</span>
+            <span className={styles.factLabel}>{t("OverviewTab.nameLabel")}</span>
             <span className={styles.factValue}>{resource.name}</span>
           </div>
           <div className={styles.fact}>
-            <span className={styles.factLabel}>類型</span>
+            <span className={styles.factLabel}>{t("OverviewTab.typeLabel")}</span>
             <span className={styles.factValue}>{String(resource.type).toUpperCase()}</span>
           </div>
           <div className={styles.fact}>
-            <span className={styles.factLabel}>狀態</span>
-            <span className={`${styles.badge} ${styles[badge.cls]}`}>{badge.label}</span>
+            <span className={styles.factLabel}>{t("OverviewTab.statusLabel")}</span>
+            <span className={`${styles.badge} ${styles[badge.cls]}`}>{badge.labelKey ? t(badge.labelKey) : badge.label}</span>
           </div>
           <div className={styles.fact}>
-            <span className={styles.factLabel}>節點</span>
+            <span className={styles.factLabel}>{t("OverviewTab.nodeLabel")}</span>
             <span className={styles.factValue}>{resource.node}</span>
           </div>
           {resource.ip_address && (
             <div className={styles.fact}>
-              <span className={styles.factLabel}>IP 位址</span>
+              <span className={styles.factLabel}>{t("OverviewTab.ipLabel")}</span>
               <span className={`${styles.factValue} ${styles.monoText}`}>
                 {resource.ip_address}
               </span>
@@ -168,9 +171,9 @@ export default function OverviewTab({ vmid }) {
           <div>
             <h2 className={styles.cardTitle}>
               <MIcon name="memory" size={18} />
-              資源配置
+              {t("OverviewTab.resourceConfigTitle")}
             </h2>
-            <p className={styles.cardDesc}>目前分配的運算資源</p>
+            <p className={styles.cardDesc}>{t("OverviewTab.resourceConfigDesc")}</p>
           </div>
         </div>
         <div className={`${styles.cardBody} ${styles.specGrid}`}>
@@ -181,7 +184,7 @@ export default function OverviewTab({ vmid }) {
             <div>
               <span className={styles.factLabel}>CPU</span>
               <span className={styles.specValue}>{resource.maxcpu}</span>
-              <span className={styles.mutedText}>核心</span>
+              <span className={styles.mutedText}>{t("OverviewTab.coresUnit")}</span>
             </div>
           </div>
           <div className={styles.specTile}>
@@ -189,7 +192,7 @@ export default function OverviewTab({ vmid }) {
               <MIcon name="sd_card" size={22} />
             </span>
             <div>
-              <span className={styles.factLabel}>記憶體</span>
+              <span className={styles.factLabel}>{t("MonitoringTab.memory")}</span>
               <span className={styles.specValue}>
                 {resource.maxmem ? (resource.maxmem / 1024 ** 3).toFixed(2) : "N/A"}
               </span>
@@ -206,27 +209,27 @@ export default function OverviewTab({ vmid }) {
             <div>
               <h2 className={styles.cardTitle}>
                 <MIcon name="event" size={18} />
-                環境資訊
+                {t("OverviewTab.envInfoTitle")}
               </h2>
-              <p className={styles.cardDesc}>作業系統與租期</p>
+              <p className={styles.cardDesc}>{t("OverviewTab.envInfoDesc")}</p>
             </div>
           </div>
           <div className={`${styles.cardBody} ${styles.factGrid}`}>
             {resource.environment_type && (
               <div className={styles.fact}>
-                <span className={styles.factLabel}>環境類型</span>
+                <span className={styles.factLabel}>{t("OverviewTab.envTypeLabel")}</span>
                 <span className={styles.factValue}>{resource.environment_type}</span>
               </div>
             )}
             {resource.os_info && (
               <div className={styles.fact}>
-                <span className={styles.factLabel}>作業系統</span>
+                <span className={styles.factLabel}>{t("OverviewTab.osLabel")}</span>
                 <span className={styles.factValue}>{resource.os_info}</span>
               </div>
             )}
             {resource.expiry_date && (
               <div className={styles.fact}>
-                <span className={styles.factLabel}>到期日</span>
+                <span className={styles.factLabel}>{t("OverviewTab.expiryLabel")}</span>
                 <span className={styles.factValue}>
                   {new Date(resource.expiry_date).toLocaleDateString("zh-TW")}
                 </span>
@@ -243,17 +246,17 @@ export default function OverviewTab({ vmid }) {
             <div>
               <h2 className={styles.cardTitle}>
                 <MIcon name="password" size={18} />
-                登入密碼
+                {t("OverviewTab.loginPasswordTitle")}
               </h2>
               <p className={styles.cardDesc}>
-                克隆時為此機器產生的初始密碼（VM 為範本預設使用者、容器為 root）
+                {t("OverviewTab.loginPasswordDesc")}
               </p>
             </div>
           </div>
           <div className={styles.cardBody}>
             <div className={styles.keyBlock}>
               <div className={styles.keyHead}>
-                <span className={styles.factLabel}>密碼</span>
+                <span className={styles.factLabel}>{t("OverviewTab.passwordLabel")}</span>
                 <div className={styles.keyActions}>
                   <button
                     type="button"
@@ -261,7 +264,7 @@ export default function OverviewTab({ vmid }) {
                     onClick={() => setShowPassword((v) => !v)}
                   >
                     <MIcon name={showPassword ? "visibility_off" : "visibility"} size={14} />
-                    {showPassword ? "隱藏" : "顯示"}
+                    {showPassword ? t("OverviewTab.hide") : t("OverviewTab.show")}
                   </button>
                   <button
                     type="button"
@@ -269,14 +272,14 @@ export default function OverviewTab({ vmid }) {
                     onClick={() => copy(sshKey.login_password, "password")}
                   >
                     <MIcon name={copied === "password" ? "check" : "content_copy"} size={14} />
-                    {copied === "password" ? "已複製" : "複製"}
+                    {copied === "password" ? t("OverviewTab.copied") : t("OverviewTab.copy")}
                   </button>
                 </div>
               </div>
               {showPassword ? (
                 <pre className={styles.keyPre}>{sshKey.login_password}</pre>
               ) : (
-                <div className={styles.keyHidden}>密碼已隱藏，點「顯示」查看</div>
+                <div className={styles.keyHidden}>{t("OverviewTab.passwordHiddenHint")}</div>
               )}
             </div>
           </div>
@@ -290,22 +293,22 @@ export default function OverviewTab({ vmid }) {
             <div>
               <h2 className={styles.cardTitle}>
                 <MIcon name="key" size={18} />
-                SSH 金鑰
+                {t("OverviewTab.sshKeyTitle")}
               </h2>
-              <p className={styles.cardDesc}>用於免密碼登入此資源</p>
+              <p className={styles.cardDesc}>{t("OverviewTab.sshKeyDesc")}</p>
             </div>
           </div>
           <div className={styles.cardBody}>
             <div className={styles.keyBlock}>
               <div className={styles.keyHead}>
-                <span className={styles.factLabel}>公鑰</span>
+                <span className={styles.factLabel}>{t("OverviewTab.publicKeyLabel")}</span>
                 <button
                   type="button"
                   className={styles.ghostBtn}
                   onClick={() => copy(resource.ssh_public_key, "public")}
                 >
                   <MIcon name={copied === "public" ? "check" : "content_copy"} size={14} />
-                  {copied === "public" ? "已複製" : "複製"}
+                  {copied === "public" ? t("OverviewTab.copied") : t("OverviewTab.copy")}
                 </button>
               </div>
               <pre className={styles.keyPre}>{resource.ssh_public_key}</pre>
@@ -314,7 +317,7 @@ export default function OverviewTab({ vmid }) {
             {sshKey?.ssh_private_key && (
               <div className={styles.keyBlock}>
                 <div className={styles.keyHead}>
-                  <span className={styles.factLabel}>私鑰</span>
+                  <span className={styles.factLabel}>{t("OverviewTab.privateKeyLabel")}</span>
                   <div className={styles.keyActions}>
                     <button
                       type="button"
@@ -322,7 +325,7 @@ export default function OverviewTab({ vmid }) {
                       onClick={() => setShowPrivateKey((v) => !v)}
                     >
                       <MIcon name={showPrivateKey ? "visibility_off" : "visibility"} size={14} />
-                      {showPrivateKey ? "隱藏" : "顯示"}
+                      {showPrivateKey ? t("OverviewTab.hide") : t("OverviewTab.show")}
                     </button>
                     <button
                       type="button"
@@ -330,7 +333,7 @@ export default function OverviewTab({ vmid }) {
                       onClick={() => copy(sshKey.ssh_private_key, "private")}
                     >
                       <MIcon name={copied === "private" ? "check" : "content_copy"} size={14} />
-                      {copied === "private" ? "已複製" : "複製"}
+                      {copied === "private" ? t("OverviewTab.copied") : t("OverviewTab.copy")}
                     </button>
                     <button
                       type="button"
@@ -346,14 +349,14 @@ export default function OverviewTab({ vmid }) {
                       }}
                     >
                       <MIcon name="download" size={14} />
-                      下載
+                      {t("OverviewTab.download")}
                     </button>
                   </div>
                 </div>
                 {showPrivateKey ? (
                   <pre className={styles.keyPre}>{sshKey.ssh_private_key}</pre>
                 ) : (
-                  <div className={styles.keyHidden}>私鑰已隱藏，點「顯示」查看</div>
+                  <div className={styles.keyHidden}>{t("OverviewTab.privateKeyHiddenHint")}</div>
                 )}
               </div>
             )}

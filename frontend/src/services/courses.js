@@ -1,8 +1,8 @@
 import { apiDelete, apiGet, apiGetBlob, apiPost, apiPut } from "./api";
 
 /**
- * 課程實驗室（Course Lab）：
- * - CoursesService：學生端 — 路徑瀏覽、房間內容、秒開部署、Flag 提交
+ * 課程服務：
+ * - CoursesService：學生端 — 正式課程總覽、每週任務、PDF 與完成狀態
  * - CourseAdminService：老師/管理員端 — 路徑/房間/任務/題目 CRUD、發布、進度監控
  * 欄位見後端 app/schemas/course.py。
  */
@@ -56,17 +56,12 @@ export const CoursesService = {
     return apiGet(`/api/v1/courses/paths/${pathId}/practice-machines`);
   },
 
-  /** 學生完成操作後，對自己的班級機器送出 AI Check。 */
-  startAiCheck(pathId, assignmentId, itemId = null) {
-    return apiPost(
-      `/api/v1/courses/paths/${pathId}/ai-assignments/${assignmentId}/checks`,
-      itemId ? { item_id: itemId } : {},
+  /** 學生只回報完成狀態；AI 檢查由老師統一啟動。 */
+  updateAssignmentCompletion(pathId, assignmentId, itemId, completed) {
+    return apiPut(
+      `/api/v1/courses/paths/${pathId}/ai-assignments/${assignmentId}/completion`,
+      { item_id: itemId, completed },
     );
-  },
-
-  /** 查詢自己送出的 AI Check 進度與回饋。 */
-  getAiCheck(pathId, assignmentId, runId) {
-    return apiGet(`/api/v1/courses/paths/${pathId}/ai-assignments/${assignmentId}/checks/${runId}`);
   },
 
   /** 房間詳情：任務 + 題目（不含答案）+ 我的部署狀態 */
@@ -74,25 +69,6 @@ export const CoursesService = {
     return apiGet(`/api/v1/courses/rooms/${roomId}`);
   },
 
-  /** 秒開部署（202；之後以 getDeployment 輪詢） */
-  deployRoom(roomId) {
-    return apiPost(`/api/v1/courses/rooms/${roomId}/deploy`, {});
-  },
-
-  /** 部署狀態輪詢（provisioning / running / failed / expired） */
-  getDeployment(deploymentId) {
-    return apiGet(`/api/v1/courses/deployments/${deploymentId}`);
-  },
-
-  /** 提前歸還銷毀 */
-  terminateDeployment(deploymentId) {
-    return apiDelete(`/api/v1/courses/deployments/${deploymentId}`);
-  },
-
-  /** 提交答案（no_answer 題型 answer 可為 null） */
-  submitAnswer(questionId, answer) {
-    return apiPost(`/api/v1/courses/questions/${questionId}/submit`, { answer });
-  },
 };
 
 export const CourseAdminService = {

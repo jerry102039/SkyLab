@@ -35,6 +35,7 @@ from sqlmodel import Session
 from app.ai.pve_log.config import settings
 from app.ai.pve_log.schemas import SSHConfirmRequest, SSHExecRequest, SSHExecResult
 from app.ai.pve_log.ssh_guard import check_command
+from app.core.i18n import t
 from app.core.security import decrypt_value
 from app.infrastructure.ssh import create_key_client
 from app.repositories import resource as resource_repo
@@ -134,12 +135,12 @@ async def _get_campus_token(client: httpx.AsyncClient) -> str:
     )
     if not resp.is_success:
         raise RuntimeError(
-            f"SkyLab 登入失敗（HTTP {resp.status_code}）：{resp.text[:200]}"
+            t("pveLog.skylabLoginFailed", status=resp.status_code, detail=resp.text[:200])
         )
     data = resp.json()
     token = data.get("access_token")
     if not isinstance(token, str) or not token:
-        raise RuntimeError("SkyLab 登入回應中缺少 access_token")
+        raise RuntimeError(t("pveLog.skylabTokenMissing"))
     return token
 
 
@@ -149,7 +150,12 @@ async def _get_vm_ip(client: httpx.AsyncClient, token: str, vmid: int) -> str:
     resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
     if not resp.is_success:
         raise RuntimeError(
-            f"取得 VMID={vmid} 資源失敗（HTTP {resp.status_code}）：{resp.text[:200]}"
+            t(
+                "pveLog.resourceFetchFailed",
+                vmid=vmid,
+                status=resp.status_code,
+                detail=resp.text[:200],
+            )
         )
     data = resp.json()
     # /resources/{vmid} 回傳 {summary, status, config, network_interfaces}
@@ -164,9 +170,7 @@ async def _get_vm_ip(client: httpx.AsyncClient, token: str, vmid: int) -> str:
                 ip = inet.split("/")[0]
                 break
     if not ip:
-        raise RuntimeError(
-            f"VMID={vmid} 沒有可用的 IP 位址。請確認 VM 正在運行且有設定網路。"
-        )
+        raise RuntimeError(t("pveLog.noIpAddress", vmid=vmid))
     return ip
 
 
@@ -181,17 +185,18 @@ async def _get_ssh_private_key(client: httpx.AsyncClient, token: str, vmid: int)
         except Exception:
             detail = resp.text[:200]
         if resp.status_code in {404, 502} and "not found" in detail.lower():
-            raise RuntimeError(
-                f"VMID={vmid} 未在 SkyLab 資料庫中登記 SSH key。"
-                "請先在 SkyLab 後端設定此 VM/LXC 的 SSH 金鑰。"
-            )
+            raise RuntimeError(t("pveLog.sshKeyNotRegistered", vmid=vmid))
         raise RuntimeError(
-            f"取得 SSH key 失敗（HTTP {resp.status_code}）：{detail or resp.text[:200]}"
+            t(
+                "pveLog.sshKeyFetchFailed",
+                status=resp.status_code,
+                detail=detail or resp.text[:200],
+            )
         )
     data = resp.json()
     key = data.get("ssh_private_key") if isinstance(data, dict) else None
     if not isinstance(key, str) or not key.strip():
-        raise RuntimeError(f"VMID={vmid} 的 SSH private key 為空。")
+        raise RuntimeError(t("pveLog.sshKeyEmpty", vmid=vmid))
     return key
 
 
@@ -257,7 +262,7 @@ def _resolve_vm_info_from_db(session: Session, vmid: int) -> tuple[str, str]:
     """
     resource = resource_repo.get_resource_by_vmid(session=session, vmid=vmid)
     if not resource:
-        raise RuntimeError(f"VMID={vmid} 未在 SkyLab 資料庫中登記。")
+        raise RuntimeError(t("pveLog.vmNotRegistered", vmid=vmid))
 
     host = (resource_repo.get_cached_ip_address(session=session, vmid=vmid) or "").strip()
     if not host:
@@ -288,16 +293,10 @@ def _resolve_vm_info_from_db(session: Session, vmid: int) -> tuple[str, str]:
             logger.warning("VMID=%s 即時 IP 解析失敗：%s", vmid, exc)
 
     if not host:
-        raise RuntimeError(
-            f"VMID={vmid} 沒有可用的 IP 位址。"
-            "請確認 VM 正在運行且有設定網路，或 ip_address 快取已過期。"
-        )
+        raise RuntimeError(t("pveLog.noIpAddressCached", vmid=vmid))
 
     if not resource.ssh_private_key_encrypted:
-        raise RuntimeError(
-            f"VMID={vmid} 未在 SkyLab 資料庫中登記 SSH key。"
-            "請先在 SkyLab 後端設定此 VM/LXC 的 SSH 金鑰。"
-        )
+        raise RuntimeError(t("pveLog.sshKeyNotRegistered", vmid=vmid))
     private_key = decrypt_value(resource.ssh_private_key_encrypted)
     return host, private_key
 
@@ -341,7 +340,7 @@ async def ssh_exec(
             ssh_user=req.ssh_user,
             command=req.command,
             blocked=True,
-            block_reason="目前只允許存取指定範圍內的 VM/LXC",
+            block_reason=t("pveLog.scopeRestricted"),
         )
 
     # ── 層二：執行前確認（AI 呼叫時） ────────────────────────────────────
@@ -383,7 +382,7 @@ async def confirm_exec(
             host="",
             ssh_user="",
             command="",
-            error="缺少確認 token，請重新發起請求。",
+            error=t("pveLog.missingConfirmToken"),
         )
     entry = _peek_pending(token)
     if entry is None:
@@ -392,7 +391,7 @@ async def confirm_exec(
             host="",
             ssh_user="",
             command="",
-            error="確認 token 無效或已過期（TTL 5 分鐘）。請重新發起請求。",
+            error=t("pveLog.confirmTokenInvalid"),
         )
     req = entry["request"]
     stored_vmids = entry.get("allowed_vmids")
@@ -409,7 +408,7 @@ async def confirm_exec(
         return SSHExecResult(
             vmid=req.vmid,
             command=req.command,
-            error="確認 token 與目前使用者或資源範圍不符，請重新發起請求。",
+            error=t("pveLog.confirmTokenScopeMismatch"),
         )
     # Only a successfully re-authorized caller may consume the one-time token.
     entry = _pop_pending(token)
@@ -417,7 +416,7 @@ async def confirm_exec(
         return SSHExecResult(
             vmid=req.vmid,
             command=req.command,
-            error="確認 token 無效或已過期（TTL 5 分鐘）。請重新發起請求。",
+            error=t("pveLog.confirmTokenInvalid"),
         )
     allowed_vmids = stored_vmids
 
@@ -428,7 +427,7 @@ async def confirm_exec(
             host="",
             ssh_user=req.ssh_user,
             command=req.command,
-            error="使用者已拒絕執行此指令。",
+            error=t("pveLog.userRejected"),
         )
 
     override_command = (confirm_req.command or "").strip()
@@ -476,7 +475,7 @@ async def _do_exec(
                 ssh_user=req.ssh_user,
                 command=req.command,
                 blocked=True,
-                block_reason="目前只允許存取指定範圍內的 VM/LXC",
+                block_reason=t("pveLog.scopeRestricted"),
             )
 
         if session is not None:
@@ -488,10 +487,7 @@ async def _do_exec(
                     host="",
                     ssh_user=req.ssh_user,
                     command=req.command,
-                    error=(
-                        "SkyLab 登入憑證未設定。"
-                        "請確認 .env 中有 FIRST_SUPERUSER 與 FIRST_SUPERUSER_PASSWORD。"
-                    ),
+                    error=t("pveLog.skylabCredentialsMissing"),
                 )
             async with httpx.AsyncClient(timeout=timeout) as client:
                 token = await _get_campus_token(client)

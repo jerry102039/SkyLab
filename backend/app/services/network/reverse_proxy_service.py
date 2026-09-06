@@ -12,6 +12,7 @@ import re
 
 import yaml
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError, ProxmoxError
 from app.schemas.reverse_proxy import ReverseProxySetupContext, ReverseProxyZoneOption
 
@@ -32,7 +33,7 @@ def build_runtime_name(vmid: int, domain: str) -> str:
 def build_full_domain(*, zone_name: str, hostname_prefix: str) -> str:
     clean_zone_name = zone_name.strip().lower().rstrip(".")
     if not _is_valid_hostname(clean_zone_name):
-        raise BadRequestError("Zone 名稱格式不正確")
+        raise BadRequestError(t("reverseProxy.zoneNameInvalid"))
 
     clean_hostname_prefix = hostname_prefix.strip().lower().strip(".")
     if not clean_hostname_prefix:
@@ -40,11 +41,11 @@ def build_full_domain(*, zone_name: str, hostname_prefix: str) -> str:
 
     labels = clean_hostname_prefix.split(".")
     if not all(_HOSTNAME_LABEL_PATTERN.fullmatch(label) for label in labels):
-        raise BadRequestError("子網域格式不正確")
+        raise BadRequestError(t("reverseProxy.subdomainInvalid"))
 
     full_domain = f"{clean_hostname_prefix}.{clean_zone_name}"
     if len(full_domain) > 255:
-        raise BadRequestError("網域名稱過長")
+        raise BadRequestError(t("reverseProxy.domainNameTooLong"))
     return full_domain
 
 
@@ -70,7 +71,7 @@ def _get_gateway_ready_state(session: object) -> tuple[bool, str | None]:
 
     config = gw_repo.get_gateway_config(session)  # type: ignore[arg-type]
     if config is None or not config.host or not config.encrypted_private_key:
-        return False, "Gateway VM 尚未設定"
+        return False, t("reverseProxy.gatewayNotConfigured")
     return True, None
 
 
@@ -81,9 +82,9 @@ def _get_cloudflare_ready_state(
 
     config = cloudflare_service.get_public_config(session)  # type: ignore[arg-type]
     if not config.is_configured:
-        return False, "Cloudflare API Token 尚未設定", [], None, None
+        return False, t("reverseProxy.cloudflareApiTokenNotConfigured"), [], None, None
     if not config.has_default_dns_target:
-        return False, "Cloudflare 預設 DNS 指向尚未設定", [], None, None
+        return False, t("reverseProxy.cloudflareDefaultDnsTargetNotConfigured"), [], None, None
 
     try:
         zones = cloudflare_service.list_zones(  # type: ignore[arg-type]
@@ -99,7 +100,7 @@ def _get_cloudflare_ready_state(
     if not options:
         return (
             False,
-            "Cloudflare 沒有可用的 active Zone",
+            t("reverseProxy.cloudflareNoActiveZone"),
             [],
             config.default_dns_target_type,
             config.default_dns_target_value,
@@ -245,7 +246,7 @@ def _sync_traefik(session: object) -> None:
 
     config = gw_repo.get_gateway_config(session)  # type: ignore[arg-type]
     if config is None or not config.host or not config.encrypted_private_key:
-        raise ProxmoxError("Gateway VM 尚未設定，無法同步 Traefik 規則")
+        raise ProxmoxError(t("reverseProxy.gatewayNotConfiguredSyncFailed"))
 
     rules = rp_repo.list_rules(session)  # type: ignore[arg-type]
     private_key_pem = get_decrypted_private_key(config)  # type: ignore[arg-type]
@@ -273,7 +274,7 @@ def _sync_traefik(session: object) -> None:
             client, f"mkdir -p $(dirname {TRAEFIK_DYNAMIC_PATH})"
         )
         if code != 0:
-            raise ProxmoxError(f"建立目錄失敗：{out}{err}")
+            raise ProxmoxError(t("reverseProxy.createDirFailed", out=out, err=err))
 
         # 原子性寫入
         content_bytes = new_cfg.encode("utf-8")
@@ -286,7 +287,7 @@ def _sync_traefik(session: object) -> None:
 
         code, out, err = exec_command(client, f"mv {tmp_path} {TRAEFIK_DYNAMIC_PATH}")
         if code != 0:
-            raise ProxmoxError(f"Traefik 設定寫入失敗：{out}{err}")
+            raise ProxmoxError(t("reverseProxy.writeConfigFailed", out=out, err=err))
 
         # 驗證寫入結果
         code, verify_out, _ = exec_command(
@@ -307,7 +308,7 @@ def _sync_traefik(session: object) -> None:
     except ProxmoxError:
         raise
     except Exception as e:
-        raise ProxmoxError(f"Traefik 同步失敗：{e}")
+        raise ProxmoxError(t("reverseProxy.traefikSyncFailed", error=e))
     finally:
         client.close()
 
@@ -333,13 +334,13 @@ def apply_reverse_proxy_rule(
     ensure_reverse_proxy_ready(session)
 
     if getattr(session, "get", lambda *_: None)(Resource, vmid) is None:
-        raise BadRequestError(f"VMID {vmid} 不在 SkyLab 資源清單中，無法建立反向代理規則")
+        raise BadRequestError(t("reverseProxy.vmidNotInResourceList", vmid=vmid))
 
     zone = cloudflare_service.get_zone(session=session, zone_id=zone_id)  # type: ignore[arg-type]
     domain = build_full_domain(zone_name=zone.name, hostname_prefix=hostname_prefix)
 
     if rp_repo.is_domain_taken(session, domain):  # type: ignore[arg-type]
-        raise BadRequestError(f"網域 {domain} 已被其他 VM 佔用")
+        raise BadRequestError(t("reverseProxy.domainAlreadyTaken", domain=domain))
 
     record = cloudflare_service.upsert_reverse_proxy_dns_record(  # type: ignore[arg-type]
         session=session,
@@ -373,7 +374,7 @@ def resolve_zone_for_domain(session: object, domain: str) -> tuple[str, str]:
 
     clean = domain.strip().lower().rstrip(".")
     if not _is_valid_hostname(clean):
-        raise BadRequestError(f"網域 {domain} 格式不正確")
+        raise BadRequestError(t("reverseProxy.domainInvalid", domain=domain))
 
     zones = cloudflare_service.list_zones(  # type: ignore[arg-type]
         session=session,
@@ -390,7 +391,7 @@ def resolve_zone_for_domain(session: object, domain: str) -> tuple[str, str]:
                 best = (zone.id, zone_name)
     if best is None:
         raise BadRequestError(
-            f"找不到網域 {clean} 對應的 Cloudflare Zone，請確認 Zone 已啟用"
+            t("reverseProxy.domainZoneNotFound", domain=clean)
         )
 
     zone_id, zone_name = best
@@ -441,12 +442,12 @@ def update_reverse_proxy_rule(
     ensure_reverse_proxy_ready(session)
     rule = rp_repo.get_rule(session, _uuid.UUID(rule_id))  # type: ignore[arg-type]
     if rule is None:
-        raise BadRequestError(f"反向代理規則 {rule_id} 不存在")
+        raise BadRequestError(t("reverseProxy.ruleIdNotFound", ruleId=rule_id))
 
     zone = cloudflare_service.get_zone(session=session, zone_id=zone_id)  # type: ignore[arg-type]
     domain = build_full_domain(zone_name=zone.name, hostname_prefix=hostname_prefix)
     if rp_repo.is_domain_taken(session, domain, exclude_rule_id=rule.id):  # type: ignore[arg-type]
-        raise BadRequestError(f"網域 {domain} 已被其他 VM 佔用")
+        raise BadRequestError(t("reverseProxy.domainAlreadyTaken", domain=domain))
 
     record = cloudflare_service.upsert_reverse_proxy_dns_record(  # type: ignore[arg-type]
         session=session,
@@ -494,7 +495,7 @@ def remove_reverse_proxy_rule_by_id(session: object, rule_id: str) -> None:
 
     rule = rp_repo.get_rule(session, _uuid.UUID(rule_id))  # type: ignore[arg-type]
     if rule is None:
-        raise BadRequestError(f"反向代理規則 {rule_id} 不存在")
+        raise BadRequestError(t("reverseProxy.ruleIdNotFound", ruleId=rule_id))
 
     _cleanup_managed_dns_record(session, rule)
     rp_repo.delete_rule(session, rule)  # type: ignore[arg-type]

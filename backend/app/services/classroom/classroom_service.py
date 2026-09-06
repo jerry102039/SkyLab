@@ -17,6 +17,7 @@ from app.core.authorizers import (
     require_resource_access,
     require_teaching_access,
 )
+from app.core.i18n import t
 from app.core.permissions import is_admin
 from app.exceptions import BadRequestError, NotFoundError, PermissionDeniedError
 from app.models import (
@@ -55,10 +56,10 @@ def _require_active_class(
 ) -> TeachingClass:
     teaching_class = session.get(TeachingClass, class_id)
     if teaching_class is None:
-        raise NotFoundError("Teaching class not found")
+        raise NotFoundError(t("classroom.teaching_class_not_found"))
     require_teaching_access(user, teaching_class.owner_id)
     if teaching_class.status != TeachingClassStatus.active:
-        raise BadRequestError("班級機器全部就緒後才能使用上課監看")
+        raise BadRequestError(t("classroom.class_not_ready"))
     return teaching_class
 
 
@@ -79,10 +80,10 @@ def require_can_watch_class(
         )
     ).first()
     if machine is None:
-        raise PermissionDeniedError("This machine does not belong to the teaching class")
+        raise PermissionDeniedError(t("classroom.machine_not_in_class"))
     node = session.get(TeachingClassMachineNode, machine.machine_node_id)
     if node is None or node.resource_type.lower() == "lxc":
-        raise BadRequestError("目前上課監看只支援 VM")
+        raise BadRequestError(t("classroom.watch_vm_only"))
     return machine
 
 
@@ -94,11 +95,11 @@ def require_can_broadcast_class(
     _require_active_class(session, user, class_id)
     resource = session.get(Resource, vmid)
     if resource is None:
-        raise NotFoundError(f"Resource {vmid} not found")
+        raise NotFoundError(t("classroom.resource_not_found", vmid=vmid))
     require_resource_access(
         user,
         resource.user_id,
-        detail="You can only broadcast your own VM",
+        detail=t("classroom.broadcast_own_vm_only"),
     )
 
 
@@ -303,9 +304,9 @@ async def stop_session(user: User, session_id: str) -> None:
     """發起者或 admin 可停止；live_stopped 由 on_session_end 統一推播。"""
     live = vnc_session_manager.get_session(session_id)
     if live is None:
-        raise NotFoundError("Classroom session not found")
+        raise NotFoundError(t("classroom.session_not_found"))
     if live.started_by != user.id and not is_admin(user):
-        raise PermissionDeniedError("Only the session starter or an admin can stop it")
+        raise PermissionDeniedError(t("classroom.stop_forbidden"))
     await vnc_session_manager.stop_session(session_id)
 
 
@@ -315,11 +316,11 @@ async def set_control(
     """接管 / 釋放學生 VM 的控制權（僅 monitor session 發起者或 admin）。"""
     live = vnc_session_manager.get_session(session_id)
     if live is None:
-        raise NotFoundError("Classroom session not found")
+        raise NotFoundError(t("classroom.session_not_found"))
     if live.mode is not SessionMode.monitor:
-        raise BadRequestError("Control is only available for monitor sessions")
+        raise BadRequestError(t("classroom.control_monitor_only"))
     if live.started_by != user.id and not is_admin(user):
-        raise PermissionDeniedError("Only the session starter or an admin can take control")
+        raise PermissionDeniedError(t("classroom.control_forbidden"))
 
     if action == "take":
         await vnc_session_manager.set_controller(session_id, user.id)

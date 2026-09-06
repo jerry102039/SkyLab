@@ -9,6 +9,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider }  from "./contexts/AuthContext";
 import { ConfirmProvider } from "./components/ConfirmDialog/ConfirmProvider";
 import "./assets/styles/global.scss";
+import "./i18n";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <ThemeProvider>

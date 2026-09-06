@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 from sqlmodel import Session, desc, func, select
 
+from app.ai.teacher_judge.attachment_service import attachment_public, storage_path
 from app.ai.teacher_judge.file_service import (
     FileDeleteStage,
     _stored_path,
@@ -26,6 +27,8 @@ from app.ai.teacher_judge.schemas import (
 )
 from app.ai.teacher_judge.service import chat_with_rubric
 from app.ai.teacher_judge.template_command_service import get_enabled_template_commands
+from app.core.i18n import t
+from app.models.teacher_judge_attachment import TeacherJudgeSessionAttachment
 from app.models.teacher_judge_file import TeacherJudgeFile, TeacherJudgeFileStatus
 from app.models.teacher_judge_script_artifact import TeacherJudgeScriptArtifact
 from app.models.teacher_judge_script_run import TeacherJudgeScriptRun
@@ -68,14 +71,16 @@ def redact_message_content(value: str) -> str:
 
 def require_selected_file(db: Session, item: TeacherJudgeSession) -> TeacherJudgeFile:
     if not item.selected_file_id:
-        raise HTTPException(status_code=409, detail="這項檢查尚未選擇評分表。")
+        raise HTTPException(status_code=409, detail=t("session.no_rubric_selected"))
     file = db.get(TeacherJudgeFile, item.selected_file_id)
     if (
         not file
         or file.teaching_class_id != item.teaching_class_id
         or file.status != TeacherJudgeFileStatus.active
     ):
-        raise HTTPException(status_code=409, detail="這項檢查選定的評分表已無法使用。")
+        raise HTTPException(
+            status_code=409, detail=t("session.selected_file_unavailable")
+        )
     return file
 
 
@@ -93,13 +98,20 @@ def get_session(
 ) -> TeacherJudgeSession:
     item = db.get(TeacherJudgeSession, session_id)
     if not item or item.teaching_class_id != class_id:
-        raise HTTPException(status_code=404, detail="找不到這項檢查。")
+        raise HTTPException(status_code=404, detail=t("session.not_found"))
     return item
 
 
 def delete_session_data(db: Session, item: TeacherJudgeSession) -> None:
     """Delete a session and its private rubric, messages, scripts, and runs."""
     source_file_stage: FileDeleteStage | None = None
+    attachment_rows = list(
+        db.exec(
+            select(TeacherJudgeSessionAttachment).where(
+                TeacherJudgeSessionAttachment.session_id == item.id
+            )
+        )
+    )
     try:
         if item.selected_file_id:
             source_file = db.get(TeacherJudgeFile, item.selected_file_id)
@@ -146,6 +158,8 @@ def delete_session_data(db: Session, item: TeacherJudgeSession) -> None:
                 )
             )
         )
+        for attachment in attachment_rows:
+            db.delete(attachment)
         for message in messages:
             db.delete(message)
         for artifact in artifacts:
@@ -159,10 +173,22 @@ def delete_session_data(db: Session, item: TeacherJudgeSession) -> None:
         raise
     else:
         finalize_file_delete(source_file_stage)
+        for attachment in attachment_rows:
+            try:
+                storage_path(attachment).unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def clear_session_messages(db: Session, item: TeacherJudgeSession) -> None:
     """Clear conversation history while keeping the session and its artifacts."""
+    attachments = list(
+        db.exec(
+            select(TeacherJudgeSessionAttachment).where(
+                TeacherJudgeSessionAttachment.session_id == item.id
+            )
+        )
+    )
     messages = list(
         db.exec(
             select(TeacherJudgeSessionMessage).where(
@@ -170,6 +196,8 @@ def clear_session_messages(db: Session, item: TeacherJudgeSession) -> None:
             )
         )
     )
+    for attachment in attachments:
+        db.delete(attachment)
     for message in messages:
         db.delete(message)
 
@@ -180,6 +208,11 @@ def clear_session_messages(db: Session, item: TeacherJudgeSession) -> None:
     db.add(item)
     db.commit()
     db.refresh(item)
+    for attachment in attachments:
+        try:
+            storage_path(attachment).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def ensure_selected_file_available(
@@ -206,7 +239,7 @@ def ensure_selected_file_available(
         status_code=409,
         detail={
             "code": "teacher_judge_file_in_use",
-            "message": "這份評分表已被其他檢查使用；請使用「重構」建立獨立副本，或上傳新的評分表。",
+            "message": t("session.file_in_use"),
             "session_id": str(owner.id),
         },
     )
@@ -214,7 +247,7 @@ def ensure_selected_file_available(
 
 def ensure_active(item: TeacherJudgeSession) -> None:
     if item.status == TeacherJudgeSessionStatus.archived:
-        raise HTTPException(status_code=409, detail="已封存的檢查為唯讀。")
+        raise HTTPException(status_code=409, detail=t("session.archived_readonly"))
 
 
 def validate_selected_file(
@@ -230,7 +263,7 @@ def validate_selected_file(
     ):
         raise HTTPException(
             status_code=400,
-            detail="選擇的評分表來源不屬於這個班級。",
+            detail=t("session.file_not_in_class"),
         )
 
 
@@ -301,7 +334,7 @@ def _fork_title(db: Session, class_id: uuid.UUID, title: str) -> str:
         candidate = f"{title}（副本 {index}）"
         if candidate not in existing:
             return candidate
-    raise HTTPException(status_code=409, detail="無法建立檢查副本，請先重新命名原檢查。")
+    raise HTTPException(status_code=409, detail=t("session.fork_title_exhausted"))
 
 
 def fork_session_data(
@@ -321,7 +354,9 @@ def fork_session_data(
                 or source_file.teaching_class_id != source.teaching_class_id
                 or source_file.status != TeacherJudgeFileStatus.active
             ):
-                raise HTTPException(status_code=409, detail="原檢查的評分表已無法複製。")
+                raise HTTPException(
+                    status_code=409, detail=t("session.fork_file_unavailable")
+                )
             cloned_file = clone_file_asset(
                 session=db,
                 source=source_file,
@@ -348,8 +383,21 @@ def fork_session_data(
         raise
 
 
+def message_attachments(
+    db: Session, message_id: uuid.UUID
+) -> list[TeacherJudgeSessionAttachment]:
+    return list(
+        db.exec(
+            select(TeacherJudgeSessionAttachment)
+            .where(TeacherJudgeSessionAttachment.message_id == message_id)
+            .order_by(TeacherJudgeSessionAttachment.created_at)
+        )
+    )
+
+
 def message_public(
     item: TeacherJudgeSessionMessage,
+    attachments: list[TeacherJudgeSessionAttachment] | None = None,
 ) -> TeacherJudgeSessionMessagePublic:
     return TeacherJudgeSessionMessagePublic(
         id=str(item.id),
@@ -358,13 +406,33 @@ def message_public(
         content=item.content,
         message_type=item.message_type.value,
         metadata_json=item.metadata_json,
+        attachments=[attachment_public(row) for row in attachments or []],
         created_by=str(item.created_by) if item.created_by else None,
         created_at=item.created_at.isoformat(),
     )
 
 
+def _message_context(
+    db: Session,
+    row: TeacherJudgeSessionMessage,
+    *,
+    include_attachments: bool = True,
+) -> str:
+    if not include_attachments:
+        return row.content
+    attachments = message_attachments(db, row.id)
+    if not attachments:
+        return row.content
+    from app.ai.teacher_judge.attachment_service import attachment_context
+
+    return f"{row.content}\n\n{attachment_context(attachments)}"
+
+
 def bounded_history(
-    db: Session, session_id: uuid.UUID
+    db: Session,
+    session_id: uuid.UUID,
+    *,
+    exclude_attachments_for_message_id: uuid.UUID | None = None,
 ) -> list[TeacherJudgeRubricChatMessage]:
     rows = list(
         db.exec(
@@ -385,12 +453,24 @@ def bounded_history(
     kept: list[TeacherJudgeSessionMessage] = []
     size = 0
     for row in reversed(rows):
-        if kept and size + len(row.content) > HISTORY_CHARACTER_LIMIT:
+        content = _message_context(
+            db,
+            row,
+            include_attachments=row.id != exclude_attachments_for_message_id,
+        )
+        if kept and size + len(content) > HISTORY_CHARACTER_LIMIT:
             break
         kept.append(row)
-        size += len(row.content)
+        size += len(content)
     return [
-        TeacherJudgeRubricChatMessage(role=row.role.value, content=row.content)
+        TeacherJudgeRubricChatMessage(
+            role=row.role.value,
+            content=_message_context(
+                db,
+                row,
+                include_attachments=row.id != exclude_attachments_for_message_id,
+            ),
+        )
         for row in reversed(kept)
     ]
 

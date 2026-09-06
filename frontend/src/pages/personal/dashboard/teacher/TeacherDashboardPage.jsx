@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import MIcon from "../../../../components/MIcon";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { CourseAdminService } from "../../../../services/courses";
@@ -9,13 +10,13 @@ import PageHeader from "../../../../components/PageHeader/PageHeader";
 import EmptyState from "../../../../components/EmptyState/EmptyState";
 import LoadingState from "../../../../components/LoadingState/LoadingState";
 
-const CLASS_STATUS = {
-  planning: "準備中",
-  pending_review: "等待審核",
-  provisioning: "建立中",
-  partial_failed: "部分失敗",
-  active: "上課中",
-  archived: "已結束",
+const CLASS_STATUS_KEYS = {
+  planning: "TeacherDashboardPage.statusPlanning",
+  pending_review: "TeacherDashboardPage.statusPendingReview",
+  provisioning: "TeacherDashboardPage.statusProvisioning",
+  partial_failed: "TeacherDashboardPage.statusPartialFailed",
+  active: "TeacherDashboardPage.statusActive",
+  archived: "TeacherDashboardPage.statusArchived",
 };
 
 function dateKey(date) {
@@ -84,6 +85,7 @@ function normalizeClass(item) {
 }
 
 function CheckpointRow({ item, onOpen }) {
+  const { t } = useTranslation("personal");
   const students = item.report?.students ?? [];
   const completed = students.reduce((sum, student) => sum + Number(student.completed_questions ?? 0), 0);
   const possible = students.reduce((sum, student) => sum + Number(student.total_questions ?? 0), 0);
@@ -92,7 +94,7 @@ function CheckpointRow({ item, onOpen }) {
   return <button type="button" className={styles.checkpointRow} onClick={onOpen}>
     <span className={styles.courseIcon}><MIcon name="checklist" size={19} /></span>
     <span className={styles.checkpointMain}>
-      <span><strong>{item.path.title}</strong><small>{students.length ? `${fullyCompleted}/${students.length} 位學生完成全部 checkpoint` : "尚無學生 checkpoint 紀錄"}</small></span>
+      <span><strong>{item.path.title}</strong><small>{students.length ? t("CheckpointRow.completedCount", { fullyCompleted, total: students.length }) : t("CheckpointRow.noRecords")}</small></span>
       <span className={styles.progressTrack}><i style={{ width: `${percent}%` }} /></span>
     </span>
     <span className={styles.checkpointMetric}><strong>{percent}%</strong><small>{completed}/{possible || item.report?.total_questions || 0}</small></span>
@@ -101,6 +103,7 @@ function CheckpointRow({ item, onOpen }) {
 }
 
 export default function TeacherDashboardPage() {
+  const { t } = useTranslation("personal");
   const navigate = useNavigate();
   const { user } = useAuth();
   const [classes, setClasses] = useState([]);
@@ -126,7 +129,7 @@ export default function TeacherDashboardPage() {
         );
         if (active) setReports(settled.filter((result) => result.status === "fulfilled").map((result) => result.value));
       } catch (reason) {
-        if (active) setError(reason?.message ?? "無法讀取教師儀表板資料");
+        if (active) setError(reason?.message ?? t("TeacherDashboardPage.loadError"));
       } finally {
         if (active) setLoading(false);
       }
@@ -146,40 +149,40 @@ export default function TeacherDashboardPage() {
     .map((student) => ({ ...student, pathTitle: path.title, pathId: path.id })))
     .sort((a, b) => Number(a.progress_percent) - Number(b.progress_percent))
     .slice(0, 5), [reports]);
-  const firstName = user?.full_name?.trim()?.split(/\s+/)[0] ?? user?.email?.split("@")[0] ?? "老師";
+  const firstName = user?.full_name?.trim()?.split(/\s+/)[0] ?? user?.email?.split("@")[0] ?? t("TeacherDashboardPage.defaultTeacherName");
 
   return <div className={styles.page}>
-    <PageHeader title={`${firstName}老師，今天想先看哪個班級？`} subtitle="集中查看學生 checkpoint 完成度、近期課堂與課程準備狀態。">
-      <button type="button" className={styles.btnPrimary} onClick={() => navigate("/class-setup")}><MIcon name="add" size={18} />建立班級</button>
+    <PageHeader title={t("TeacherDashboardPage.greeting", { name: firstName })} subtitle={t("TeacherDashboardPage.subtitle")}>
+      <button type="button" className={styles.btnPrimary} onClick={() => navigate("/class-setup")}><MIcon name="add" size={18} />{t("TeacherDashboardPage.createClass")}</button>
     </PageHeader>
 
     {error && <div className={styles.error}><MIcon name="error_outline" size={18} />{error}</div>}
 
-    <section className={styles.metricGrid} aria-label="教學摘要">
-      <article><span className={styles.metricIcon}><MIcon name="task_alt" size={20} /></span><div><small>Checkpoint 完成度</small><strong>{loading ? "—" : `${checkpointSummary.percent}%`}</strong><p>{checkpointSummary.completed}/{checkpointSummary.possible} 個學生 checkpoint</p></div></article>
-      <article><span className={styles.metricIcon}><MIcon name="groups" size={20} /></span><div><small>已有學習紀錄</small><strong>{loading ? "—" : checkpointSummary.students}</strong><p>跨 {reports.length} 個學習路徑</p></div></article>
-      <article><span className={styles.metricIcon}><MIcon name="school" size={20} /></span><div><small>進行中的班級</small><strong>{loading ? "—" : classes.filter((item) => item.status !== "archived").length}</strong><p>{classes.filter((item) => item.status === "planning").length} 個仍在準備</p></div></article>
-      <article><span className={styles.metricIcon}><MIcon name="calendar_today" size={20} /></span><div><small>下一堂課</small><strong>{upcoming[0] ? upcoming[0].session.toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" }) : "—"}</strong><p>{upcoming[0]?.item.name ?? "尚無近期班級"}</p></div></article>
+    <section className={styles.metricGrid} aria-label={t("TeacherDashboardPage.summaryAriaLabel")}>
+      <article><span className={styles.metricIcon}><MIcon name="task_alt" size={20} /></span><div><small>{t("TeacherDashboardPage.metricCheckpointRate")}</small><strong>{loading ? "—" : `${checkpointSummary.percent}%`}</strong><p>{t("TeacherDashboardPage.metricCheckpointDetail", { completed: checkpointSummary.completed, possible: checkpointSummary.possible })}</p></div></article>
+      <article><span className={styles.metricIcon}><MIcon name="groups" size={20} /></span><div><small>{t("TeacherDashboardPage.metricHasRecords")}</small><strong>{loading ? "—" : checkpointSummary.students}</strong><p>{t("TeacherDashboardPage.metricAcrossPaths", { count: reports.length })}</p></div></article>
+      <article><span className={styles.metricIcon}><MIcon name="school" size={20} /></span><div><small>{t("TeacherDashboardPage.metricActiveClasses")}</small><strong>{loading ? "—" : classes.filter((item) => item.status !== "archived").length}</strong><p>{t("TeacherDashboardPage.metricStillPreparing", { count: classes.filter((item) => item.status === "planning").length })}</p></div></article>
+      <article><span className={styles.metricIcon}><MIcon name="calendar_today" size={20} /></span><div><small>{t("TeacherDashboardPage.metricNextClass")}</small><strong>{upcoming[0] ? upcoming[0].session.toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" }) : "—"}</strong><p>{upcoming[0]?.item.name ?? t("TeacherDashboardPage.noUpcomingClasses")}</p></div></article>
     </section>
 
     <div className={styles.mainGrid}>
       <section className={styles.panel}>
-        <div className={styles.panelHeader}><div><span className={styles.eyebrow}>學習成果</span><h2>學生 Checkpoint 完成度</h2><p>以學生實際完成的題目與 checkpoint 統計，不混入機器建立狀態。</p></div><button type="button" className={styles.textButton} onClick={() => navigate("/course-cms?tab=progress")}>完整進度<MIcon name="arrow_forward" size={16} /></button></div>
-        <div className={styles.checkpointList}>{loading ? <LoadingState text="正在讀取 checkpoint…" /> : reports.length ? reports.map((item) => <CheckpointRow key={item.path.id} item={item} onOpen={() => navigate(`/course-cms?tab=progress&pathId=${item.path.id}`)} />) : <EmptyState icon="checklist" title="尚無 checkpoint 資料" action={<button type="button" className={styles.btnSecondary} onClick={() => navigate("/course-cms")}>建立教學內容</button>} />}</div>
+        <div className={styles.panelHeader}><div><span className={styles.eyebrow}>{t("TeacherDashboardPage.eyebrowLearningOutcomes")}</span><h2>{t("TeacherDashboardPage.checkpointPanelTitle")}</h2><p>{t("TeacherDashboardPage.checkpointPanelDesc")}</p></div><button type="button" className={styles.textButton} onClick={() => navigate("/course-cms?tab=progress")}>{t("TeacherDashboardPage.fullProgress")}<MIcon name="arrow_forward" size={16} /></button></div>
+        <div className={styles.checkpointList}>{loading ? <LoadingState text={t("TeacherDashboardPage.loadingCheckpoints")} /> : reports.length ? reports.map((item) => <CheckpointRow key={item.path.id} item={item} onOpen={() => navigate(`/course-cms?tab=progress&pathId=${item.path.id}`)} />) : <EmptyState icon="checklist" title={t("TeacherDashboardPage.noCheckpointData")} action={<button type="button" className={styles.btnSecondary} onClick={() => navigate("/course-cms")}>{t("TeacherDashboardPage.createContent")}</button>} />}</div>
       </section>
 
       <aside className={styles.panel}>
-        <div className={styles.panelHeader}><div><span className={styles.eyebrow}>跟進學生</span><h2>尚未完成 Checkpoint</h2><p>優先列出完成度較低的學生。</p></div></div>
-        <div className={styles.studentList}>{loading ? <LoadingState text="正在讀取學生進度…" /> : incompleteStudents.length ? incompleteStudents.map((student) => <button key={`${student.pathId}-${student.user_id}`} type="button" onClick={() => navigate(`/course-cms?tab=progress&pathId=${student.pathId}`)}><span className={styles.studentAvatar}>{(student.user_name ?? student.user_email ?? "學").slice(0, 1)}</span><span><strong>{student.user_name ?? student.user_email}</strong><small>{student.pathTitle} · {student.completed_questions}/{student.total_questions}</small></span><em>{Math.round(student.progress_percent)}%</em></button>) : <EmptyState icon="verified" title={reports.length ? "目前學生皆已完成" : "尚無學生進度"} />}</div>
+        <div className={styles.panelHeader}><div><span className={styles.eyebrow}>{t("TeacherDashboardPage.eyebrowFollowUpStudents")}</span><h2>{t("TeacherDashboardPage.incompleteCheckpointTitle")}</h2><p>{t("TeacherDashboardPage.incompleteCheckpointDesc")}</p></div></div>
+        <div className={styles.studentList}>{loading ? <LoadingState text={t("TeacherDashboardPage.loadingStudentProgress")} /> : incompleteStudents.length ? incompleteStudents.map((student) => <button key={`${student.pathId}-${student.user_id}`} type="button" onClick={() => navigate(`/course-cms?tab=progress&pathId=${student.pathId}`)}><span className={styles.studentAvatar}>{(student.user_name ?? student.user_email ?? t("TeacherDashboardPage.avatarFallback")).slice(0, 1)}</span><span><strong>{student.user_name ?? student.user_email}</strong><small>{student.pathTitle} · {student.completed_questions}/{student.total_questions}</small></span><em>{Math.round(student.progress_percent)}%</em></button>) : <EmptyState icon="verified" title={reports.length ? t("TeacherDashboardPage.allStudentsComplete") : t("TeacherDashboardPage.noStudentProgress")} />}</div>
       </aside>
     </div>
 
     <section className={styles.panel}>
-      <div className={styles.panelHeader}><div><span className={styles.eyebrow}>課堂安排</span><h2>近期班級</h2><p>從班級進入學生名單、機器、任務與上課監看。</p></div><button type="button" className={styles.textButton} onClick={() => navigate("/class-management")}>全部班級<MIcon name="arrow_forward" size={16} /></button></div>
-      <div className={styles.classList}>{loading ? <LoadingState text="正在讀取班級…" /> : upcoming.length ? upcoming.map(({ item, session }) => {
+      <div className={styles.panelHeader}><div><span className={styles.eyebrow}>{t("TeacherDashboardPage.eyebrowClassSchedule")}</span><h2>{t("TeacherDashboardPage.upcomingClassesTitle")}</h2><p>{t("TeacherDashboardPage.upcomingClassesDesc")}</p></div><button type="button" className={styles.textButton} onClick={() => navigate("/class-management")}>{t("TeacherDashboardPage.allClasses")}<MIcon name="arrow_forward" size={16} /></button></div>
+      <div className={styles.classList}>{loading ? <LoadingState text={t("TeacherDashboardPage.loadingClasses")} /> : upcoming.length ? upcoming.map(({ item, session }) => {
         const ready = item.totalMachines ? Math.round(item.readyMachines / item.totalMachines * 100) : 0;
-        return <button type="button" key={item.id} className={styles.classRow} onClick={() => navigate(`/class-management/${item.id}`)}><span className={styles.classDate}><strong>{session.toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" })}</strong><small>{String(item.start_time ?? "").slice(0, 5)}</small></span><span className={styles.classMain}><strong>{item.name}</strong><small>{item.students} 位學生 · 每位 {item.nodes.length} 台機器</small></span><span className={styles.classState}><em className={styles[`status_${item.status}`]}>{CLASS_STATUS[item.status] ?? item.status}</em><small>{item.status === "active" ? `${ready}% 機器就緒` : item.status === "planning" ? "繼續完成班級設定" : "查看目前進度"}</small></span><MIcon name="chevron_right" size={19} /></button>;
-      }) : <EmptyState icon="event_available" title="尚無近期班級" action={<button type="button" className={styles.btnPrimary} onClick={() => navigate("/class-setup")}>建立班級</button>} />}</div>
+        return <button type="button" key={item.id} className={styles.classRow} onClick={() => navigate(`/class-management/${item.id}`)}><span className={styles.classDate}><strong>{session.toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" })}</strong><small>{String(item.start_time ?? "").slice(0, 5)}</small></span><span className={styles.classMain}><strong>{item.name}</strong><small>{t("TeacherDashboardPage.classMemberSummary", { count: item.students, nodes: item.nodes.length })}</small></span><span className={styles.classState}><em className={styles[`status_${item.status}`]}>{t(CLASS_STATUS_KEYS[item.status] ?? item.status)}</em><small>{item.status === "active" ? t("TeacherDashboardPage.machinesReady", { percent: ready }) : item.status === "planning" ? t("TeacherDashboardPage.continueClassSetup") : t("TeacherDashboardPage.viewProgress")}</small></span><MIcon name="chevron_right" size={19} /></button>;
+      }) : <EmptyState icon="event_available" title={t("TeacherDashboardPage.noUpcomingClasses")} action={<button type="button" className={styles.btnPrimary} onClick={() => navigate("/class-setup")}>{t("TeacherDashboardPage.createClass")}</button>} />}</div>
     </section>
   </div>;
 }

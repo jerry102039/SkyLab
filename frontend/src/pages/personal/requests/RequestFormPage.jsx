@@ -1,5 +1,7 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./RequestFormPage.module.scss";
+import i18n from "../../../i18n";
 import { LayoutContext } from "../../../layout/layoutContext";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../hooks/useToast";
@@ -58,11 +60,6 @@ function SelectField({ value, onChange, disabled, children, placeholder }) {
 /* ── Helpers ── */
 const DT_FMT = { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" };
 const formatDT = (iso) => new Date(iso).toLocaleString("zh-TW", DT_FMT);
-const formatDateOnly = (iso) => new Date(iso).toLocaleDateString("zh-TW", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
 const OS_DISPLAY_NAMES = {
   ubuntu: "Ubuntu",
   debian: "Debian",
@@ -81,7 +78,7 @@ const OS_DISPLAY_NAMES = {
 const GPU_MARKER_RE = /-gpu$/i;
 const osNameNeedsGpu = (name) => GPU_MARKER_RE.test(String(name ?? "").trim());
 const stripGpuMarker = (name) => String(name ?? "").trim().replace(GPU_MARKER_RE, "");
-const withGpuTag = (label, needsGpu) => (needsGpu ? `${label}（需 GPU）` : label);
+const withGpuTag = (label, needsGpu) => (needsGpu ? `${label}${i18n.t("RequestFormPage.gpuTagSuffix", { ns: "personal" })}` : label);
 const parseLxcImage = (v) => {
   const file = v.split("/").pop() ?? v;
   const base = file.replace(/\.tar\.(zst|gz|xz|bz2)$/, "");
@@ -125,14 +122,15 @@ const GPU_OPTIONS_DEBOUNCE_MS = 300;
 const ADVISE_DEBOUNCE_MS = 500;
 const formatVramMb = (mb) => (mb >= 1024 ? `${Number.isInteger(mb / 1024) ? mb / 1024 : (mb / 1024).toFixed(1)} GB` : `${mb} MB`);
 const gpuLabel = (gpu) => {
+  const t = (key, opts) => i18n.t(key, { ns: "personal", ...opts });
   /* SR-IOV vGPU 以 framebuffer 可切數為上限（capacity_count），非 VF 插槽數 */
   const capacity = gpu.capacity_count || gpu.device_count;
   const parts = [];
-  if (gpu.per_instance_vram_mb > 0) parts.push(`${formatVramMb(gpu.per_instance_vram_mb)}/顆`);
-  if (gpu.total_vram_mb > 0) parts.push(`共 ${formatVramMb(gpu.total_vram_mb)}`);
+  if (gpu.per_instance_vram_mb > 0) parts.push(t("RequestFormPage.gpuVramPerUnit", { vram: formatVramMb(gpu.per_instance_vram_mb) }));
+  if (gpu.total_vram_mb > 0) parts.push(t("RequestFormPage.gpuVramTotal", { vram: formatVramMb(gpu.total_vram_mb) }));
   else if (gpu.vram) parts.push(gpu.vram);
   const vram = parts.length ? ` (${parts.join(", ")})` : "";
-  return `${gpu.description || gpu.mapping_id}${vram} [${gpu.available_count}/${capacity} 可用]${gpu.available_count <= 0 ? " — 已滿" : ""}`;
+  return `${gpu.description || gpu.mapping_id}${vram} ${t("RequestFormPage.gpuAvailability", { available: gpu.available_count, capacity })}${gpu.available_count <= 0 ? t("RequestFormPage.gpuFullSuffix") : ""}`;
 };
 
 
@@ -167,7 +165,7 @@ function buildAiScheduleOptions(availability) {
         start_at: fromDateInputValue(selected[0].date),
         end_at: fromDateInputValue(selected[selected.length - 1].date, true),
         status: selectedSlots.some((slot) => slot.status === "limited") ? "limited" : "available",
-        summary: `${dayCount} 天可用時段`,
+        summary: i18n.t("RequestFormPage.availableDaysSummary", { ns: "personal", count: dayCount }),
         recommended_nodes: selectedSlots.find((slot) => slot.recommended_nodes?.length)?.recommended_nodes || [],
       });
     }
@@ -190,27 +188,29 @@ function focusFirstError(formEl, errs) {
 
 /* ── Validation messages（對齊舊版 zh-TW locales）── */
 const MSG = {
-  hostnameRequired: "名稱為必填項",
-  hostnameInvalid:  "僅允許小寫字母、數字和連字符，且不能以連字符開頭或結尾",
-  passwordRequired: "密碼為必填項",
-  passwordMinLen:   "密碼至少需要 8 個字符",
-  reasonRequired:   "申請原因為必填項",
-  reasonMinLen:     "申請原因至少需要 10 個字符",
-  osRequired:       "作業系統為必填項",
-  gpuRequired:      "此作業系統需要 GPU，請選擇一張 GPU",
-  usernameRequired: "使用者名稱為必填項",
-  startRequired:    "請選擇開始日期",
-  endRequired:      "請選擇結束日期",
-  endBeforeStart:   "結束日期必須晚於開始日期",
-  endInPast:        "結束時間必須晚於現在",
-  scheduleOutOfRange: "租借時段需在未來三個月內",
+  hostnameRequired: "RequestFormPage.msgHostnameRequired",
+  hostnameInvalid:  "RequestFormPage.msgHostnameInvalid",
+  passwordRequired: "RequestFormPage.msgPasswordRequired",
+  passwordMinLen:   "RequestFormPage.msgPasswordMinLen",
+  reasonRequired:   "RequestFormPage.msgReasonRequired",
+  reasonMinLen:     "RequestFormPage.msgReasonMinLen",
+  osRequired:       "RequestFormPage.msgOsRequired",
+  gpuRequired:      "RequestFormPage.msgGpuRequired",
+  usernameRequired: "RequestFormPage.msgUsernameRequired",
+  startRequired:    "RequestFormPage.msgStartRequired",
+  endRequired:      "RequestFormPage.msgEndRequired",
+  endBeforeStart:   "RequestFormPage.msgEndBeforeStart",
+  endInPast:        "RequestFormPage.msgEndInPast",
+  scheduleOutOfRange: "RequestFormPage.msgScheduleOutOfRange",
 };
 
 export default function RequestFormPage({ onBack, className, initialPrefill = null }) {
+  const { t } = useTranslation("personal");
   const { user }  = useAuth();
   const toast     = useToast();
   const isPrivileged = user?.is_superuser || user?.role === "admin" || user?.role === "teacher";
-  const { setCompactFooter, registerRequestForm } = useContext(LayoutContext);
+  const { setCompactFooter, registerRequestForm, registerSurface } =
+    useContext(LayoutContext);
   useEffect(() => { setCompactFooter(true); return () => setCompactFooter(false); }, [setCompactFooter]);
 
   const [closing, setClosing]   = useState(false);
@@ -646,8 +646,8 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
     setErrors({});
     toast.success(
       nextResourceType === "vm"
-        ? "已匯入 AI 推薦配置；VM 帳號與密碼不會由 AI 填入，請自行輸入。"
-        : "已匯入 AI 推薦配置；LXC Root 密碼不會由 AI 填入，請自行輸入。",
+        ? t("RequestFormPage.aiPrefillAppliedVm")
+        : t("RequestFormPage.aiPrefillAppliedLxc"),
     );
   }
 
@@ -659,7 +659,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
     if (resourceType !== "vm") { setPendingGpu(null); return; }
     if (!selectedOsNeedsGpu) {
       setPendingGpu(null);
-      toast.error("AI 建議搭配 GPU，但所選作業系統不是 GPU 版本，請改選標示「需 GPU」的作業系統。");
+      toast.error(t("RequestFormPage.aiGpuOsMismatch"));
       return;
     }
     if (mode === "scheduled" && !gpuWindowReady) return;   // 等使用者把時段選完
@@ -670,7 +670,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
     if (match && match.available_count > 0) {
       setForm((prev) => ({ ...prev, gpu_mapping_id: pendingGpu }));
     } else {
-      toast.error("AI 建議的 GPU 在這個時段沒有可用的，請改選其他 GPU 或調整時段。");
+      toast.error(t("RequestFormPage.aiGpuUnavailable"));
     }
     setPendingGpu(null);
   }, [
@@ -707,6 +707,54 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
     return () => registerRequestForm(null);
   }, [registerRequestForm]);
 
+  /* 畫面說明用的動態狀態：欄位當下的值與驗證錯誤。欄位的「意義」不在這裡——
+     label、說明與限制一律由後端的 surface 定義提供，這裡只回答「填了什麼」。
+     contextVersion 每次狀態變動就換一個值，助手用它丟棄過期的回答。 */
+  const surfaceState = () => ({
+    "request.hostname": { value: form.hostname, error: errors.hostname ?? null },
+    "request.os": {
+      value: resourceType === "vm" ? form.template_id : (selectedTplId || form.ostemplate),
+      error: errors.template_id ?? errors.ostemplate ?? null,
+    },
+    "request.username": { value: form.username, error: errors.username ?? null },
+    "request.password": { value: form.password, error: errors.password ?? null },
+    "request.cores": { value: String(form.cores ?? "") },
+    "request.memory": { value: String(form.memory ?? "") },
+    "request.disk": {
+      value: String(
+        (resourceType === "lxc" ? form.rootfs_size : form.disk_size) ?? "",
+      ),
+    },
+    "request.gpu": {
+      value: form.gpu_mapping_id,
+      error: errors.gpu_mapping_id ?? null,
+    },
+    "request.vgpu": { value: form.gpu_mdev_profile },
+    "request.mode": { value: mode },
+    "request.start_at": { value: form.start_at, error: errors.start_at ?? null },
+    "request.end_at": { value: form.end_at, error: errors.end_at ?? null },
+    "request.reason": { value: form.reason, error: errors.reason ?? null },
+    /* 送出鈕沒有被驗證停用——這張表單是按下去才驗證的。只有送出中才是真的停用，
+       據實回報，否則助手會解釋一個不存在的停用原因。 */
+    "request.submit": { disabled: submitting },
+  });
+  const surfaceStateRef = useRef(surfaceState);
+  surfaceStateRef.current = surfaceState;
+  /* render 期間不做副作用：版本號在 render 之後才遞增，語意一樣是「畫面又變了」。 */
+  const contextVersion = useRef(0);
+  useEffect(() => {
+    contextVersion.current += 1;
+  });
+
+  useEffect(() => {
+    if (!registerSurface) return undefined;
+    registerSurface("request-form", {
+      getState: () => surfaceStateRef.current(),
+      getVersion: () => contextVersion.current,
+    });
+    return () => registerSurface("request-form", null);
+  }, [registerSurface]);
+
   function handleBack() {
     setClosing(true);
     setTimeout(onBack, 180);
@@ -717,36 +765,36 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
     const errs = {};
     const hostnameRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
-    if (!form.hostname.trim())          errs.hostname = MSG.hostnameRequired;
-    else if (!hostnameRegex.test(form.hostname)) errs.hostname = MSG.hostnameInvalid;
+    if (!form.hostname.trim())          errs.hostname = t(MSG.hostnameRequired);
+    else if (!hostnameRegex.test(form.hostname)) errs.hostname = t(MSG.hostnameInvalid);
 
-    if (!form.password)                 errs.password = MSG.passwordRequired;
-    else if (form.password.length < 8)  errs.password = MSG.passwordMinLen;
+    if (!form.password)                 errs.password = t(MSG.passwordRequired);
+    else if (form.password.length < 8)  errs.password = t(MSG.passwordMinLen);
 
-    if (!form.reason.trim())            errs.reason = MSG.reasonRequired;
-    else if (form.reason.trim().length < 10) errs.reason = MSG.reasonMinLen;
+    if (!form.reason.trim())            errs.reason = t(MSG.reasonRequired);
+    else if (form.reason.trim().length < 10) errs.reason = t(MSG.reasonMinLen);
 
     if (resourceType === "lxc" && !selectedTplId && !form.ostemplate)
-      errs.ostemplate = MSG.osRequired;
+      errs.ostemplate = t(MSG.osRequired);
     if (resourceType === "vm") {
-      if (!form.template_id)            errs.template_id = MSG.osRequired;
-      if (!isWindowsVm && !form.username.trim()) errs.username = MSG.usernameRequired;
-      if (gpuNeeded && !form.gpu_mapping_id) errs.gpu_mapping_id = MSG.gpuRequired;
+      if (!form.template_id)            errs.template_id = t(MSG.osRequired);
+      if (!isWindowsVm && !form.username.trim()) errs.username = t(MSG.usernameRequired);
+      if (gpuNeeded && !form.gpu_mapping_id) errs.gpu_mapping_id = t(MSG.gpuRequired);
     }
 
     if (mode === "scheduled") {
-      if (!form.start_at) errs.start_at = MSG.startRequired;
-      if (!form.end_at)   errs.end_at   = MSG.endRequired;
+      if (!form.start_at) errs.start_at = t(MSG.startRequired);
+      if (!form.end_at)   errs.end_at   = t(MSG.endRequired);
       if (form.start_at && form.end_at && new Date(form.start_at) >= new Date(form.end_at))
-        errs.end_at = MSG.endBeforeStart;
+        errs.end_at = t(MSG.endBeforeStart);
       const maximum = new Date(scheduleBounds.max);
       if (form.start_at && new Date(form.start_at) > maximum)
-        errs.start_at = MSG.scheduleOutOfRange;
+        errs.start_at = t(MSG.scheduleOutOfRange);
       if (form.end_at && new Date(form.end_at) > maximum)
-        errs.end_at = MSG.scheduleOutOfRange;
+        errs.end_at = t(MSG.scheduleOutOfRange);
     }
     if (mode === "immediate" && !form.immediate_no_end && form.end_at) {
-      if (new Date(form.end_at) <= new Date()) errs.end_at = MSG.endInPast;
+      if (new Date(form.end_at) <= new Date()) errs.end_at = t(MSG.endInPast);
     }
     return errs;
   }
@@ -774,7 +822,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
           (g) => g.mapping_id === selectedGpuId && g.available_count > 0,
         );
         if (!gpuStillAvailable) {
-          toast.error("目前所選時段的 GPU 已不可用，請重新選擇時段或 GPU。");
+          toast.error(t("RequestFormPage.gpuNoLongerAvailable"));
           setSubmitting(false);
           return;
         }
@@ -805,7 +853,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
           toast.error(
             windowAvailability.reason ||
             windowAvailability.summary ||
-            "所選時段目前沒有足夠資源，請重新選擇時段或調整規格。",
+            t("RequestFormPage.windowInsufficientResources"),
           );
           setSubmitting(false);
           return;
@@ -855,10 +903,10 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
       };
 
       await VmRequestsService.create(body);
-      toast.success("申請已提交，等待管理員審核");
+      toast.success(t("RequestFormPage.submitSuccess"));
       handleBack();
     } catch (err) {
-      toast.error(err?.message ?? "發生錯誤，請重試。");
+      toast.error(err?.message ?? t("RequestFormPage.submitFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -920,10 +968,10 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
   return (
     <div className={`${styles.formPage} ${animCls}`}>
       {/* ── 頁首 ── */}
-      <PageHeader title="申請虛擬機 / 容器" subtitle="填寫申請表單後送出，待管理員審核通過後會自動建立資源">
+      <PageHeader title={t("RequestFormPage.title")} subtitle={t("RequestFormPage.subtitle")}>
         <button type="button" className={styles.backBtn} onClick={handleBack}>
           <MIcon name="arrow_back" size={18} />
-          返回
+          {t("RequestFormPage.back")}
         </button>
       </PageHeader>
 
@@ -931,7 +979,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
       {aiPrefilled && (
         <p className={styles.adviceBox}>
           <MIcon name="auto_awesome" size={15} />
-          {" "}以下欄位由 AI 依你的描述預填，送出前請逐項確認；帳號與密碼一律由你自己輸入。
+          {" "}{t("RequestFormPage.aiPrefillNotice")}
         </p>
       )}
 
@@ -943,11 +991,11 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
             {/* ── 申請模式（管理員／老師） ── */}
             {isPrivileged && (
               <div className={styles.formSection}>
-                <h2 className={styles.sectionTitle}>申請模式</h2>
+                <h2 className={styles.sectionTitle}>{t("RequestFormPage.requestModeTitle")}</h2>
                 <div className={styles.typeToggle}>
                   {[
-                    { key: "scheduled", label: "預約模式", icon: "calendar_month" },
-                    { key: "immediate", label: "立即模式", icon: "bolt" },
+                    { key: "scheduled", labelKey: "RequestFormPage.modeScheduled", icon: "calendar_month" },
+                    { key: "immediate", labelKey: "RequestFormPage.modeImmediate", icon: "bolt" },
                   ].map((m) => (
                     <button
                       key={m.key}
@@ -956,7 +1004,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                       onClick={() => setMode(m.key)}
                     >
                       <MIcon name={m.icon} size={16} />
-                      {m.label}
+                      {t(m.labelKey)}
                     </button>
                   ))}
                 </div>
@@ -965,27 +1013,26 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
 
             {/* ── 資源設定（型別由作業系統選擇 + 規則引擎自動決定，學生免選 QEMU/LXC） ── */}
             <div className={styles.formSection}>
-              <h2 className={styles.sectionTitle}>資源設定</h2>
+              <h2 className={styles.sectionTitle}>{t("RequestFormPage.resourceSettingsTitle")}</h2>
 
               <p className={styles.adviceBox}>
-                需要 GPU、圖形介面（GUI）或 Windows 時，請選擇「虛擬機範本」的作業系統；
-                一般輕量服務（網站、資料庫、開發環境）選容器範本或映像檔即可。
+                {t("RequestFormPage.resourceSettingsHint")}
               </p>
               {!advisorDisabled && (adviceLoading || advice) && (
                 <p className={styles.adviceBox}>
                   {adviceLoading
-                    ? "正在依申請內容判斷合適的類型…"
+                    ? t("RequestFormPage.adviceLoading")
                     : (() => {
-                        const label = (t) => (t === "vm" ? "虛擬機" : "LXC 容器");
-                        const text = `系統建議使用「${label(advice.resource_type)}」：${advice.reasons.join("；")}`;
+                        const typeLabel = (rt) => (rt === "vm" ? t("RequestFormPage.typeVm") : t("RequestFormPage.typeLxcContainer"));
+                        const text = t("RequestFormPage.adviceSuggested", { type: typeLabel(advice.resource_type), reasons: advice.reasons.join("；") });
                         return osChosen && advice.resource_type !== resourceType
-                          ? `${text}（您選擇的作業系統屬於「${label(resourceType)}」，將依作業系統建立）`
+                          ? t("RequestFormPage.adviceOverriddenByOs", { text, currentType: typeLabel(resourceType) })
                           : text;
                       })()}
                 </p>
               )}
 
-              <FieldGroup label="資源名稱" required error={errors.hostname} name="hostname">
+              <FieldGroup label={t("RequestFormPage.resourceNameLabel")} required error={errors.hostname} name="hostname">
                 <input
                   className={styles.input}
                   placeholder="project-alpha-web"
@@ -995,50 +1042,50 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                 />
               </FieldGroup>
 
-              <FieldGroup label="作業系統" required name="ostemplate template_id"
+              <FieldGroup label={t("RequestFormPage.osLabel")} required name="ostemplate template_id"
                 error={errors.template_id || errors.ostemplate}
                 hint={osChosen
-                  ? `一次申請一台，將建立為「${resourceType === "vm" ? "虛擬機" : "LXC 容器"}」`
-                  : "可直接套用老師／官方準備好的環境範本，或從作業系統映像自行安裝；一次申請一台"}>
+                  ? t("RequestFormPage.osHintChosen", { type: resourceType === "vm" ? t("RequestFormPage.typeVm") : t("RequestFormPage.typeLxcContainer") })
+                  : t("RequestFormPage.osHintNotChosen")}>
                 <SelectField
                   value={autoOsChoice}
                   onChange={handleAutoOsSelect}
                   disabled={vmLoading || lxcLoading || sysTplLoading}
-                  placeholder={(vmLoading || lxcLoading || sysTplLoading) ? "載入中…" : "選擇作業系統"}
+                  placeholder={(vmLoading || lxcLoading || sysTplLoading) ? t("RequestFormPage.loading") : t("RequestFormPage.selectOs")}
                 >
                   {catalogChoices.length > 0 && (
-                    <optgroup label="老師／官方提供的環境範本">
-                      {catalogChoices.map((t) => (
-                        <option key={`cat-${t.id}`} value={t.choice}>
-                          {withGpuTag(stripGpuMarker(t.name), osNameNeedsGpu(t.name) || Boolean(t.requires_gpu))}
+                    <optgroup label={t("RequestFormPage.optgroupCatalog")}>
+                      {catalogChoices.map((tpl) => (
+                        <option key={`cat-${tpl.id}`} value={tpl.choice}>
+                          {withGpuTag(stripGpuMarker(tpl.name), osNameNeedsGpu(tpl.name) || Boolean(tpl.requires_gpu))}
                         </option>
                       ))}
                     </optgroup>
                   )}
                   {vmTemplates.length > 0 && (
-                    <optgroup label={isPrivileged ? "虛擬機範本" : "作業系統映像（虛擬機）"}>
-                      {vmTemplates.map((t) => (
-                        <option key={`vm-${t.vmid}`} value={`vm:${t.vmid}`}>
-                          {withGpuTag(stripGpuMarker(t.name), osNameNeedsGpu(t.name))}
+                    <optgroup label={isPrivileged ? t("RequestFormPage.optgroupVmTemplate") : t("RequestFormPage.optgroupVmImage")}>
+                      {vmTemplates.map((tpl) => (
+                        <option key={`vm-${tpl.vmid}`} value={`vm:${tpl.vmid}`}>
+                          {withGpuTag(stripGpuMarker(tpl.name), osNameNeedsGpu(tpl.name))}
                         </option>
                       ))}
                     </optgroup>
                   )}
                   {isPrivileged && lxcSysTemplates.length > 0 && (
-                    <optgroup label="容器範本（克隆建立）">
-                      {lxcSysTemplates.map((t) => (
-                        <option key={`tpl-${t.id}`} value={`tpl:${t.id}`}>
-                          {withGpuTag(`${stripGpuMarker(t.name)}（v${t.version}）`, osNameNeedsGpu(t.name))}
+                    <optgroup label={t("RequestFormPage.optgroupContainerTemplate")}>
+                      {lxcSysTemplates.map((tpl) => (
+                        <option key={`tpl-${tpl.id}`} value={`tpl:${tpl.id}`}>
+                          {withGpuTag(t("RequestFormPage.templateVersionLabel", { name: stripGpuMarker(tpl.name), version: tpl.version }), osNameNeedsGpu(tpl.name))}
                         </option>
                       ))}
                     </optgroup>
                   )}
                   {lxcTemplates.length > 0 && (
-                    <optgroup label="容器映像檔">
-                      {lxcTemplates.map((t) => {
-                        const img = parseLxcImage(t.volid);
+                    <optgroup label={t("RequestFormPage.optgroupContainerImage")}>
+                      {lxcTemplates.map((tpl) => {
+                        const img = parseLxcImage(tpl.volid);
                         return (
-                          <option key={`img-${t.volid}`} value={`img:${t.volid}`}>
+                          <option key={`img-${tpl.volid}`} value={`img:${tpl.volid}`}>
                             {withGpuTag(img.label, img.needsGpu)}
                           </option>
                         );
@@ -1049,11 +1096,13 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                 {selectedCatalogItem && (
                   <p className={styles.fieldHint}>
                     {selectedCatalogItem.description
-                      || "老師／官方已裝好的環境，建立後可直接使用。"}
-                    {" "}範本建議規格：{selectedCatalogItem.cores ?? "—"} 核心 ·{" "}
-                    {selectedCatalogItem.memory_mb
-                      ? `${(selectedCatalogItem.memory_mb / 1024).toFixed(1)} GB RAM`
-                      : "— RAM"}
+                      || t("RequestFormPage.catalogDefaultDesc")}
+                    {" "}{t("RequestFormPage.templateRecommendedSpec", {
+                      cores: selectedCatalogItem.cores ?? "—",
+                      memory: selectedCatalogItem.memory_mb
+                        ? `${(selectedCatalogItem.memory_mb / 1024).toFixed(1)} GB RAM`
+                        : t("RequestFormPage.ramDash"),
+                    })}
                     {selectedCatalogItem.disk_gb ? ` · ${selectedCatalogItem.disk_gb} GB` : ""}
                   </p>
                 )}
@@ -1063,7 +1112,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
               {osChosen && resourceType === "vm" && (
                 <div className={styles.formGrid}>
                   {!isWindowsVm && (
-                    <FieldGroup label="使用者名稱" required error={errors.username} name="username">
+                    <FieldGroup label={t("RequestFormPage.usernameLabel")} required error={errors.username} name="username">
                       <input
                         className={styles.input}
                         placeholder="admin"
@@ -1073,18 +1122,18 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                     </FieldGroup>
                   )}
                   <FieldGroup
-                    label="密碼"
+                    label={t("RequestFormPage.passwordLabel")}
                     required
                     error={errors.password}
                     name="password"
                     hint={isWindowsVm
-                      ? "Windows 範本登入帳號固定為 Admin，僅需設定密碼"
+                      ? t("RequestFormPage.windowsPasswordHint")
                       : undefined}
                   >
                     <input
                       className={styles.input}
                       type="password"
-                      placeholder="至少 8 個字元"
+                      placeholder={t("RequestFormPage.passwordPlaceholder")}
                       value={form.password}
                       onChange={(e) => set("password", e.target.value)}
                     />
@@ -1092,14 +1141,14 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                 </div>
               )}
               {osChosen && resourceType === "lxc" && (
-                <FieldGroup label="密碼" required error={errors.password} name="password"
+                <FieldGroup label={t("RequestFormPage.passwordLabel")} required error={errors.password} name="password"
                   hint={selectedTpl
-                    ? "克隆建立的容器沿用範本內建帳密，此密碼僅作平台紀錄"
-                    : "LXC 容器登入帳號固定為 root，僅需設定密碼"}>
+                    ? t("RequestFormPage.clonedPasswordHint")
+                    : t("RequestFormPage.lxcPasswordHint")}>
                   <input
                     className={styles.input}
                     type="password"
-                    placeholder="至少 8 個字元"
+                    placeholder={t("RequestFormPage.passwordPlaceholder")}
                     value={form.password}
                     onChange={(e) => set("password", e.target.value)}
                   />
@@ -1109,15 +1158,15 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
 
             {/* ── 硬體資源配置 ── */}
             <div className={styles.formSection}>
-              <h2 className={styles.sectionTitle}>硬體資源配置</h2>
+              <h2 className={styles.sectionTitle}>{t("RequestFormPage.hardwareConfigTitle")}</h2>
 
               {selectedCatalogItem && (
                 <p className={styles.fieldHint}>
-                  已帶入範本的建議規格，可依需求調整；硬碟不可小於範本本身的大小。
+                  {t("RequestFormPage.hardwareConfigHint")}
                 </p>
               )}
 
-              <FieldGroup label="CPU 核心數" labelRight={`${form.cores} 核心`}>
+              <FieldGroup label={t("RequestFormPage.cpuCoresLabel")} labelRight={t("RequestFormPage.coresValue", { count: form.cores })}>
                 <input
                   type="range" min={1} max={8} step={1}
                   className={styles.slider}
@@ -1131,7 +1180,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                 </div>
               </FieldGroup>
 
-              <FieldGroup label="記憶體 (RAM)" labelRight={`${(form.memory / 1024).toFixed(1)} GB`}>
+              <FieldGroup label={t("RequestFormPage.memoryLabel")} labelRight={`${(form.memory / 1024).toFixed(1)} GB`}>
                 <input
                   type="range" min={512} max={32768} step={512}
                   className={styles.slider}
@@ -1155,7 +1204,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                   : (selectedVmTemplate?.disk_gb || 20);
                 const diskMax = Math.max(500, diskMin);
                 return (
-                  <FieldGroup label="硬碟空間 (Disk)" labelRight={
+                  <FieldGroup label={t("RequestFormPage.diskSpaceLabel")} labelRight={
                     <div className={styles.diskInput}>
                       <input
                         type="number" min={diskMin} max={diskMax}
@@ -1180,24 +1229,24 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
             {/* ── GPU（作業系統標記 -GPU、或範本政策要求 GPU 時才顯示）── */}
             {resourceType === "vm" && gpuNeeded && (
               <div className={styles.formSection}>
-                <h2 className={styles.sectionTitle}>GPU 加速</h2>
+                <h2 className={styles.sectionTitle}>{t("RequestFormPage.gpuAccelTitle")}</h2>
                 {selectedTemplateRequiresGpu && (
-                  <p className={styles.fieldHint}>此範本需要 GPU，送出前必須選擇要配置的 GPU。</p>
+                  <p className={styles.fieldHint}>{t("RequestFormPage.templateRequiresGpuHint")}</p>
                 )}
 
                 {!canLoadGpu && mode === "scheduled" && (
-                  <p className={styles.fieldHint}>請先選擇租借時段，再載入該時段可用的 GPU。</p>
+                  <p className={styles.fieldHint}>{t("RequestFormPage.selectScheduleFirstHint")}</p>
                 )}
                 {!gpuLoading && gpuOptions.length === 0 && (
-                  <p className={styles.fieldHint}>此時段目前沒有可用 GPU，請改選其他時段或其他作業系統。</p>
+                  <p className={styles.fieldHint}>{t("RequestFormPage.noGpuAvailableHint")}</p>
                 )}
 
                 <FieldGroup
-                  label="選擇 GPU"
+                  label={t("RequestFormPage.selectGpuLabel")}
                   required
                   error={errors.gpu_mapping_id}
                   name="gpu_mapping_id"
-                  hint="GPU 會依所選時段重新計算可用性，送出前仍會再做一次即時檢查"
+                  hint={t("RequestFormPage.gpuAvailabilityHint")}
                 >
                   <SelectField
                     value={form.gpu_mapping_id || "__none__"}
@@ -1210,9 +1259,9 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                       if (errors.gpu_mapping_id) setErrors((prev) => ({ ...prev, gpu_mapping_id: "" }));
                     }}
                     disabled={gpuLoading || gpuOptions.length === 0}
-                    placeholder={!canLoadGpu ? "請先選擇時段" : undefined}
+                    placeholder={!canLoadGpu ? t("RequestFormPage.selectScheduleFirstPlaceholder") : undefined}
                   >
-                    <option value="__none__">請選擇 GPU</option>
+                    <option value="__none__">{t("RequestFormPage.selectGpuPlaceholder")}</option>
                     {gpuOptions.map((gpu) => (
                       <option key={gpu.mapping_id} value={gpu.mapping_id} disabled={gpu.available_count <= 0}>
                         {gpuLabel(gpu)}
@@ -1223,18 +1272,18 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
 
                 {selectedGpuProfiles.length > 0 && (
                   <FieldGroup
-                    label="vGPU 規格"
-                    hint="依需要的 GPU 記憶體選擇；預設為最小可用規格"
+                    label={t("RequestFormPage.vgpuSpecLabel")}
+                    hint={t("RequestFormPage.vgpuSpecHint")}
                   >
                     <SelectField
                       value={form.gpu_mdev_profile || smallestCreatableProfile?.mdev_type || ""}
                       onChange={(v) => set("gpu_mdev_profile", v)}
-                      placeholder={smallestCreatableProfile ? undefined : "無可建立的規格（記憶體不足）"}
+                      placeholder={smallestCreatableProfile ? undefined : t("RequestFormPage.noCreatableProfile")}
                     >
                       {selectedGpuProfiles.map((p) => (
                         <option key={p.mdev_type} value={p.mdev_type} disabled={!p.creatable}>
                           {`${p.name || p.mdev_type} — ${formatVramMb(p.vram_mb)}`}
-                          {p.creatable ? "" : "（記憶體不足）"}
+                          {p.creatable ? "" : t("RequestFormPage.insufficientMemorySuffix")}
                         </option>
                       ))}
                     </SelectField>
@@ -1247,14 +1296,14 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
             <div className={styles.formSection}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.sectionTitle}>
-                  {mode === "immediate" ? "立即模式設定" : "租借時段"}
+                  {mode === "immediate" ? t("RequestFormPage.immediateModeSettingsTitle") : t("RequestFormPage.scheduleTitle")}
                 </h2>
               </div>
 
               {mode === "immediate" ? (
                 <>
                   <p className={styles.fieldHint}>
-                    立即模式會在送出申請後馬上開始部署，不需要選擇開始時間。
+                    {t("RequestFormPage.immediateModeHint")}
                   </p>
                   <label className={styles.checkboxLabel}>
                     <input
@@ -1263,10 +1312,10 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
                       checked={form.immediate_no_end}
                       onChange={(e) => set("immediate_no_end", e.target.checked)}
                     />
-                    無限期 (No end date)
+                    {t("RequestFormPage.noEndDate")}
                   </label>
                   {!form.immediate_no_end && (
-                    <FieldGroup label="結束時間" error={errors.end_at} name="end_at">
+                    <FieldGroup label={t("RequestFormPage.endTimeLabel")} error={errors.end_at} name="end_at">
                       <input
                       type="datetime-local"
                       className={styles.input}
@@ -1281,28 +1330,28 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
               ) : (
                 <>
                   <div className={styles.scheduleInputGrid}>
-                    <FieldGroup label="開始日期" required error={errors.start_at} name="start_at">
+                    <FieldGroup label={t("RequestFormPage.startDateLabel")} required error={errors.start_at} name="start_at">
                       <input
-                        type="date"
+                        type="datetime-local"
                         className={styles.input}
-                        min={scheduleBounds.min.slice(0, 10)}
-                        max={scheduleBounds.max.slice(0, 10)}
-                        value={toDateInputValue(form.start_at)}
-                        onChange={(e) => set("start_at", fromDateInputValue(e.target.value))}
+                        min={scheduleBounds.min}
+                        max={scheduleBounds.max}
+                        value={toDateTimeLocalValue(form.start_at)}
+                        onChange={(e) => set("start_at", fromDateTimeLocalValue(e.target.value))}
                       />
                     </FieldGroup>
-                    <FieldGroup label="結束日期" required error={errors.end_at} name="end_at">
+                    <FieldGroup label={t("RequestFormPage.endDateLabel")} required error={errors.end_at} name="end_at">
                       <input
-                        type="date"
+                        type="datetime-local"
                         className={styles.input}
-                        min={toDateInputValue(form.start_at) || scheduleBounds.min.slice(0, 10)}
-                        max={scheduleBounds.max.slice(0, 10)}
-                        value={toDateInputValue(form.end_at)}
-                        onChange={(e) => set("end_at", fromDateInputValue(e.target.value, true))}
+                        min={toDateTimeLocalValue(form.start_at) || scheduleBounds.min}
+                        max={scheduleBounds.max}
+                        value={toDateTimeLocalValue(form.end_at)}
+                        onChange={(e) => set("end_at", fromDateTimeLocalValue(e.target.value))}
                       />
                     </FieldGroup>
                   </div>
-                  <div className={styles.scheduleDivider}><span>或使用可用性月曆</span></div>
+                  <div className={styles.scheduleDivider}><span>{t("RequestFormPage.orUseAvailabilityCalendar")}</span></div>
                   <AvailabilityPanel
                     startAt={form.start_at}
                     endAt={form.end_at}
@@ -1337,15 +1386,15 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
 
             {/* ── 申請原因 ── */}
             <div className={styles.formSection}>
-              <h2 className={styles.sectionTitle}>申請原因<span className={styles.required}> *</span></h2>
+              <h2 className={styles.sectionTitle}>{t("RequestFormPage.reasonTitle")}<span className={styles.required}> *</span></h2>
               <FieldGroup error={errors.reason} name="reason">
                 <textarea
                   className={styles.textarea}
-                  placeholder="請描述您的申請用途..."
+                  placeholder={t("RequestFormPage.reasonPlaceholder")}
                   value={form.reason}
                   onChange={(e) => set("reason", e.target.value)}
                 />
-                <div className={styles.charCount}>{form.reason.length} 字</div>
+                <div className={styles.charCount}>{t("RequestFormPage.charCount", { count: form.reason.length })}</div>
               </FieldGroup>
             </div>
 
@@ -1353,7 +1402,7 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
 
           <div className={styles.formActions}>
             <button type="button" className={styles.btnSecondary} onClick={handleBack}>
-              取消
+              {t("RequestFormPage.cancel")}
             </button>
             <button
               type="submit"
@@ -1362,8 +1411,8 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
               disabled={submitting}
             >
               {submitting
-                ? <><span className={styles.spin}><MIcon name="hourglass_empty" size={16} /></span>送出中…</>
-                : <><MIcon name="send" size={16} />送出申請</>
+                ? <><span className={styles.spin}><MIcon name="hourglass_empty" size={16} /></span>{t("RequestFormPage.submitting")}</>
+                : <><MIcon name="send" size={16} />{t("RequestFormPage.submitRequest")}</>
               }
             </button>
           </div>
@@ -1377,12 +1426,12 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
               <div className={styles.summaryChips}>
                 <span className={`${styles.summaryChip} ${resourceType === "lxc" ? styles.summaryChipLxc : styles.summaryChipVm}`}>
                   <MIcon name={resourceType === "lxc" ? "dashboard" : "computer"} size={12} />
-                  {resourceType === "lxc" ? "LXC 容器" : "虛擬機"}
+                  {resourceType === "lxc" ? t("RequestFormPage.typeLxcContainer") : t("RequestFormPage.typeVm")}
                 </span>
                 {isPrivileged && (
                   <span className={`${styles.summaryChip} ${mode === "scheduled" ? styles.summaryChipScheduled : styles.summaryChipImmediate}`}>
                     <MIcon name={mode === "scheduled" ? "calendar_month" : "bolt"} size={12} />
-                    {mode === "scheduled" ? "預約" : "立即"}
+                    {mode === "scheduled" ? t("RequestFormPage.modeScheduledShort") : t("RequestFormPage.modeImmediateShort")}
                   </span>
                 )}
               </div>
@@ -1390,23 +1439,23 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
               <div className={styles.summaryDivider} />
 
               <div className={styles.summaryRow}>
-                <span className={styles.summaryLabel}>名稱</span>
+                <span className={styles.summaryLabel}>{t("RequestFormPage.summaryName")}</span>
                 <span className={`${styles.summaryValue} ${!form.hostname ? styles.summaryValueMuted : ""}`}>
-                  {form.hostname || "未填寫"}
+                  {form.hostname || t("RequestFormPage.notFilled")}
                 </span>
               </div>
 
               {resourceType === "lxc" && (
                 selectedTpl ? (
                   <div className={styles.summaryRow}>
-                    <span className={styles.summaryLabel}>範本</span>
+                    <span className={styles.summaryLabel}>{t("RequestFormPage.summaryTemplate")}</span>
                     <span className={styles.summaryValue}>{selectedTpl.name}</span>
                   </div>
                 ) : (
                   <div className={styles.summaryRow}>
-                    <span className={styles.summaryLabel}>映像檔</span>
+                    <span className={styles.summaryLabel}>{t("RequestFormPage.summaryImage")}</span>
                     <span className={`${styles.summaryValue} ${!form.ostemplate ? styles.summaryValueMuted : ""}`}>
-                      {form.ostemplate ? formatOstemplate(form.ostemplate) : "未選擇"}
+                      {form.ostemplate ? formatOstemplate(form.ostemplate) : t("RequestFormPage.notSelected")}
                     </span>
                   </div>
                 )
@@ -1415,18 +1464,18 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
               {resourceType === "vm" && (
                 <>
                   <div className={styles.summaryRow}>
-                    <span className={styles.summaryLabel}>作業系統</span>
+                    <span className={styles.summaryLabel}>{t("RequestFormPage.summaryOs")}</span>
                     <span className={`${styles.summaryValue} ${!form.template_id ? styles.summaryValueMuted : ""}`}>
                       {form.template_id
-                        ? (vmChoices.find((t) => String(t.vmid) === String(form.template_id))?.name ?? form.template_id)
-                        : "未選擇"}
+                        ? (vmChoices.find((tpl) => String(tpl.vmid) === String(form.template_id))?.name ?? form.template_id)
+                        : t("RequestFormPage.notSelected")}
                     </span>
                   </div>
                   {(isWindowsVm || form.username) && (
                     <div className={styles.summaryRow}>
-                      <span className={styles.summaryLabel}>使用者</span>
+                      <span className={styles.summaryLabel}>{t("RequestFormPage.summaryUsername")}</span>
                       <span className={styles.summaryValue}>
-                        {isWindowsVm ? "Admin（Windows 固定）" : form.username}
+                        {isWindowsVm ? t("RequestFormPage.windowsFixedAdmin") : form.username}
                       </span>
                     </div>
                   )}
@@ -1437,14 +1486,14 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
 
               <div className={styles.summaryRow}>
                 <span className={styles.summaryLabel}>CPU</span>
-                <span className={styles.summaryValue}>{form.cores} 核心</span>
+                <span className={styles.summaryValue}>{t("RequestFormPage.coresValue", { count: form.cores })}</span>
               </div>
               <div className={styles.summaryRow}>
-                <span className={styles.summaryLabel}>記憶體</span>
+                <span className={styles.summaryLabel}>{t("RequestFormPage.summaryMemory")}</span>
                 <span className={styles.summaryValue}>{(form.memory / 1024).toFixed(1)} GB</span>
               </div>
               <div className={styles.summaryRow}>
-                <span className={styles.summaryLabel}>硬碟</span>
+                <span className={styles.summaryLabel}>{t("RequestFormPage.summaryDisk")}</span>
                 <span className={styles.summaryValue}>
                   {resourceType === "lxc" ? form.rootfs_size : form.disk_size} GB
                 </span>
@@ -1462,28 +1511,28 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
 
               {mode === "immediate" ? (
                 <div className={styles.summaryRow}>
-                  <span className={styles.summaryLabel}>時段</span>
+                  <span className={styles.summaryLabel}>{t("RequestFormPage.summaryPeriod")}</span>
                   <span className={styles.summaryValue}>
                     {form.immediate_no_end
-                      ? "立即 / 無限期"
-                      : form.end_at ? `至 ${formatDT(form.end_at)}` : "立即開始"}
+                      ? t("RequestFormPage.immediateUnlimited")
+                      : form.end_at ? t("RequestFormPage.untilDate", { date: formatDT(form.end_at) }) : t("RequestFormPage.startsImmediately")}
                   </span>
                 </div>
               ) : form.start_at && form.end_at ? (
                 <>
                   <div className={styles.summaryRow}>
-                    <span className={styles.summaryLabel}>開始</span>
-                    <span className={styles.summaryTimeValue}>{formatDateOnly(form.start_at)}</span>
+                    <span className={styles.summaryLabel}>{t("RequestFormPage.summaryStart")}</span>
+                    <span className={styles.summaryTimeValue}>{formatDT(form.start_at)}</span>
                   </div>
                   <div className={styles.summaryRow}>
-                    <span className={styles.summaryLabel}>結束</span>
-                    <span className={styles.summaryTimeValue}>{formatDateOnly(form.end_at)}</span>
+                    <span className={styles.summaryLabel}>{t("RequestFormPage.summaryEnd")}</span>
+                    <span className={styles.summaryTimeValue}>{formatDT(form.end_at)}</span>
                   </div>
                 </>
               ) : (
                 <div className={styles.summaryRow}>
-                  <span className={styles.summaryLabel}>時段</span>
-                  <span className={`${styles.summaryValue} ${styles.summaryValueMuted}`}>未選擇</span>
+                  <span className={styles.summaryLabel}>{t("RequestFormPage.summaryPeriod")}</span>
+                  <span className={`${styles.summaryValue} ${styles.summaryValueMuted}`}>{t("RequestFormPage.notSelected")}</span>
                 </div>
               )}
           </div>

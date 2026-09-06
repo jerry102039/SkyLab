@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./ResourceDetailPage.module.scss";
 import LoadingState from "../../../../components/LoadingState/LoadingState";
 import MIcon from "../../../../components/MIcon";
@@ -34,50 +35,54 @@ function findAppliedWithWarning(list, vmid) {
 }
 
 function OpenRequestNotice({ request, busy, onApply, onCancel }) {
+  const { t } = useTranslation("personal");
   const display = specRequestDisplayStatus(request);
+  const statusLabel = display.labelKey ? t(display.labelKey) : display.key;
   const showApply = canApplySpecRequest(request);
   const showCancel = canCancelSpecRequest(request);
 
   let line;
   switch (display.key) {
     case "pending":
-      line = "已送出申請，等待管理員審核。";
+      line = t("SpecificationsTab.noticePending");
       break;
     case "ready":
-      line = "申請已通過。按「套用新規格」後，機器會先關機、套用規格、再自動開機。";
+      line = t("SpecificationsTab.noticeReady");
       break;
     case "applying":
-      line = "正在套用新規格：機器會關機、改完規格後自動開機，請稍候…";
+      line = t("SpecificationsTab.noticeApplying");
       break;
     case "apply_failed":
-      line = `上次套用失敗：${request.apply_error ?? "未知原因"}。可以再試一次。`;
+      line = t("SpecificationsTab.noticeApplyFailed", {
+        error: request.apply_error ?? t("SpecificationsTab.unknownError"),
+      });
       break;
     case "apply_interrupted":
-      line = "套用作業在系統重啟時中斷，規格可能尚未變更。請重新套用。";
+      line = t("SpecificationsTab.noticeInterrupted");
       break;
     default:
-      line = display.label;
+      line = statusLabel;
   }
 
   return (
     <div className={styles.noteBox}>
       <span className={styles.noteBoxTitle}>
         <MIcon name={display.key === "applying" ? "hourglass_top" : "tune"} size={14} />
-        規格調整申請 · {display.label}
+        {t("SpecificationsTab.noticeTitle", { status: statusLabel })}
       </span>
-      <span className={styles.noteBoxLine}>{specRequestChangeLabel(request)}</span>
+      <span className={styles.noteBoxLine}>{specRequestChangeLabel(request, t)}</span>
       <span className={styles.noteBoxLine}>{line}</span>
       {(showApply || showCancel) && (
         <div className={styles.noteActions}>
           {showApply && (
             <button type="button" className={styles.btnPrimary} disabled={busy} onClick={onApply}>
               <MIcon name="play_arrow" size={16} />
-              {display.key === "ready" ? "套用新規格" : "重新套用"}
+              {display.key === "ready" ? t("SpecificationsTab.applyNewSpec") : t("SpecificationsTab.reapply")}
             </button>
           )}
           {showCancel && (
             <button type="button" className={styles.btnDangerOutline} disabled={busy} onClick={onCancel}>
-              撤銷申請
+              {t("SpecificationsTab.cancelRequest")}
             </button>
           )}
         </div>
@@ -87,12 +92,16 @@ function OpenRequestNotice({ request, busy, onApply, onCancel }) {
 }
 
 export default function SpecificationsTab({ vmid }) {
+  const { t } = useTranslation("personal");
   const toast = useToast();
   const confirm = useConfirm();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.is_superuser || false;
 
   const [config, setConfig] = useState(null);
+  // 課堂與快速練習的機器照課程環境版本建立，規格不接受個別調整；
+  // 後端一直有算 can_request_spec_change，只是沒有人讀。
+  const [specFixed, setSpecFixed] = useState(false);
   const [cores, setCores] = useState(1);
   const [memory, setMemory] = useState(512);
   const [reason, setReason] = useState("");
@@ -111,6 +120,13 @@ export default function SpecificationsTab({ vmid }) {
       setMemory(c.memory_mb || 512);
     } catch {
       setError(true);
+      return;
+    }
+    try {
+      const resource = await ResourcesService.get(vmid);
+      setSpecFixed(resource?.can_request_spec_change === false);
+    } catch {
+      setSpecFixed(false);
     }
   }, [vmid]);
 
@@ -146,19 +162,18 @@ export default function SpecificationsTab({ vmid }) {
   const handleApply = async () => {
     if (!openRequest) return;
     const ok = await confirm({
-      title: "套用新規格？",
-      message:
-        "若機器正在執行，系統會先關機、套用規格後再自動開機（容器的 CPU／記憶體可線上生效，不會重開）。過程約 1～3 分鐘無法使用，請先儲存機器內的工作。",
-      confirmText: "關機並套用",
+      title: t("SpecificationsTab.confirmApplyTitle"),
+      message: t("SpecificationsTab.confirmApplyMessage"),
+      confirmText: t("SpecificationsTab.confirmApplyLabel"),
     });
     if (!ok) return;
     setBusy(true);
     try {
       const res = await SpecChangeRequestsService.apply(openRequest.id);
       setOpenRequest(res.request);
-      toast.success("已開始套用新規格，完成後會自動更新");
+      toast.success(t("SpecificationsTab.applyStarted"));
     } catch (e) {
-      toast.error(e?.message ?? "套用失敗，請稍後再試");
+      toast.error(e?.message ?? t("SpecificationsTab.applyFailed"));
       await loadRequests();
     } finally {
       setBusy(false);
@@ -168,8 +183,8 @@ export default function SpecificationsTab({ vmid }) {
   const handleCancel = async () => {
     if (!openRequest) return;
     const ok = await confirm({
-      title: "撤銷規格調整申請？",
-      message: "撤銷後若還需要調整，需重新送出申請並再次審核。",
+      title: t("SpecificationsTab.confirmCancelTitle"),
+      message: t("SpecificationsTab.confirmCancelMessage"),
       danger: true,
     });
     if (!ok) return;
@@ -177,9 +192,9 @@ export default function SpecificationsTab({ vmid }) {
     try {
       await SpecChangeRequestsService.cancel(openRequest.id);
       setOpenRequest(null);
-      toast.success("已撤銷規格調整申請");
+      toast.success(t("SpecificationsTab.cancelSuccess"));
     } catch (e) {
-      toast.error(e?.message ?? "撤銷失敗，請稍後再試");
+      toast.error(e?.message ?? t("SpecificationsTab.cancelFailed"));
       await loadRequests();
     } finally {
       setBusy(false);
@@ -196,10 +211,10 @@ export default function SpecificationsTab({ vmid }) {
           cores: cores !== config.cpu_cores ? cores : undefined,
           memory: memory !== config.memory_mb ? memory : undefined,
         });
-        toast.success("規格已更新");
+        toast.success(t("SpecificationsTab.updateSuccess"));
         await loadConfig();
       } catch (e) {
-        toast.error(e?.message ?? "規格更新失敗");
+        toast.error(e?.message ?? t("SpecificationsTab.updateFailed"));
       } finally {
         setBusy(false);
       }
@@ -212,7 +227,7 @@ export default function SpecificationsTab({ vmid }) {
       return;
     }
     if (!hasChanges) {
-      toast.error("沒有變更任何規格");
+      toast.error(t("SpecificationsTab.noChanges"));
       return;
     }
 
@@ -226,20 +241,27 @@ export default function SpecificationsTab({ vmid }) {
         requested_memory: memory !== config.memory_mb ? memory : undefined,
       });
       setOpenRequest(created);
-      toast.success("申請已送出，等待管理員審核");
+      toast.success(t("SpecificationsTab.requestSubmitted"));
       setReason("");
     } catch (e) {
-      toast.error(e?.message ?? "送出申請失敗");
+      toast.error(e?.message ?? t("SpecificationsTab.submitFailed"));
     } finally {
       setBusy(false);
     }
   };
 
-  if (error) return <p className={styles.stateText}>無法載入規格資訊</p>;
+  if (error) return <p className={styles.stateText}>{t("SpecificationsTab.loadFailed")}</p>;
   if (!config) return <LoadingState />;
 
   /* 一張處理中就不能再送（後端也擋），表單只留給管理員或沒有申請時 */
   const formLocked = !isAdmin && Boolean(openRequest);
+  const inputsDisabled = specFixed || formLocked;
+
+  let desc;
+  if (specFixed) desc = t("SpecificationsTab.descFixed");
+  else if (isAdmin) desc = t("SpecificationsTab.descAdmin");
+  else if (formLocked) desc = t("SpecificationsTab.descLocked");
+  else desc = t("SpecificationsTab.descUser");
 
   return (
     <div className={styles.tabStack}>
@@ -247,7 +269,7 @@ export default function SpecificationsTab({ vmid }) {
         <div className={styles.noteBox}>
           <span className={styles.noteBoxTitle}>
             <MIcon name="warning" size={14} />
-            規格已套用，但需要注意
+            {t("SpecificationsTab.appliedWarningTitle")}
           </span>
           <span className={styles.noteBoxLine}>{appliedWarning.apply_error}</span>
         </div>
@@ -265,33 +287,27 @@ export default function SpecificationsTab({ vmid }) {
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <div>
-            <h2 className={styles.cardTitle}>規格調整</h2>
-            <p className={styles.cardDesc}>
-              {isAdmin
-                ? "管理員可直接套用新規格（執行中的虛擬機需重開機後 CPU／記憶體才會生效）"
-                : formLocked
-                  ? "這台機器已有一張處理中的申請，處理完或撤銷後才能再送出新申請"
-                  : "送出申請後由管理員審核，通過後由你自己按「套用」，機器會關機、套用後再開機"}
-            </p>
+            <h2 className={styles.cardTitle}>{t("SpecificationsTab.title")}</h2>
+            <p className={styles.cardDesc}>{desc}</p>
           </div>
         </div>
         <div className={styles.cardBody}>
           <div className={styles.formGrid}>
             <div className={styles.field}>
-              <label htmlFor="spec-cores">CPU 核心</label>
+              <label htmlFor="spec-cores">{t("SpecificationsTab.cpuCoresLabel")}</label>
               <input
                 id="spec-cores"
                 type="number"
                 min={1}
                 max={32}
                 value={cores}
-                disabled={formLocked}
+                disabled={inputsDisabled}
                 onChange={(e) => setCores(Number.parseInt(e.target.value, 10) || 1)}
               />
-              <span className={styles.fieldHint}>目前：{config.cpu_cores}</span>
+              <span className={styles.fieldHint}>{t("SpecificationsTab.currentLabel", { value: config.cpu_cores })}</span>
             </div>
             <div className={styles.field}>
-              <label htmlFor="spec-memory">記憶體 (MB)</label>
+              <label htmlFor="spec-memory">{t("SpecificationsTab.memoryLabel")}</label>
               <input
                 id="spec-memory"
                 type="number"
@@ -299,52 +315,54 @@ export default function SpecificationsTab({ vmid }) {
                 max={65536}
                 step={512}
                 value={memory}
-                disabled={formLocked}
+                disabled={inputsDisabled}
                 onChange={(e) => setMemory(Number.parseInt(e.target.value, 10) || 512)}
               />
-              <span className={styles.fieldHint}>目前：{config.memory_mb} MB</span>
+              <span className={styles.fieldHint}>{t("SpecificationsTab.currentMemoryLabel", { value: config.memory_mb })}</span>
             </div>
           </div>
 
-          {!isAdmin && (
+          {!isAdmin && !specFixed && (
             <div className={`${styles.field} ${reasonInvalid ? styles.fieldInvalid : ""}`}>
-              <label htmlFor="spec-reason">申請原因 *</label>
+              <label htmlFor="spec-reason">{t("SpecificationsTab.reasonLabel")}</label>
               <textarea
                 id="spec-reason"
                 ref={reasonRef}
                 rows={4}
-                placeholder="請說明為什麼需要調整規格（課程需求、負載狀況等）"
+                placeholder={t("SpecificationsTab.reasonPlaceholder")}
                 aria-invalid={reasonInvalid}
                 value={reason}
                 disabled={formLocked}
                 onChange={(e) => { setReason(e.target.value); setReasonInvalid(false); }}
               />
-              <span className={styles.fieldHint}>至少 10 個字</span>
+              <span className={styles.fieldHint}>{t("SpecificationsTab.reasonHint")}</span>
             </div>
           )}
 
-          <button
-            type="button"
-            className={styles.btnPrimary}
-            disabled={busy || formLocked}
-            onClick={handleSubmit}
-          >
-            {busy ? "處理中…" : isAdmin ? "套用變更" : "送出申請"}
-          </button>
+          {!specFixed && (
+            <button
+              type="button"
+              className={styles.btnPrimary}
+              disabled={busy || formLocked}
+              onClick={handleSubmit}
+            >
+              {busy ? t("SpecificationsTab.processing") : isAdmin ? t("SpecificationsTab.applyChanges") : t("SpecificationsTab.submitRequest")}
+            </button>
+          )}
         </div>
       </div>
 
-      {!isAdmin && (
+      {!isAdmin && !specFixed && (
         <div className={styles.card}>
           <div className={styles.cardHeader}>
-            <h2 className={styles.cardTitle}>審核流程</h2>
+            <h2 className={styles.cardTitle}>{t("SpecificationsTab.reviewProcessTitle")}</h2>
           </div>
           <div className={styles.cardBody}>
             <ol className={styles.stepList}>
-              <li>送出規格變更申請，附上原因說明</li>
-              <li>管理員在「申請審核」頁面審核</li>
-              <li>審核通過後，回到這裡或「我的申請」按「套用新規格」</li>
-              <li>系統會先關機、套用規格、再自動開機（容器可線上生效，不會重開）</li>
+              <li>{t("SpecificationsTab.step1")}</li>
+              <li>{t("SpecificationsTab.step2")}</li>
+              <li>{t("SpecificationsTab.step3")}</li>
+              <li>{t("SpecificationsTab.step4")}</li>
             </ol>
           </div>
         </div>

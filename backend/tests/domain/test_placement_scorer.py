@@ -31,8 +31,6 @@ def _tuning(**overrides) -> PlacementTuning:
         disk_contention_warn_share=0.7,
         disk_contention_high_share=0.9,
         disk_penalty_weight=1.0,
-        search_max_reassignments=10,
-        search_depth=5,
         cpu_peak_warn_share=0.7,
         cpu_peak_high_share=0.9,
         memory_peak_warn_share=0.7,

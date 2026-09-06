@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { VncScreen } from "react-vnc";
+import { useTranslation } from "react-i18next";
 import styles from "./Classroom.module.scss";
 import MIcon from "../MIcon";
 import { AuthStorage } from "../../services/auth";
@@ -18,6 +19,7 @@ export default function ClassroomWatchDialog({
   canControl = false,
   onClose,
 }) {
+  const { t } = useTranslation("components");
   const toast = useToast();
   const vncRef = useRef(null);
   const [connected, setConnected] = useState(false);
@@ -44,7 +46,7 @@ export default function ClassroomWatchDialog({
       await ClassroomService.setControl(sessionId, action);
       setControlling(action === "take");
     } catch (e) {
-      toast.error(e?.message ?? "控制權切換失敗");
+      toast.error(e?.message ?? t("ClassroomWatchDialog.controlToggleFailed"));
     } finally {
       setControlBusy(false);
     }
@@ -70,13 +72,13 @@ export default function ClassroomWatchDialog({
             <MIcon name="cast" size={16} />
           </span>
           <span className={styles.headerTitleGroup}>
-            <span className={styles.headerTitle}>{title || "教室觀看"}</span>
+            <span className={styles.headerTitle}>{title || t("ClassroomWatchDialog.defaultTitle")}</span>
             <span
               className={`${styles.statusDot} ${connected ? styles.dot_connected : styles.dot_connecting}`}
             />
             <span className={styles.statusText}>
-              {connected ? "已連線" : "連線中"}
-              {!viewOnly && "・接管中"}
+              {connected ? t("ClassroomWatchDialog.statusConnected") : t("ClassroomWatchDialog.statusConnecting")}
+              {!viewOnly && t("ClassroomWatchDialog.statusTakenOverSuffix")}
             </span>
           </span>
 
@@ -88,10 +90,10 @@ export default function ClassroomWatchDialog({
               onClick={handleControl}
             >
               <MIcon name="back_hand" size={14} />
-              {controlling ? "釋放控制" : "接管"}
+              {controlling ? t("ClassroomWatchDialog.releaseControl") : t("ClassroomWatchDialog.takeControl")}
             </button>
           )}
-          <button type="button" className={styles.closeBtn} onClick={handleClose} title="關閉">
+          <button type="button" className={styles.closeBtn} onClick={handleClose} title={t("ClassroomWatchDialog.closeTitle")}>
             <MIcon name="close" size={18} />
           </button>
         </div>
@@ -100,7 +102,7 @@ export default function ClassroomWatchDialog({
           {!connected && wsUrl && (
             <div className={styles.vncLoading}>
               <MIcon name="hourglass_empty" size={28} />
-              正在連接畫面…
+              {t("ClassroomWatchDialog.connecting")}
             </div>
           )}
           {wsUrl && (

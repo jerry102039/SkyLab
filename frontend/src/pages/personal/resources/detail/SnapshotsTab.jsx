@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./ResourceDetailPage.module.scss";
 import MIcon from "../../../../components/MIcon";
 import LoadingState from "../../../../components/LoadingState/LoadingState";
@@ -11,7 +12,8 @@ import { focusInvalidField } from "../../../../utils/focusField";
 const INIT_SNAPSHOT_NAME = "skylab-init";
 
 /** 輕量確認 dialog（比照 ResourcesPage 的 ConfirmModal 行為） */
-function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, loading = false, closing = false, onConfirm, onClose }) {
+function ConfirmModal({ title, desc, confirmLabel, danger = false, loading = false, closing = false, onConfirm, onClose }) {
+  const { t } = useTranslation("personal");
   return (
     <div
       className={`${styles.modalOverlay} ${closing ? styles.modalOverlayOut : ""}`}
@@ -22,7 +24,7 @@ function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, lo
         {desc && <p className={styles.modalDesc}>{desc}</p>}
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnSecondary} onClick={onClose}>
-            取消
+            {t("ConfirmModal.cancel")}
           </button>
           <button
             type="button"
@@ -30,7 +32,7 @@ function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, lo
             disabled={loading}
             onClick={onConfirm}
           >
-            {loading ? "處理中…" : confirmLabel}
+            {loading ? t("ConfirmModal.processing") : (confirmLabel ?? t("ConfirmModal.confirm"))}
           </button>
         </div>
       </div>
@@ -39,6 +41,7 @@ function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, lo
 }
 
 export default function SnapshotsTab({ vmid }) {
+  const { t } = useTranslation("personal");
   const toast = useToast();
   const [snapshots, setSnapshots] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -59,10 +62,10 @@ export default function SnapshotsTab({ vmid }) {
     try {
       setSnapshots(await ResourcesService.listSnapshots(vmid));
     } catch (e) {
-      toast.error(e?.message ?? "無法載入快照列表");
+      toast.error(e?.message ?? t("SnapshotsTab.loadFailed"));
       setSnapshots((prev) => prev ?? []);
     }
-  }, [vmid, toast]);
+  }, [vmid, toast, t]);
 
   useEffect(() => {
     load();
@@ -78,7 +81,7 @@ export default function SnapshotsTab({ vmid }) {
       after?.();
       await load();
     } catch (e) {
-      toast.error(e?.message ?? "操作失敗");
+      toast.error(e?.message ?? t("SnapshotsTab.operationFailed"));
     } finally {
       setBusy(false);
     }
@@ -97,7 +100,7 @@ export default function SnapshotsTab({ vmid }) {
           description: description || undefined,
           vmstate: false,
         }),
-      "快照建立中",
+      t("SnapshotsTab.snapshotCreating"),
       () => {
         setCreateOpen(false);
         setSnapname("");
@@ -114,19 +117,19 @@ export default function SnapshotsTab({ vmid }) {
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <div>
-            <h2 className={styles.cardTitle}>快照管理</h2>
-            <p className={styles.cardDesc}>建立、還原與刪除此資源的快照</p>
+            <h2 className={styles.cardTitle}>{t("SnapshotsTab.title")}</h2>
+            <p className={styles.cardDesc}>{t("SnapshotsTab.desc")}</p>
           </div>
           <div className={styles.headerActions}>
             <button
               type="button"
               className={styles.btnSecondary}
               disabled={!hasInitSnapshot || busy}
-              title={hasInitSnapshot ? undefined : "尚未建立初始快照，無法一鍵重置"}
+              title={hasInitSnapshot ? undefined : t("SnapshotsTab.noInitSnapshotHint")}
               onClick={() => setResetConfirm(true)}
             >
               <MIcon name="restart_alt" size={14} />
-              一鍵重置
+              {t("SnapshotsTab.oneClickReset")}
             </button>
             {!hasInitSnapshot && (
               <button
@@ -134,10 +137,10 @@ export default function SnapshotsTab({ vmid }) {
                 className={styles.btnSecondary}
                 disabled={busy}
                 onClick={() =>
-                  run(() => ResourcesService.createInitSnapshot(vmid), "初始快照已建立")
+                  run(() => ResourcesService.createInitSnapshot(vmid), t("SnapshotsTab.initSnapshotCreated"))
                 }
               >
-                建立初始快照
+                {t("SnapshotsTab.createInitSnapshot")}
               </button>
             )}
             <button
@@ -146,21 +149,21 @@ export default function SnapshotsTab({ vmid }) {
               onClick={() => { setNameInvalid(false); setCreateOpen(true); }}
             >
               <MIcon name="add" size={14} />
-              建立快照
+              {t("SnapshotsTab.createSnapshot")}
             </button>
           </div>
         </div>
 
         {snapshots.length === 0 ? (
-          <EmptyState icon="photo_camera" title="尚無快照" />
+          <EmptyState icon="photo_camera" title={t("SnapshotsTab.emptyTitle")} />
         ) : (
           <table className={styles.table}>
             <thead>
               <tr>
-                <th className={styles.th}>名稱</th>
-                <th className={styles.th}>描述</th>
-                <th className={styles.th}>建立時間</th>
-                <th className={`${styles.th} ${styles.thRight}`}>操作</th>
+                <th className={styles.th}>{t("SnapshotsTab.colName")}</th>
+                <th className={styles.th}>{t("SnapshotsTab.colDesc")}</th>
+                <th className={styles.th}>{t("SnapshotsTab.colCreatedAt")}</th>
+                <th className={`${styles.th} ${styles.thRight}`}>{t("SnapshotsTab.colActions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -172,7 +175,7 @@ export default function SnapshotsTab({ vmid }) {
                       {snap.name === INIT_SNAPSHOT_NAME && (
                         <span className={`${styles.badge} ${styles.badge_info}`}>
                           <MIcon name="verified_user" size={12} />
-                          受保護
+                          {t("SnapshotsTab.protected")}
                         </span>
                       )}
                     </span>
@@ -193,7 +196,7 @@ export default function SnapshotsTab({ vmid }) {
                       onClick={() => setRollbackTarget(snap.name)}
                     >
                       <MIcon name="history" size={14} />
-                      還原
+                      {t("SnapshotsTab.restore")}
                     </button>
                     {snap.name !== INIT_SNAPSHOT_NAME && (
                       <button
@@ -203,7 +206,7 @@ export default function SnapshotsTab({ vmid }) {
                         onClick={() => setDeleteTarget(snap.name)}
                       >
                         <MIcon name="delete_outline" size={14} />
-                        刪除
+                        {t("SnapshotsTab.delete")}
                       </button>
                     )}
                   </td>
@@ -220,10 +223,10 @@ export default function SnapshotsTab({ vmid }) {
           onClick={() => setCreateOpen(false)}
         >
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <span className={styles.modalTitle}>建立快照</span>
-            <p className={styles.modalDesc}>快照會保留目前磁碟狀態，可隨時還原</p>
+            <span className={styles.modalTitle}>{t("SnapshotsTab.createSnapshotTitle")}</span>
+            <p className={styles.modalDesc}>{t("SnapshotsTab.createSnapshotDesc")}</p>
             <div className={`${styles.field} ${nameInvalid ? styles.fieldInvalid : ""}`}>
-              <label htmlFor="snap-name">名稱 *</label>
+              <label htmlFor="snap-name">{t("SnapshotsTab.nameLabel")}</label>
               <input
                 id="snap-name"
                 ref={snapnameRef}
@@ -235,11 +238,11 @@ export default function SnapshotsTab({ vmid }) {
               />
             </div>
             <div className={styles.field}>
-              <label htmlFor="snap-desc">描述</label>
+              <label htmlFor="snap-desc">{t("SnapshotsTab.descLabel")}</label>
               <textarea
                 id="snap-desc"
                 rows={3}
-                placeholder="例如：升級套件前的備份"
+                placeholder={t("SnapshotsTab.descPlaceholder")}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
@@ -250,7 +253,7 @@ export default function SnapshotsTab({ vmid }) {
                 className={styles.btnSecondary}
                 onClick={() => setCreateOpen(false)}
               >
-                取消
+                {t("SnapshotsTab.cancel")}
               </button>
               <button
                 type="button"
@@ -258,7 +261,7 @@ export default function SnapshotsTab({ vmid }) {
                 disabled={busy}
                 onClick={handleCreate}
               >
-                {busy ? "建立中…" : "建立"}
+                {busy ? t("SnapshotsTab.creating") : t("SnapshotsTab.create")}
               </button>
             </div>
           </div>
@@ -267,14 +270,14 @@ export default function SnapshotsTab({ vmid }) {
 
       {resetDialog.open && (
         <ConfirmModal
-          title="重置到初始狀態？"
-          desc="VM 會還原到初始快照並重新開機，之後的所有變更將會消失。"
-          confirmLabel="重置"
+          title={t("SnapshotsTab.resetConfirmTitle")}
+          desc={t("SnapshotsTab.resetConfirmDesc")}
+          confirmLabel={t("SnapshotsTab.reset")}
           danger
           loading={busy}
           closing={resetDialog.closing}
           onConfirm={() =>
-            run(() => ResourcesService.resetToInit(vmid), "重置任務已排入背景執行", () =>
+            run(() => ResourcesService.resetToInit(vmid), t("SnapshotsTab.resetTaskQueued"), () =>
               setResetConfirm(false),
             )
           }
@@ -284,16 +287,16 @@ export default function SnapshotsTab({ vmid }) {
 
       {rollbackDialog.open && (
         <ConfirmModal
-          title={`還原到快照「${rollbackDialog.item}」？`}
-          desc="還原後，快照之後的變更將會消失。"
-          confirmLabel="還原"
+          title={t("SnapshotsTab.rollbackConfirmTitle", { name: rollbackDialog.item })}
+          desc={t("SnapshotsTab.rollbackConfirmDesc")}
+          confirmLabel={t("SnapshotsTab.restore")}
           danger
           loading={busy}
           closing={rollbackDialog.closing}
           onConfirm={() =>
             run(
               () => ResourcesService.rollbackSnapshot(vmid, rollbackDialog.item),
-              "還原已開始",
+              t("SnapshotsTab.rollbackStarted"),
               () => setRollbackTarget(null),
             )
           }
@@ -303,16 +306,16 @@ export default function SnapshotsTab({ vmid }) {
 
       {deleteDialog.open && (
         <ConfirmModal
-          title={`刪除快照「${deleteDialog.item}」？`}
-          desc="刪除後無法復原。"
-          confirmLabel="刪除"
+          title={t("SnapshotsTab.deleteConfirmTitle", { name: deleteDialog.item })}
+          desc={t("SnapshotsTab.deleteConfirmDesc")}
+          confirmLabel={t("SnapshotsTab.delete")}
           danger
           loading={busy}
           closing={deleteDialog.closing}
           onConfirm={() =>
             run(
               () => ResourcesService.deleteSnapshot(vmid, deleteDialog.item),
-              "快照已刪除",
+              t("SnapshotsTab.snapshotDeleted"),
               () => setDeleteTarget(null),
             )
           }

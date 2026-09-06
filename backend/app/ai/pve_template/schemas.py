@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
 from app.ai.pve_log.schemas import SSHConfirmRequest, SSHExecResult, ToolCallRecord
+from app.core.i18n import t
 
 
 class AIPVETemplateRead(BaseModel):
@@ -56,10 +57,10 @@ class AIPVETemplateChatRequest(BaseModel):
     @model_validator(mode="after")
     def require_message_or_history(self) -> AIPVETemplateChatRequest:
         if not self.message and not self.messages:
-            raise ValueError("message 或 messages 至少需要一項")
+            raise ValueError(t("pveTemplate.messageOrMessagesRequired"))
         vmids = [target.vmid for target in self.targets]
         if len(vmids) != len(set(vmids)):
-            raise ValueError("targets 內的 VMID 不得重複")
+            raise ValueError(t("pveTemplate.duplicateVmid"))
         return self
 
 

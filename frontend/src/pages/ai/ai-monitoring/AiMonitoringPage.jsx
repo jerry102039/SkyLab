@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./AiMonitoringPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -19,33 +20,6 @@ function presetToRange(preset) {
 function fmtTime(iso) {
   return iso ? new Date(iso).toLocaleString("zh-TW") : "—";
 }
-
-const PRESETS = [
-  { value: "7d",  label: "近 7 天" },
-  { value: "30d", label: "近 30 天" },
-  { value: "90d", label: "近 90 天" },
-];
-
-const TABS = [
-  { key: "proxy",    label: "Proxy 呼叫", icon: "swap_horiz" },
-  { key: "template", label: "Template 呼叫", icon: "auto_awesome" },
-  { key: "users",    label: "使用者用量", icon: "groups" },
-];
-
-const PROXY_COLS = ["時間", "使用者", "模型", "類型", "輸入", "輸出", "耗時", "狀態"];
-const TPL_COLS   = ["時間", "使用者", "呼叫類型", "模型", "Preset", "輸入", "輸出", "耗時", "狀態"];
-const USER_COLS  = ["使用者", "呼叫次數", "Tokens 總計", "平均延遲", "失敗率"];
-
-const CALL_TYPE_LABELS = {
-  recommend: "模板推薦方案",
-  chat: "模板推薦對話",
-  ai_nav: "AI 導覽",
-  tj_rubric: "Teacher Judge 評分表分析",
-  tj_chat: "Teacher Judge 對話",
-  tj_script_gen: "Teacher Judge 腳本生成",
-  tj_script_review: "Teacher Judge 腳本審查",
-  tj_result_ai: "Teacher Judge 結果分析",
-};
 
 function formatTokens(n) {
   if (n == null) return "—";
@@ -71,11 +45,6 @@ function formatModelDisplay(modelName) {
   return `${match[1]}/${match[2]}`;
 }
 
-function formatCallType(callType) {
-  if (!callType) return "—";
-  return CALL_TYPE_LABELS[callType] ?? callType;
-}
-
 function isOkStatus(status) {
   return (
     status === "success" ||
@@ -90,11 +59,12 @@ function EmptyState({ icon, title }) {
 }
 
 function StatusBadge({ status }) {
+  const { t } = useTranslation("ai");
   const ok = isOkStatus(status);
   return (
     <span className={`${styles.badge} ${ok ? styles.badge_ok : styles.badge_err}`}>
       <span className={styles.dot} />
-      {ok ? "成功" : "失敗"}
+      {ok ? t("AiMonitoringPage.statusSuccess") : t("AiMonitoringPage.statusFail")}
     </span>
   );
 }
@@ -108,7 +78,7 @@ function UserCell({ email, fullName, fallback }) {
   );
 }
 
-function CallTypeCell({ callType }) {
+function CallTypeCell({ callType, formatCallType }) {
   const label = formatCallType(callType);
   return (
     <div className={styles.callTypeCell}>
@@ -121,6 +91,7 @@ function CallTypeCell({ callType }) {
 }
 
 export default function AiMonitoringPage() {
+  const { t } = useTranslation("ai");
   const toast = useToast();
   const [preset, setPreset] = useState("7d");
   const [tab, setTab] = useState("proxy");
@@ -131,12 +102,55 @@ export default function AiMonitoringPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const PRESETS = [
+    { value: "7d",  label: t("AiMonitoringPage.preset7d") },
+    { value: "30d", label: t("AiMonitoringPage.preset30d") },
+    { value: "90d", label: t("AiMonitoringPage.preset90d") },
+  ];
+
+  const TABS = [
+    { key: "proxy",    label: t("AiMonitoringPage.tabProxy"),    icon: "swap_horiz" },
+    { key: "template", label: t("AiMonitoringPage.tabTemplate"), icon: "auto_awesome" },
+    { key: "users",    label: t("AiMonitoringPage.tabUsers"),    icon: "groups" },
+  ];
+
+  const PROXY_COLS = [
+    t("AiMonitoringPage.colTime"), t("AiMonitoringPage.colUser"), t("AiMonitoringPage.colModel"),
+    t("AiMonitoringPage.colType"), t("AiMonitoringPage.colInput"), t("AiMonitoringPage.colOutput"),
+    t("AiMonitoringPage.colDuration"), t("AiMonitoringPage.colStatus"),
+  ];
+  const TPL_COLS = [
+    t("AiMonitoringPage.colTime"), t("AiMonitoringPage.colUser"), t("AiMonitoringPage.colCallType"),
+    t("AiMonitoringPage.colModel"), t("AiMonitoringPage.colPreset"), t("AiMonitoringPage.colInput"),
+    t("AiMonitoringPage.colOutput"), t("AiMonitoringPage.colDuration"), t("AiMonitoringPage.colStatus"),
+  ];
+  const USER_COLS = [
+    t("AiMonitoringPage.colUser"), t("AiMonitoringPage.colCallCount"), t("AiMonitoringPage.colTokensTotal"),
+    t("AiMonitoringPage.colAvgLatency"), t("AiMonitoringPage.colFailRate"),
+  ];
+
+  const CALL_TYPE_LABELS = {
+    recommend: t("AiMonitoringPage.callTypeRecommend"),
+    chat: t("AiMonitoringPage.callTypeChat"),
+    ai_nav: t("AiMonitoringPage.callTypeAiNav"),
+    tj_rubric: t("AiMonitoringPage.callTypeTjRubric"),
+    tj_chat: t("AiMonitoringPage.callTypeTjChat"),
+    tj_script_gen: t("AiMonitoringPage.callTypeTjScriptGen"),
+    tj_script_review: t("AiMonitoringPage.callTypeTjScriptReview"),
+    tj_result_ai: t("AiMonitoringPage.callTypeTjResultAi"),
+  };
+
+  function formatCallType(callType) {
+    if (!callType) return "—";
+    return CALL_TYPE_LABELS[callType] ?? callType;
+  }
+
   /** silent = true 時不觸發 loading 與錯誤提示，供背景自動刷新使用 */
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const range = presetToRange(preset);
-      const [s, p, t, u] = await Promise.all([
+      const [s, p, tpl, u] = await Promise.all([
         AiMonitoringService.stats(range),
         AiMonitoringService.listProxyCalls({ ...range, limit: 100 }),
         AiMonitoringService.listTemplateCalls({ ...range, limit: 100 }),
@@ -144,14 +158,14 @@ export default function AiMonitoringPage() {
       ]);
       setStatsData(s);
       setProxyCalls(p?.data ?? []);
-      setTemplateCalls(t?.data ?? []);
+      setTemplateCalls(tpl?.data ?? []);
       setUsers(u?.data ?? []);
     } catch (e) {
-      if (!silent) toast.error(e?.message ?? "載入 AI 監控資料失敗");
+      if (!silent) toast.error(e?.message ?? t("AiMonitoringPage.loadError"));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [preset, toast]);
+  }, [preset, toast, t]);
 
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(() => load(true));
@@ -199,7 +213,7 @@ export default function AiMonitoringPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="使用監控" subtitle="檢視 AI Proxy 與 Template 服務的呼叫紀錄與用量統計">
+      <PageHeader title={t("AiMonitoringPage.pageTitle")} subtitle={t("AiMonitoringPage.pageSubtitle")}>
         <div className={styles.pageActions}>
           <div className={styles.segment}>
             {PRESETS.map((p) => (
@@ -222,7 +236,7 @@ export default function AiMonitoringPage() {
             <MIcon name="swap_calls" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>呼叫次數</span>
+            <span className={styles.statLabel}>{t("AiMonitoringPage.statCallCount")}</span>
             <span className={styles.statValue}>{stats.totalCalls}</span>
           </div>
         </div>
@@ -231,7 +245,7 @@ export default function AiMonitoringPage() {
             <MIcon name="bolt" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>Tokens 總計</span>
+            <span className={styles.statLabel}>{t("AiMonitoringPage.statTokensTotal")}</span>
             <span className={styles.statValue}>{formatTokens(stats.totalTokens)}</span>
           </div>
         </div>
@@ -240,7 +254,7 @@ export default function AiMonitoringPage() {
             <MIcon name="task_alt" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>成功率</span>
+            <span className={styles.statLabel}>{t("AiMonitoringPage.statSuccessRate")}</span>
             <span className={styles.statValue}>{stats.successRate}%</span>
           </div>
         </div>
@@ -249,22 +263,22 @@ export default function AiMonitoringPage() {
             <MIcon name="timer" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>平均延遲</span>
+            <span className={styles.statLabel}>{t("AiMonitoringPage.statAvgLatency")}</span>
             <span className={styles.statValue}>{formatDuration(stats.avgLatency)}</span>
           </div>
         </div>
       </div>
 
       <div className={styles.tabs}>
-        {TABS.map((t) => (
+        {TABS.map((tItem) => (
           <button
-            key={t.key}
+            key={tItem.key}
             type="button"
-            className={`${styles.tab} ${tab === t.key ? styles.tabActive : ""}`}
-            onClick={() => setTab(t.key)}
+            className={`${styles.tab} ${tab === tItem.key ? styles.tabActive : ""}`}
+            onClick={() => setTab(tItem.key)}
           >
-            <MIcon name={t.icon} size={16} />
-            {t.label}
+            <MIcon name={tItem.icon} size={16} />
+            {tItem.label}
           </button>
         ))}
       </div>
@@ -275,7 +289,7 @@ export default function AiMonitoringPage() {
           <input
             type="text"
             className={styles.searchInput}
-            placeholder={tab === "users" ? "搜尋使用者" : "搜尋使用者、模型、呼叫類型或 Preset"}
+            placeholder={tab === "users" ? t("AiMonitoringPage.searchPlaceholderUsers") : t("AiMonitoringPage.searchPlaceholderCalls")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -289,7 +303,7 @@ export default function AiMonitoringPage() {
           visibleUsers.length === 0 ? (
             <EmptyState
               icon="groups"
-              title="尚無使用者用量資料"
+              title={t("AiMonitoringPage.emptyUsersTitle")}
             />
           ) : (
             <div className={styles.tableWrap}>
@@ -332,7 +346,7 @@ export default function AiMonitoringPage() {
         ) : visibleCalls.length === 0 ? (
           <EmptyState
             icon="analytics"
-            title="尚無呼叫紀錄"
+            title={t("AiMonitoringPage.emptyCallsTitle")}
           />
         ) : (
           <div className={styles.tableWrap}>
@@ -367,7 +381,7 @@ export default function AiMonitoringPage() {
                     ) : (
                       <>
                         <td className={styles.td}>
-                          <CallTypeCell callType={c.call_type} />
+                          <CallTypeCell callType={c.call_type} formatCallType={formatCallType} />
                         </td>
                         <td className={`${styles.td} ${styles.monoCell}`} title={c.model_name}>
                           {formatModelDisplay(c.model_name)}

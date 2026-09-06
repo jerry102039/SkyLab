@@ -13,6 +13,7 @@ from sqlmodel import Session, col, select
 from app.ai.teacher_judge.schemas import TeacherJudgeScriptRunPublic
 from app.ai.teacher_judge.script_artifact_service import get_artifact
 from app.ai.teacher_judge.target_ip_resolver import resolve_target_ip_address
+from app.core.i18n import t
 from app.infrastructure.proxmox import operations as proxmox_ops
 from app.models.teacher_judge_script_artifact import TeacherJudgeScriptStatus
 from app.models.teacher_judge_script_run import (
@@ -126,7 +127,7 @@ def _running_resources_by_vmid() -> dict[int, dict[str, Any]]:
         logger.warning("Teacher Judge run target status lookup failed", exc_info=True)
         raise HTTPException(
             status_code=503,
-            detail="無法確認 VM/LXC 即時狀態，請稍後再試。",
+            detail=t("run.status_lookup_failed"),
         ) from exc
 
     result: dict[int, dict[str, Any]] = {}
@@ -160,7 +161,7 @@ def _resolve_running_targets(
         if member is None:
             raise HTTPException(
                 status_code=400,
-                detail=f"VMID {vmid} 不屬於此班級或尚未建立可用機器。",
+                detail=t("run.vmid_not_in_class", vmid=vmid),
             )
 
         live = live_by_vmid.get(vmid)
@@ -169,23 +170,23 @@ def _resolve_running_targets(
         if live is None or live_type not in {"qemu", "lxc"}:
             raise HTTPException(
                 status_code=400,
-                detail=f"VMID {vmid} 不是可執行的 VM/LXC。",
+                detail=t("run.vmid_not_runnable", vmid=vmid),
             )
         if live_status != "running":
             raise HTTPException(
                 status_code=400,
-                detail=f"VMID {vmid} 目前不是運行中，不能執行腳本。",
+                detail=t("run.vmid_not_running", vmid=vmid),
             )
 
         resource = resource_repo.get_resource_by_vmid(session=session, vmid=vmid)
         if resource is None:
             raise HTTPException(
-                status_code=400, detail=f"VMID {vmid} 未在資料庫中登記。"
+                status_code=400, detail=t("run.vmid_not_registered", vmid=vmid)
             )
         if str(resource.user_id) != member["user_id"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"VMID {vmid} 目前資源擁有者與班級學生不一致。",
+                detail=t("run.owner_mismatch", vmid=vmid),
             )
         ip_address = resolve_target_ip_address(
             session=session,
@@ -193,10 +194,10 @@ def _resolve_running_targets(
             live_resource=live,
         )
         if not ip_address:
-            raise HTTPException(status_code=400, detail=f"VMID {vmid} 沒有可用 IP。")
+            raise HTTPException(status_code=400, detail=t("run.no_ip", vmid=vmid))
         if not resource.ssh_private_key_encrypted:
             raise HTTPException(
-                status_code=400, detail=f"VMID {vmid} 沒有可用 SSH 金鑰。"
+                status_code=400, detail=t("run.no_ssh_key", vmid=vmid)
             )
 
         targets.append(
@@ -231,7 +232,7 @@ def create_script_run(
     requested_item_id: str | None = None,
 ) -> TeacherJudgeScriptRunPublic:
     if target_scope != TeacherJudgeScriptRunTargetScope.manual:
-        raise HTTPException(status_code=400, detail="第一版只支援手動選擇執行機器。")
+        raise HTTPException(status_code=400, detail=t("run.manual_scope_only"))
 
     artifact = get_artifact(
         session=session,
@@ -239,7 +240,7 @@ def create_script_run(
         artifact_id=artifact_id,
     )
     if artifact.status != TeacherJudgeScriptStatus.approved:
-        raise HTTPException(status_code=400, detail="只有已核准的腳本可以執行。")
+        raise HTTPException(status_code=400, detail=t("run.artifact_not_approved"))
 
     targets = _resolve_running_targets(
         session=session,
@@ -247,9 +248,9 @@ def create_script_run(
         target_vmids=target_vmids,
     )
     if not targets:
-        raise HTTPException(status_code=400, detail="請至少選擇一台運行中的 VM/LXC。")
+        raise HTTPException(status_code=400, detail=t("run.no_target_selected"))
     if len(targets) > 5:
-        raise HTTPException(status_code=400, detail="單次最多只能選擇 5 台 VM/LXC。")
+        raise HTTPException(status_code=400, detail=t("run.too_many_targets"))
 
     run = TeacherJudgeScriptRun(
         teaching_class_id=teaching_class_id,

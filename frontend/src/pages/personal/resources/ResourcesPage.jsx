@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../../../contexts/AuthContext";
 import styles from "./ResourcesPage.module.scss";
 import MIcon from "../../../components/MIcon";
@@ -24,24 +25,27 @@ import { buildEnvironmentGroups, groupedResourceKeys } from "../../../utils/envi
 
 /* ── Constants ── */
 const STATUS_MAP = {
-  scheduled:    { label: "已排程",   color: "info",    icon: "event"          },
-  provisioning: { label: "建立中",   color: "info",    icon: "settings"       },
-  partial_failed:{ label: "需要處理", color: "danger",  icon: "error_outline"  },
-  running:      { label: "執行中",   color: "success", icon: "play_circle"    },
-  stopping:     { label: "準備回收", color: "muted",   icon: "power_settings_new" },
-  reclaiming:   { label: "回收中",   color: "danger",  icon: "delete_sweep"   },
-  stopped:      { label: "已關機",   color: "muted",   icon: "stop_circle"    },
-  paused:       { label: "已暫停",   color: "muted",   icon: "pause_circle"   },
-  deleting:     { label: "刪除中",   color: "danger",  icon: "hourglass_empty"},
-  failed:       { label: "建立失敗", color: "danger",  icon: "error_outline"  },
-  deleted:      { label: "已刪除",   color: "danger",  icon: "delete_forever" },
-  unknown:      { label: "狀態未知", color: "muted",   icon: "help_outline"   },
+  scheduled:    { labelKey: "ResourcesPage.statusScheduled",     color: "info",    icon: "event"          },
+  provisioning: { labelKey: "ResourcesPage.statusProvisioning",  color: "info",    icon: "settings"       },
+  partial_failed:{ labelKey: "ResourcesPage.statusPartialFailed",color: "danger",  icon: "error_outline"  },
+  running:      { labelKey: "ResourcesPage.statusRunning",       color: "success", icon: "play_circle"    },
+  stopping:     { labelKey: "ResourcesPage.statusStopping",      color: "muted",   icon: "power_settings_new" },
+  reclaiming:   { labelKey: "ResourcesPage.statusReclaiming",    color: "danger",  icon: "delete_sweep"   },
+  stopped:      { labelKey: "ResourcesPage.statusStopped",       color: "muted",   icon: "stop_circle"    },
+  paused:       { labelKey: "ResourcesPage.statusPaused",        color: "muted",   icon: "pause_circle"   },
+  deleting:     { labelKey: "ResourcesPage.statusDeleting",      color: "danger",  icon: "hourglass_empty"},
+  failed:       { labelKey: "ResourcesPage.statusFailed",        color: "danger",  icon: "error_outline"  },
+  deleted:      { labelKey: "ResourcesPage.statusDeleted",       color: "danger",  icon: "delete_forever" },
+  unknown:      { labelKey: "ResourcesPage.statusUnknown",       color: "muted",   icon: "help_outline"   },
 };
 
 const TYPE_MAP = {
-  lxc:   { label: "容器 (LXC)", icon: "terminal" },
-  qemu:  { label: "虛擬機 (VM)", icon: "computer" },
+  lxc:   { labelKey: "ResourcesPage.typeLxc", icon: "terminal" },
+  qemu:  { labelKey: "ResourcesPage.typeQemu", icon: "computer" },
 };
+
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+const DESKTOP_CLIENT_DOWNLOAD_URL = `${API_BASE_URL}/api/v1/desktop-client/download`;
 
 /* ── Helpers ── */
 function formatDate(isoStr) {
@@ -60,17 +64,24 @@ function formatDatetime(isoStr) {
 }
 
 /* ── Primitive sub-components ── */
+/* reboot / reset 之後機器仍是開著的；原本一律當成 stopped 會讓列上的狀態說謊。 */
+function statusAfterAction(action) {
+  return action === "stop" || action === "shutdown" ? "stopped" : "running";
+}
+
 function StatusBadge({ status }) {
+  const { t } = useTranslation("personal");
   const s = STATUS_MAP[status] ?? { label: status, color: "muted", icon: "help_outline" };
   return (
     <span className={`${styles.badge} ${styles[`badge_${s.color}`]}`}>
-      {s.label}
+      {s.labelKey ? t(s.labelKey) : s.label}
     </span>
   );
 }
 
 /* ── Confirm Modal ── */
-function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, loading = false, onConfirm, onClose }) {
+function ConfirmModal({ title, desc, confirmLabel, danger = false, loading = false, onConfirm, onClose }) {
+  const { t } = useTranslation("personal");
   const [closing, setClosing] = useState(false);
 
   function close() {
@@ -93,7 +104,7 @@ function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, lo
         {desc && <p className={styles.modalDesc}>{desc}</p>}
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnSecondary} onClick={close}>
-            取消
+            {t("ConfirmModal.cancel")}
           </button>
           <button
             type="button"
@@ -101,7 +112,7 @@ function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, lo
             disabled={loading}
             onClick={onConfirm}
           >
-            {loading ? "處理中…" : confirmLabel}
+            {loading ? t("ConfirmModal.processing") : (confirmLabel ?? t("ConfirmModal.confirm"))}
           </button>
         </div>
       </div>
@@ -112,23 +123,25 @@ function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, lo
 /* ── Creating placeholder row ── */
 
 /** 依申請階段決定 placeholder 的狀態顯示（開通中 / 超時 / 失敗…） */
-function getCreatingDisplay(req) {
+function getCreatingDisplay(req, t) {
   if (req.status === "pending") {
-    return { label: "審核中", color: "info", spin: true };
+    return { label: t("CreatingRow.statusPendingReview"), color: "info", spin: true };
   }
   if (req.provisioning_status === "failed") {
-    return { label: "開通失敗", color: "danger", spin: false };
+    return { label: t("CreatingRow.statusProvisionFailed"), color: "danger", spin: false };
   }
   if (req.provisioning_status === "running") {
-    return { label: "開通中", color: "info", spin: true };
+    return { label: t("CreatingRow.statusProvisioning"), color: "info", spin: true };
   }
   // approved 等待排程開機：start_at 已過但仍未開始建立 → 超時
   if (req.start_at && new Date(req.start_at).getTime() < Date.now()) {
     const overdueMin = Math.floor((Date.now() - new Date(req.start_at).getTime()) / 60_000);
-    const overdueLabel = overdueMin >= 60 ? `${Math.floor(overdueMin / 60)} 小時` : `${overdueMin} 分鐘`;
-    return { label: `超時 (${overdueLabel})`, color: "danger", spin: false };
+    const overdueLabel = overdueMin >= 60
+      ? t("CreatingRow.overdueHoursLabel", { count: Math.floor(overdueMin / 60) })
+      : t("CreatingRow.overdueMinutesLabel", { count: overdueMin });
+    return { label: t("CreatingRow.statusOverdue", { label: overdueLabel }), color: "danger", spin: false };
   }
-  return { label: "排程中", color: "info", spin: true };
+  return { label: t("CreatingRow.statusScheduling"), color: "info", spin: true };
 }
 
 function formatMemory(memoryMb) {
@@ -137,12 +150,13 @@ function formatMemory(memoryMb) {
 }
 
 function CreatingRow({ request, onCancelled }) {
+  const { t } = useTranslation("personal");
   const toast = useToast();
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [cancelling, setCancelling]       = useState(false);
 
   const type    = TYPE_MAP[request.resource_type === "lxc" ? "lxc" : "qemu"];
-  const display = getCreatingDisplay(request);
+  const display = getCreatingDisplay(request, t);
   // 開通流程一旦開始跑 Proxmox clone 就無法取消
   const canCancel = request.provisioning_status !== "running";
 
@@ -150,18 +164,18 @@ function CreatingRow({ request, onCancelled }) {
     setCancelling(true);
     try {
       await cancelVmRequest(request.id);
-      toast.success(`已送出取消申請「${request.hostname}」`);
+      toast.success(t("CreatingRow.cancelRequestSuccess", { hostname: request.hostname }));
       setCancelConfirm(false);
       onCancelled();
     } catch (err) {
-      toast.error(err?.message ?? "取消申請失敗");
+      toast.error(err?.message ?? t("CreatingRow.cancelRequestFailed"));
     } finally {
       setCancelling(false);
     }
   }
 
   const specs = [
-    request.cores != null ? `${request.cores} 核心` : null,
+    request.cores != null ? t("CreatingRow.coresLabel", { count: request.cores }) : null,
     formatMemory(request.memory),
   ].filter(Boolean).join(" / ");
 
@@ -169,10 +183,11 @@ function CreatingRow({ request, onCancelled }) {
     <tr className={`${styles.tr} ${styles.pendingRow}`}>
       <td className={styles.td}>
         <div className={styles.nameCell}>
-          <div><strong>{request.hostname}</strong><small>{type.label} · {specs || "規格處理中"}</small></div>
+          <span className={styles.nameIcon}><MIcon name={type.icon} size={18} /></span>
+          <div><strong>{request.hostname}</strong><small>{t(type.labelKey)} · {specs || t("CreatingRow.specsPending")}</small></div>
         </div>
       </td>
-      <td className={styles.td}><div className={styles.envPrimary}>資源申請</div><div className={styles.envSub}>建立中</div></td>
+      <td className={styles.td}><div className={styles.envPrimary}>{t("CreatingRow.resourceRequestLabel")}</div><div className={styles.envSub}>{t("CreatingRow.creating")}</div></td>
       <td className={styles.td}>
         <span className={`${styles.badge} ${styles[`badge_${display.color}`]} ${styles.creatingBadge}`}>
           <span className={display.spin ? styles.spin : styles.badgeIcon}><MIcon name={display.spin ? "autorenew" : "error_outline"} size={12} /></span>{display.label}
@@ -180,18 +195,18 @@ function CreatingRow({ request, onCancelled }) {
       </td>
       <td className={styles.td}><span className={styles.muted}>N/A</span></td>
       <td className={styles.td}>{formatDatetime(request.start_at) ?? formatDatetime(request.created_at)}</td>
-      <td className={styles.td}>{request.assigned_node ?? request.desired_node ?? "尚未分配"}</td>
+      <td className={styles.td}>{request.assigned_node ?? request.desired_node ?? t("CreatingRow.notAssigned")}</td>
       <td className={styles.td}>
         <button type="button" className={styles.cancelBtn} disabled={!canCancel || cancelling} onClick={() => setCancelConfirm(true)}>
-          <MIcon name="cancel" size={14} />取消申請
+          <MIcon name="cancel" size={14} />{t("CreatingRow.cancelRequest")}
         </button>
       </td>
     </tr>
     {cancelConfirm && createPortal(
       <ConfirmModal
-        title="確定取消資源申請？"
-        desc={`取消「${request.hostname}」後，如有需要必須重新提出申請。`}
-        confirmLabel="取消申請"
+        title={t("CreatingRow.confirmCancelTitle")}
+        desc={t("CreatingRow.confirmCancelDesc", { hostname: request.hostname })}
+        confirmLabel={t("CreatingRow.confirmCancelLabel")}
         danger
         loading={cancelling}
         onConfirm={handleCancel}
@@ -215,6 +230,7 @@ function resourceRowKey(resource, index) {
 
 /* ── Resource row ── */
 function ResourceRow({ resource, onUpdated, onDeleted }) {
+  const { t } = useTranslation("personal");
   const navigate = useNavigate();
   const { user } = useAuth();
   /* VMID 是系統內部編號，僅管理員／老師看得到 */
@@ -241,7 +257,7 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
     setActionLoading(action);
     try {
       await ResourcesService[action](resource.vmid);
-      onUpdated({ ...resource, status: action === "start" ? "running" : "stopped" });
+      onUpdated({ ...resource, status: statusAfterAction(action) });
     } finally {
       setActionLoading(null);
     }
@@ -262,43 +278,56 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
     <tr className={styles.tr} data-guide="resource-card">
       <td className={styles.td}>
         <div className={styles.nameCell}>
+          <span className={styles.nameIcon}><MIcon name={type.icon} size={18} /></span>
           <div>
             {resource.vmid > 0
               ? <button type="button" className={styles.nameLink} onClick={() => navigate(`/my-resources/${resource.vmid}`)}>{resource.name}</button>
               : <strong>{resource.name}</strong>}
-            <small>{type.label}{showVmid && resource.vmid > 0 ? ` · VMID ${resource.vmid}` : ""}</small>
+            <small>{t(type.labelKey)}{showVmid && resource.vmid > 0 ? t("ResourceRow.vmidSuffix", { vmid: resource.vmid }) : ""}</small>
           </div>
         </div>
       </td>
       <td className={styles.td}><div className={styles.envPrimary}>{resource.environment_type || "Custom"}</div><div className={styles.envSub}>{resource.os_info || "—"}</div></td>
       <td className={styles.td}><StatusBadge status={resource.status} /></td>
       <td className={styles.td}><span className={styles.mono}>{resource.ip_address ?? "N/A"}</span></td>
-      <td className={styles.td}>{resource.expiry_date ? formatDate(resource.expiry_date) : <span className={styles.cardPeriodUnlimited}>∞ 無期限</span>}</td>
+      <td className={styles.td}>{resource.expiry_date ? formatDate(resource.expiry_date) : <span className={styles.cardPeriodUnlimited}>{t("ResourceRow.unlimited")}</span>}</td>
       <td className={styles.td}>{resource.node ?? "—"}</td>
       <td className={styles.td}>
         {isLive ? <div className={styles.rowActions}>
           <button type="button" className={styles.terminalBtn} disabled={resource.status !== "running"} onClick={() => setConsoleOpen(true)} data-guide="resource-console">
-            <MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />{isLxc ? "終端機" : "控制台"}
+            <MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />{isLxc ? t("ResourceRow.terminal") : t("ResourceRow.console")}
           </button>
           {actionLoading && <MIcon name="hourglass_empty" size={16} />}
           <div className={styles.menuWrap}>
             {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onDeleteClick={() => { closeMenu(); setDeleteConfirm(true); }} onClose={closeMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
-            <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)} title="更多操作"><MIcon name="more_vert" size={18} /></button>
+            <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)} title={t("ResourceRow.moreActions")}><MIcon name="more_vert" size={18} /></button>
           </div>
-        </div> : <span className={styles.deletedNote}>{STATUS_MAP[resource.status]?.label ?? resource.status}</span>}
+        </div> : <span className={styles.deletedNote}>{STATUS_MAP[resource.status]?.labelKey ? t(STATUS_MAP[resource.status].labelKey) : resource.status}</span>}
       </td>
     </tr>
-    {deleteConfirm && createPortal(<ConfirmModal title="確定刪除資源？" desc={`「${resource.name}」${showVmid ? `（VMID ${resource.vmid}）` : ""}刪除後無法復原。`} confirmLabel="刪除" danger loading={deleting} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />, document.body)}
+    {deleteConfirm && createPortal(<ConfirmModal title={t("ResourceRow.confirmDeleteTitle")} desc={showVmid ? t("ResourceRow.confirmDeleteDescWithVmid", { name: resource.name, vmid: resource.vmid }) : t("ResourceRow.confirmDeleteDescNoVmid", { name: resource.name })} confirmLabel={t("ResourceRow.confirmDeleteLabel")} danger loading={deleting} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />, document.body)}
     {consoleOpen && isLxc && createPortal(<TerminalDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
     {consoleOpen && !isLxc && createPortal(<VncDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
   </>;
 }
 
+function machineSpecLabel(machine) {
+  const parts = [];
+  if (machine.cpu) parts.push(`${machine.cpu} CPU`);
+  if (machine.memoryBytes) parts.push(`${Math.round(machine.memoryBytes / 1024 ** 3)} GB`);
+  return parts.join(" · ");
+}
+
 function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
+  const { t } = useTranslation("personal");
   const toast = useToast();
+  const navigate = useNavigate();
   const type = TYPE_MAP[machine.type] ?? { label: machine.type, icon: "computer" };
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuClosing, setMenuClosing] = useState(false);
+  const menuBtnRef = useRef(null);
   const resource = machine.resource;
   const isLxc = machine.type === "lxc";
   const environmentReady = ["running", "active"].includes(groupStatus);
@@ -306,32 +335,46 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
     environmentReady && resource?.vmid && resource.can_control !== false,
   );
   const canOpen = canControl && resource.status === "running";
-  const controlAction = resource?.status === "running" ? "shutdown" : "start";
+  const specLabel = machineSpecLabel(machine);
 
-  async function handleControl() {
+  function closeMenu() {
+    setMenuClosing(true);
+    setTimeout(() => { setMenuOpen(false); setMenuClosing(false); }, 130);
+  }
+
+  // 與單機列同一組電源控制；環境內的機器差別只在不能單台刪除。
+  async function handleControl(action) {
     if (!canControl || actionLoading) return;
-    setActionLoading(true);
+    setActionLoading(action);
     try {
-      await ResourcesService[controlAction](resource.vmid);
-      const status = controlAction === "start" ? "running" : "stopped";
-      onUpdated({ ...resource, status });
-      toast.success(controlAction === "start" ? "已送出啟動指令" : "已送出正常關機指令");
+      await ResourcesService[action](resource.vmid);
+      onUpdated({ ...resource, status: statusAfterAction(action) });
+      toast.success(t("EnvironmentMachineRow.commandSent"));
     } catch (error) {
-      toast.error(error?.message ?? "機器操作失敗");
+      toast.error(error?.message ?? t("EnvironmentMachineRow.controlFailed"));
     } finally {
-      setActionLoading(false);
+      setActionLoading(null);
     }
   }
 
   return <>
     <tr className={`${styles.tr} ${styles.environmentMachineRow}`}>
-    <td className={styles.td}><div className={`${styles.nameCell} ${styles.environmentMachineName}`}><span className={styles.machineBranch}>└</span><div><strong>{machine.name}</strong><small>{machine.role} · {type.label}</small></div></div></td>
-    <td className={styles.td}><div className={styles.envPrimary}>{machine.os}</div><div className={styles.envSub}>{machine.resource ? "已連接實際資源" : "建立中"}</div></td>
+    <td className={styles.td}><div className={`${styles.nameCell} ${styles.environmentMachineName}`}><span className={styles.machineBranch}>└</span><div>{resource?.vmid > 0
+      ? <button type="button" className={styles.nameLink} onClick={() => navigate(`/my-resources/${resource.vmid}`)}>{machine.name}</button>
+      : <strong>{machine.name}</strong>}<small>{machine.role} · {t(type.labelKey ?? type.label)}{specLabel ? ` · ${specLabel}` : ""}</small></div></div></td>
+    <td className={styles.td}><div className={styles.envPrimary}>{machine.os}</div><div className={styles.envSub}>{machine.resource ? t("EnvironmentMachineRow.resourceConnected") : t("EnvironmentMachineRow.creating")}</div></td>
     <td className={styles.td}><StatusBadge status={machine.status} /></td>
     <td className={styles.td}><span className={styles.mono}>{machine.ip}</span></td>
-    <td className={styles.td}><span className={styles.muted}>依環境管理</span></td>
+    <td className={styles.td}><span className={styles.muted}>{t("EnvironmentMachineRow.managedByEnvironment")}</span></td>
     <td className={styles.td}>{machine.node}</td>
-    <td className={styles.td}><div className={styles.rowActions}><button type="button" className={styles.terminalBtn} disabled={!canOpen} title={canOpen ? (isLxc ? "終端機" : "控制台") : "機器尚未完成或未開機"} onClick={() => setConsoleOpen(true)}><MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />{isLxc ? "終端機" : "控制台"}</button><button type="button" className={styles.terminalBtn} disabled={!canControl || actionLoading || !["running", "stopped"].includes(resource?.status)} onClick={handleControl}><MIcon name={actionLoading ? "hourglass_empty" : controlAction === "start" ? "play_arrow" : "power_settings_new"} size={14} />{controlAction === "start" ? "啟動" : "關機"}</button></div></td>
+    <td className={styles.td}><div className={styles.rowActions}>
+      <button type="button" className={styles.terminalBtn} disabled={!canOpen} title={canOpen ? (isLxc ? t("EnvironmentMachineRow.terminal") : t("EnvironmentMachineRow.console")) : t("EnvironmentMachineRow.notReadyTitle")} onClick={() => setConsoleOpen(true)}><MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />{isLxc ? t("EnvironmentMachineRow.terminal") : t("EnvironmentMachineRow.console")}</button>
+      {actionLoading && <MIcon name="hourglass_empty" size={16} />}
+      {canControl && <div className={styles.menuWrap}>
+        {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onClose={closeMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
+        <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)} title={t("ResourceRow.moreActions")}><MIcon name="more_vert" size={18} /></button>
+      </div>}
+    </div></td>
     </tr>
     {consoleOpen && isLxc && createPortal(<TerminalDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
     {consoleOpen && !isLxc && createPortal(<VncDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
@@ -339,21 +382,41 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
 }
 
 function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
+  const { t } = useTranslation("personal");
   const [expanded, setExpanded] = useState(true);
   const [ending, setEnding] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
+  const [groupAction, setGroupAction] = useState(null);
   const toast = useToast();
   const canEnd = group.kind === "quick_practice" && !["reclaiming", "reclaimed"].includes(group.status);
+  const controllableVmids = group.machines
+    .filter((machine) => machine.resource?.vmid && machine.resource.can_control !== false)
+    .map((machine) => machine.resource.vmid);
+  const runningCount = group.machines.filter((machine) => machine.status === "running").length;
+
+  async function runGroupAction(action) {
+    if (!controllableVmids.length || groupAction) return;
+    setGroupAction(action);
+    try {
+      await ResourcesService.batchAction(controllableVmids, action);
+      toast.success(t("EnvironmentGroupRows.groupCommandSent"));
+      onEnded?.();
+    } catch (error) {
+      toast.error(error?.message ?? t("EnvironmentGroupRows.groupCommandFailed"));
+    } finally {
+      setGroupAction(null);
+    }
+  }
 
   async function endPractice() {
     setEnding(true);
     try {
       await QuickPracticeService.endSession(group.id);
-      toast.success("已開始回收這組練習環境");
+      toast.success(t("EnvironmentGroupRows.endPracticeSuccess"));
       setEndConfirm(false);
       onEnded?.();
     } catch (error) {
-      toast.error(error?.message ?? "結束練習失敗");
+      toast.error(error?.message ?? t("EnvironmentGroupRows.endPracticeFailed"));
     } finally {
       setEnding(false);
     }
@@ -368,20 +431,22 @@ function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
         setExpanded((value) => !value);
       }}
     >
-      <td className={styles.td}><button type="button" className={styles.environmentToggle} aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}><MIcon name={expanded ? "expand_more" : "chevron_right"} size={20} /><span><strong>{group.kindLabel}｜{group.title}</strong><small>{group.machines.length} 台機器 · 整組管理</small></span></button></td>
-      <td className={styles.td}><div className={styles.envPrimary}>{group.kind === "course" ? "課程多機環境" : "快速練習環境"}</div><div className={styles.envSub}>整組檢視</div></td>
+      <td className={styles.td}><button type="button" className={styles.environmentToggle} aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}><MIcon name={expanded ? "expand_more" : "chevron_right"} size={20} /><span><strong>{group.kindLabel}｜{group.title}</strong><small>{t("EnvironmentGroupRows.machineCount", { count: group.machines.length })}</small></span></button></td>
+      <td className={styles.td}><div className={styles.envPrimary}>{group.kind === "course" ? t("EnvironmentGroupRows.courseEnv") : t("EnvironmentGroupRows.quickPracticeEnv")}</div><div className={styles.envSub}>{t("EnvironmentGroupRows.groupOverview")}</div></td>
       <td className={styles.td}><StatusBadge status={group.status} /></td>
-      <td className={styles.td}><span className={styles.muted}>展開查看</span></td>
+      <td className={styles.td}><span className={styles.muted}>{t("EnvironmentGroupRows.runningCount", { running: runningCount, total: group.machines.length })}</span></td>
       <td className={styles.td}><strong className={styles.environmentTiming}>{group.timingLabel}</strong></td>
       <td className={styles.td}>{group.nodeLabel}</td>
       <td className={styles.td}><div className={styles.groupActions}>
-        {canEnd
-          ? <button type="button" className={styles.terminalBtn} disabled={ending} onClick={() => setEndConfirm(true)}><MIcon name="stop_circle" size={14} />{ending ? "結束中…" : "結束練習"}</button>
-          : <span className={styles.muted}>展開查看</span>}
+        {controllableVmids.length > 0 && <>
+          <button type="button" className={styles.terminalBtn} disabled={Boolean(groupAction) || runningCount === group.machines.length} onClick={() => runGroupAction("start")}><MIcon name={groupAction === "start" ? "hourglass_empty" : "play_arrow"} size={14} />{t("EnvironmentGroupRows.startAll")}</button>
+          <button type="button" className={styles.terminalBtn} disabled={Boolean(groupAction) || runningCount === 0} onClick={() => runGroupAction("shutdown")}><MIcon name={groupAction === "shutdown" ? "hourglass_empty" : "power_settings_new"} size={14} />{t("EnvironmentGroupRows.shutdownAll")}</button>
+        </>}
+        {canEnd && <button type="button" className={styles.terminalBtn} disabled={ending} onClick={() => setEndConfirm(true)}><MIcon name="stop_circle" size={14} />{ending ? t("EnvironmentGroupRows.ending") : t("EnvironmentGroupRows.endPractice")}</button>}
       </div></td>
     </tr>
     {expanded && group.machines.map((machine) => <EnvironmentMachineRow key={machine.id} machine={machine} groupStatus={group.status} onUpdated={onUpdated} />)}
-    {endConfirm && createPortal(<ConfirmModal title="結束這組練習？" desc="整組機器會立刻回收，未儲存的內容會消失；已使用的建立次數不會退還。" confirmLabel="結束練習" danger loading={ending} onConfirm={endPractice} onClose={() => setEndConfirm(false)} />, document.body)}
+    {endConfirm && createPortal(<ConfirmModal title={t("EnvironmentGroupRows.confirmEndTitle")} desc={t("EnvironmentGroupRows.confirmEndDesc")} confirmLabel={t("EnvironmentGroupRows.endPractice")} danger loading={ending} onConfirm={endPractice} onClose={() => setEndConfirm(false)} />, document.body)}
   </>;
 }
 
@@ -392,18 +457,20 @@ function SkeletonRow() {
 
 /* ── Empty / Error states ── */
 function EmptyState() {
-  return <SharedEmptyState icon="dns" title="尚無資源" />;
+  const { t } = useTranslation("personal");
+  return <SharedEmptyState icon="dns" title={t("ResourcesPage.emptyTitle")} />;
 }
 
 function ErrorState({ onRetry }) {
+  const { t } = useTranslation("personal");
   return (
     <EmptyState
       icon="error_outline"
-      title="載入失敗"
+      title={t("ResourcesPage.errorTitle")}
       action={
         <button type="button" className={styles.btnSecondary} onClick={onRetry}>
           <MIcon name="refresh" size={16} />
-          重試
+          {t("ResourcesPage.retry")}
         </button>
       }
     />
@@ -412,6 +479,7 @@ function ErrorState({ onRetry }) {
 
 /* ── Page ── */
 export default function ResourcesPage() {
+  const { t } = useTranslation("personal");
   const navigate = useNavigate();
   const [resources, setResources] = useState([]);
   const [quickSessions, setQuickSessions] = useState([]);
@@ -494,15 +562,24 @@ export default function ResourcesPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="我的資源" subtitle="查看與管理申請通過的虛擬機和容器">
-        <button
-          type="button"
-          className={styles.btnPrimary}
-          onClick={() => navigate("/my-requests", { state: { create: true } })}
-        >
-          <MIcon name="add" size={16} />
-          申請資源
-        </button>
+      <PageHeader title={t("ResourcesPage.title")} subtitle={t("ResourcesPage.subtitle")}>
+        <div className={styles.pageActions}>
+          <a
+            className={styles.btnSecondary}
+            href={DESKTOP_CLIENT_DOWNLOAD_URL}
+          >
+            <MIcon name="download" size={16} />
+            {t("ResourcesPage.downloadDesktopClient")}
+          </a>
+          <button
+            type="button"
+            className={styles.btnPrimary}
+            onClick={() => navigate("/my-requests", { state: { create: true } })}
+          >
+            <MIcon name="add" size={16} />
+            {t("ResourcesPage.requestResource")}
+          </button>
+        </div>
       </PageHeader>
 
       {/* 我的配額用量（模組 E） */}
@@ -526,7 +603,7 @@ export default function ResourcesPage() {
                 <col className={styles.colActions} />
               </colgroup>
               <thead>
-                <tr><th className={styles.th}>名稱</th><th className={styles.th}>環境／系統</th><th className={styles.th}>狀態</th><th className={styles.th}>IP 位址</th><th className={styles.th}>到期日</th><th className={styles.th}>節點</th><th className={styles.th}>動作</th></tr>
+                <tr><th className={styles.th}>{t("ResourcesPage.colName")}</th><th className={styles.th}>{t("ResourcesPage.colEnvironment")}</th><th className={styles.th}>{t("ResourcesPage.colStatus")}</th><th className={styles.th}>{t("ResourcesPage.colIp")}</th><th className={styles.th}>{t("ResourcesPage.colExpiry")}</th><th className={styles.th}>{t("ResourcesPage.colNode")}</th><th className={styles.th}>{t("ResourcesPage.colActions")}</th></tr>
               </thead>
               <tbody>
                 {loading ? [0, 1, 2].map((i) => <SkeletonRow key={i} />) : <>

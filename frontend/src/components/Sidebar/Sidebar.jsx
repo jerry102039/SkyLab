@@ -1,95 +1,96 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth }  from "../../contexts/AuthContext";
+import { SUPPORTED_LANGUAGES, setLanguage } from "../../i18n";
 import styles from "./Sidebar.module.scss";
 import MIcon from "../MIcon";
 import Avatar from "../Avatar/Avatar";
 import JobsButton from "../Jobs/JobsButton";
 
 const topItems = [
-  { key: "dashboard", label: "首頁", icon: "dashboard" },
+  { key: "dashboard", labelKey: "Sidebar.topDashboard", icon: "dashboard" },
 ];
 
 const navGroups = [
   {
     key: "resource",
-    label: "資源",
+    labelKey: "Sidebar.groupResource",
     icon: "storage",
     items: [
-      { key: "my-resources",  label: "我的資源",    icon: "inventory_2" },
-      { key: "my-requests",   label: "我的申請",    icon: "assignment" },
-      { key: "resource-mgmt", label: "資源管理",    icon: "storage", adminOnly: true },
-      { key: "templates",     label: "機器範本",    icon: "library_books", instructorOnly: true },
-      { key: "gpu-mgmt",      label: "GPU 管理",    icon: "memory", adminOnly: true },
+      { key: "my-resources",  labelKey: "Sidebar.itemMyResources",    icon: "inventory_2" },
+      { key: "my-requests",   labelKey: "Sidebar.itemMyRequests",    icon: "assignment" },
+      { key: "resource-mgmt", labelKey: "Sidebar.itemResourceMgmt",    icon: "storage", adminOnly: true },
+      { key: "templates",     labelKey: "Sidebar.itemTemplates",    icon: "library_books", instructorOnly: true },
+      { key: "gpu-mgmt",      labelKey: "Sidebar.itemGpuMgmt",    icon: "memory", adminOnly: true },
     ],
   },
   {
     key: "review",
-    label: "審核",
+    labelKey: "Sidebar.groupReview",
     icon: "fact_check",
     items: [
-      { key: "request-review", label: "申請審核", icon: "fact_check", adminOnly: true },
-      { key: "batch-review",   label: "批量審核", icon: "library_add_check", adminOnly: true },
+      { key: "request-review", labelKey: "Sidebar.itemRequestReview", icon: "fact_check", adminOnly: true },
+      { key: "batch-review",   labelKey: "Sidebar.itemBatchReview", icon: "library_add_check", adminOnly: true },
+      { key: "ai-api-review",  labelKey: "Sidebar.itemAiApiReview", icon: "rate_review", adminOnly: true },
     ],
   },
   {
     key: "network",
-    label: "網路",
+    labelKey: "Sidebar.groupNetwork",
     icon: "router",
     items: [
-      { key: "firewall",      label: "防火牆",     icon: "security" },
-      { key: "reverse-proxy", label: "反向代理",   icon: "swap_horiz" },
+      { key: "firewall",      labelKey: "Sidebar.itemFirewall",     icon: "security" },
+      { key: "reverse-proxy", labelKey: "Sidebar.itemReverseProxy",   icon: "swap_horiz" },
     ],
   },
   {
     key: "ai",
-    label: "AI 服務",
+    labelKey: "Sidebar.groupAi",
     icon: "smart_toy",
     items: [
-      { key: "ai-api",        label: "AI API",   icon: "psychology" },
-      { key: "ai-api-review", label: "申請審核", icon: "rate_review", adminOnly: true },
-      { key: "ai-api-keys",   label: "金鑰管理", icon: "vpn_key", adminOnly: true },
-      { key: "ai-monitoring", label: "使用監控", icon: "monitor_heart", adminOnly: true },
+      { key: "ai-api",        labelKey: "Sidebar.itemAiApi",   icon: "psychology" },
+      { key: "ai-api-keys",   labelKey: "Sidebar.itemAiApiKeys", icon: "vpn_key", adminOnly: true },
+      { key: "ai-monitoring", labelKey: "Sidebar.itemAiMonitoring", icon: "monitor_heart", adminOnly: true },
       /* PVE 維運助手不放側欄：管理者首頁就是它的入口，那裡同時看得到待處理的問題 */
     ],
   },
   {
     key: "teaching",
-    label: "教學",
+    labelKey: "Sidebar.groupTeaching",
     icon: "school",
     items: [
-      { key: "class-setup", label: "一鍵建立班級", icon: "add_circle", instructorOnly: true },
-      { key: "class-management", label: "班級管理", icon: "groups_2", instructorOnly: true },
-      { key: "course-template-management", label: "多機環境模板", icon: "view_quilt", instructorOnly: true },
-      { key: "courses",    label: "課程學習（非正式）", icon: "flag" },
+      { key: "class-management", labelKey: "Sidebar.itemClassManagement", icon: "groups_2", instructorOnly: true },
+      { key: "course-template-management", labelKey: "Sidebar.itemCourseTemplateManagement", icon: "view_quilt", instructorOnly: true },
     ],
   },
   {
     key: "system",
-    label: "系統管理",
+    labelKey: "Sidebar.groupSystem",
     icon: "tune",
     items: [
-      { key: "admin",         label: "使用者管理", icon: "admin_panel_settings", adminOnly: true },
-      { key: "quotas",        label: "配額管理",   icon: "data_usage", adminOnly: true },
-      { key: "ip-management", label: "IP 管理",    icon: "lan", adminOnly: true },
-      { key: "domain",        label: "網域管理",   icon: "domain", adminOnly: true },
-      { key: "gateway",       label: "閘道 VM",    icon: "dns", adminOnly: true },
-      { key: "settings",      label: "系統設定",   icon: "settings", adminOnly: true },
+      { key: "admin",         labelKey: "Sidebar.itemAdmin", icon: "admin_panel_settings", adminOnly: true },
+      { key: "quotas",        labelKey: "Sidebar.itemQuotas",   icon: "data_usage", adminOnly: true },
+      { key: "ip-management", labelKey: "Sidebar.itemIpManagement",    icon: "lan", adminOnly: true },
+      { key: "domain",        labelKey: "Sidebar.itemDomain",   icon: "domain", adminOnly: true },
+      { key: "gateway",       labelKey: "Sidebar.itemGateway",    icon: "dns", adminOnly: true },
+      { key: "settings",      labelKey: "Sidebar.itemSettings",   icon: "settings", adminOnly: true },
     ],
   },
   {
     key: "monitoring",
-    label: "監控與日誌",
+    labelKey: "Sidebar.groupMonitoring",
     icon: "insights",
     items: [
-      { key: "monitoring",    label: "資源監控",       icon: "monitor_heart", adminOnly: true },
-      { key: "jobs",          label: "背景任務",       icon: "task_alt" },
-      { key: "audit",         label: "稽核日誌",     icon: "receipt_long", adminOnly: true },
+      { key: "monitoring",    labelKey: "Sidebar.itemMonitoring",       icon: "monitor_heart", adminOnly: true },
+      { key: "jobs",          labelKey: "Sidebar.itemJobs",       icon: "task_alt" },
+      { key: "audit",         labelKey: "Sidebar.itemAudit",     icon: "receipt_long", adminOnly: true },
     ],
   },
 ];
 
 function NavGroup({ group, active, onSelect, collapsed, onExpand }) {
+  const { t } = useTranslation("common");
   const [open, setOpen] = useState(
     group.items.some((i) => i.key === active)
   );
@@ -111,14 +112,14 @@ function NavGroup({ group, active, onSelect, collapsed, onExpand }) {
         type="button"
         className={`${styles.groupHeader} ${hasActive ? styles.groupHeaderActive : ""}`}
         onClick={handleHeaderClick}
-        title={collapsed ? group.label : undefined}
-        aria-label={group.label}
+        title={collapsed ? t(group.labelKey) : undefined}
+        aria-label={t(group.labelKey)}
         aria-expanded={!collapsed && open}
       >
         <MIcon name={group.icon} size={20} />
         {!collapsed && (
           <>
-            <span className={styles.groupLabel}>{group.label}</span>
+            <span className={styles.groupLabel}>{t(group.labelKey)}</span>
             <span className={`${styles.groupChevron} ${open ? styles.open : ""}`}>
               <MIcon name="chevron_right" size={16} />
             </span>
@@ -136,9 +137,9 @@ function NavGroup({ group, active, onSelect, collapsed, onExpand }) {
               type="button"
               className={`${styles.navItem} ${active === item.key ? styles.active : ""}`}
               onClick={() => onSelect(item.key)}
-              aria-label={item.label}
+              aria-label={t(item.labelKey)}
             >
-              <span className={styles.navLabel}>{item.label}</span>
+              <span className={styles.navLabel}>{t(item.labelKey)}</span>
             </button>
           ))}
         </div>
@@ -213,6 +214,7 @@ function SelectPopup({ options, value, onSelect, onClose, triggerRef, closing })
 }
 
 function UserPopup({ user, onLogout, onSettings, onClose, triggerRef, closing }) {
+  const { t } = useTranslation("common");
   const ref = useRef(null);
 
   useEffect(() => {
@@ -237,7 +239,7 @@ function UserPopup({ user, onLogout, onSettings, onClose, triggerRef, closing })
       <div className={styles.userPopupDivider} />
       <button type="button" className={styles.userPopupItem} onClick={() => { onClose(); onSettings(); }}>
         <MIcon name="settings" size={18} />
-        <span>User Settings</span>
+        <span>{t("Sidebar.userSettings")}</span>
       </button>
       <button
         type="button"
@@ -245,24 +247,24 @@ function UserPopup({ user, onLogout, onSettings, onClose, triggerRef, closing })
         onClick={() => { onClose(); onLogout(); }}
       >
         <MIcon name="logout" size={18} />
-        <span>Log Out</span>
+        <span>{t("Sidebar.logOut")}</span>
       </button>
     </div>
   );
 }
 
-// 介面尚未接 i18n，僅繁體中文可用；其餘語言待字串抽取完成後開放
 const LANG_OPTIONS = [
   { key: "zh-TW", label: "繁體中文", flag: "🇹🇼" },
-  { key: "en",    label: "English",  flag: "🇬🇧", disabled: true, hint: "即將推出" },
-  { key: "ja",    label: "日本語",   flag: "🇯🇵", disabled: true, hint: "即將推出" },
+  { key: "en",    label: "English",  flag: "🇬🇧" },
+  { key: "ja",    label: "日本語",   flag: "🇯🇵" },
 ];
 
 export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
+  const { t, i18n } = useTranslation("common");
   const navigate = useNavigate();
   const location = useLocation();
   const active   = location.pathname.split("/")[1] || "dashboard";
-  const [lang, setLang] = useState("zh-TW");
+  const lang = SUPPORTED_LANGUAGES.includes(i18n.language) ? i18n.language : "zh-TW";
   const langPopup  = usePopup();
   const userPopup  = usePopup();
   const langBtnRef = useRef(null);
@@ -316,11 +318,11 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
             type="button"
             className={`${styles.navItem} ${active === item.key ? styles.active : ""}`}
             onClick={() => handleNav(item.key)}
-            title={collapsed ? item.label : undefined}
-            aria-label={item.label}
+            title={collapsed ? t(item.labelKey) : undefined}
+            aria-label={t(item.labelKey)}
           >
             <MIcon name={item.icon} size={20} />
-            {!collapsed && <span className={styles.navLabel}>{item.label}</span>}
+            {!collapsed && <span className={styles.navLabel}>{t(item.labelKey)}</span>}
           </button>
         ))}
         {visibleNavGroups.map((group) => (
@@ -346,7 +348,7 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
             <SelectPopup
               options={LANG_OPTIONS}
               value={lang}
-              onSelect={setLang}
+              onSelect={setLanguage}
               onClose={langPopup.close}
               triggerRef={langBtnRef}
               closing={langPopup.closing}
@@ -385,7 +387,7 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
             className={`${styles.user} ${userPopup.open && !userPopup.closing ? styles.userActive : ""}`}
             onClick={userPopup.toggle}
             title={collapsed ? (user?.full_name ?? user?.email) : undefined}
-            aria-label={`使用者選單：${user?.full_name ?? user?.email ?? ""}`}
+            aria-label={t("Sidebar.userMenuAriaLabel", { name: user?.full_name ?? user?.email ?? "" })}
             aria-expanded={userPopup.open}
           >
             <Avatar user={user} size={32} className={styles.avatar} />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./ResourceDetailPage.module.scss";
 import MIcon from "../../../../components/MIcon";
 import LoadingState from "../../../../components/LoadingState/LoadingState";
@@ -10,6 +11,7 @@ import { ReverseProxyService } from "../../../../services/reverseProxy";
 import { ResourcesService } from "../../../../services/resources";
 
 export default function AdvancedSettingsTab({ vmid }) {
+  const { t } = useTranslation("personal");
   const { user } = useAuth();
   const toast = useToast();
   const isAdmin = user?.role === "admin" || user?.is_superuser === true;
@@ -34,11 +36,11 @@ export default function AdvancedSettingsTab({ vmid }) {
       setRules((rulesRes ?? []).filter((r) => r.vmid === vmid));
       if (ctxRes) setSetupContext(ctxRes);
     } catch (err) {
-      toast.error(err?.message ?? "載入反向代理規則失敗");
+      toast.error(err?.message ?? t("AdvancedSettingsTab.loadRulesFailed"));
     } finally {
       setLoading(false);
     }
-  }, [vmid, toast]);
+  }, [vmid, toast, t]);
 
   useEffect(() => {
     fetchData();
@@ -48,9 +50,9 @@ export default function AdvancedSettingsTab({ vmid }) {
   const running = resource?.status === "running";
   const createDisabled = setupBlocked || !running;
   const createHint = setupBlocked
-    ? setupContext?.reasons?.[0] ?? "這個功能目前暫時無法使用"
+    ? setupContext?.reasons?.[0] ?? t("AdvancedSettingsTab.featureUnavailable")
     : !running
-      ? "VM 要先開機，才能新增網址"
+      ? t("AdvancedSettingsTab.vmMustBeRunning")
       : "";
 
   async function handleSubmitRule(payload) {
@@ -58,15 +60,15 @@ export default function AdvancedSettingsTab({ vmid }) {
     try {
       if (modal?.rule) {
         await ReverseProxyService.updateRule(modal.rule.id, payload);
-        toast.success("網址已更新，系統會自動同步相關設定");
+        toast.success(t("AdvancedSettingsTab.ruleUpdated"));
       } else {
         await ReverseProxyService.createRule(payload);
-        toast.success("網址建立成功，系統正在自動完成設定");
+        toast.success(t("AdvancedSettingsTab.ruleCreated"));
       }
       setModal(null);
       fetchData();
     } catch (err) {
-      toast.error(err?.message ?? "儲存網域規則失敗");
+      toast.error(err?.message ?? t("AdvancedSettingsTab.saveRuleFailed"));
     } finally {
       setSaving(false);
     }
@@ -77,11 +79,11 @@ export default function AdvancedSettingsTab({ vmid }) {
     setSaving(true);
     try {
       await ReverseProxyService.deleteRule(modal.rule.id);
-      toast.success("網址已刪除");
+      toast.success(t("AdvancedSettingsTab.ruleDeleted"));
       setModal(null);
       fetchData();
     } catch (err) {
-      toast.error(err?.message ?? "刪除網域規則失敗");
+      toast.error(err?.message ?? t("AdvancedSettingsTab.deleteRuleFailed"));
     } finally {
       setSaving(false);
     }
@@ -95,10 +97,10 @@ export default function AdvancedSettingsTab({ vmid }) {
           <div>
             <h2 className={styles.cardTitle}>
               <MIcon name="swap_horiz" size={18} />
-              對外網址
+              {t("AdvancedSettingsTab.externalUrlTitle")}
             </h2>
             <p className={styles.cardDesc}>
-              幫這台 VM 裡的網站或服務取一個好記的網址，別人直接輸入網址就能打開
+              {t("AdvancedSettingsTab.externalUrlDesc")}
             </p>
           </div>
           <div className={styles.headerActions}>
@@ -110,13 +112,13 @@ export default function AdvancedSettingsTab({ vmid }) {
               onClick={() => setModal({ kind: "rule" })}
             >
               <MIcon name="add" size={16} />
-              新增網址
+              {t("AdvancedSettingsTab.addUrl")}
             </button>
           </div>
         </div>
         <div className={styles.cardBody}>
           {loading ? (
-            <LoadingState text="載入網域規則..." />
+            <LoadingState text={t("AdvancedSettingsTab.loadingRules")} />
           ) : (
             <>
               {createHint && (
@@ -127,8 +129,7 @@ export default function AdvancedSettingsTab({ vmid }) {
               )}
               {rules.length === 0 ? (
                 <p className={styles.mutedText}>
-                  這台 VM 還沒有對外網址。設定之後，別人不用記一長串數字，
-                  直接輸入網址就能打開你 VM 裡的網站或服務。
+                  {t("AdvancedSettingsTab.noRulesText")}
                 </p>
               ) : (
                 <div className={styles.rpList}>
@@ -152,13 +153,13 @@ export default function AdvancedSettingsTab({ vmid }) {
                         rel="noreferrer"
                       >
                         <MIcon name="open_in_new" size={14} />
-                        開啟
+                        {t("AdvancedSettingsTab.open")}
                       </a>
                       <div className={styles.rpActions}>
                         <button
                           type="button"
                           className={styles.rpIconBtn}
-                          title="編輯"
+                          title={t("AdvancedSettingsTab.edit")}
                           onClick={() => setModal({ kind: "rule", rule })}
                         >
                           <MIcon name="edit" size={16} />
@@ -166,7 +167,7 @@ export default function AdvancedSettingsTab({ vmid }) {
                         <button
                           type="button"
                           className={`${styles.rpIconBtn} ${styles.rpIconBtnDanger}`}
-                          title="刪除"
+                          title={t("AdvancedSettingsTab.delete")}
                           onClick={() => setModal({ kind: "delete", rule })}
                         >
                           <MIcon name="delete" size={16} />
@@ -185,14 +186,14 @@ export default function AdvancedSettingsTab({ vmid }) {
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <div>
-            <h2 className={styles.cardTitle}>更多進階設定</h2>
-            <p className={styles.cardDesc}>更多資源層級的進階選項</p>
+            <h2 className={styles.cardTitle}>{t("AdvancedSettingsTab.moreAdvancedTitle")}</h2>
+            <p className={styles.cardDesc}>{t("AdvancedSettingsTab.moreAdvancedDesc")}</p>
           </div>
         </div>
         <div className={`${styles.cardBody} ${styles.comingSoon}`}>
           <MIcon name="construction" size={32} />
-          <p>即將推出</p>
-          <span className={styles.mutedText}>開機順序等進階功能規劃中</span>
+          <p>{t("AdvancedSettingsTab.comingSoon")}</p>
+          <span className={styles.mutedText}>{t("AdvancedSettingsTab.bootOrderPlanned")}</span>
         </div>
       </div>
 
@@ -214,10 +215,9 @@ export default function AdvancedSettingsTab({ vmid }) {
           onMouseDown={() => setModal(null)}
         >
           <div className={styles.modal} onMouseDown={(e) => e.stopPropagation()}>
-            <h2 className={styles.modalTitle}>刪除網址</h2>
+            <h2 className={styles.modalTitle}>{t("AdvancedSettingsTab.deleteUrlTitle")}</h2>
             <p className={styles.modalDesc}>
-              確定要刪除 <strong>{modalPresence.item.rule.domain}</strong> 嗎？刪除後這個網址會立刻失效，
-              相關設定也會一併清除。
+              {t("AdvancedSettingsTab.deleteUrlDescPart1")}<strong>{modalPresence.item.rule.domain}</strong>{t("AdvancedSettingsTab.deleteUrlDescPart2")}
             </p>
             <div className={styles.modalActions}>
               <button
@@ -225,7 +225,7 @@ export default function AdvancedSettingsTab({ vmid }) {
                 className={styles.btnSecondary}
                 onClick={() => setModal(null)}
               >
-                取消
+                {t("AdvancedSettingsTab.cancel")}
               </button>
               <button
                 type="button"
@@ -233,7 +233,7 @@ export default function AdvancedSettingsTab({ vmid }) {
                 disabled={saving}
                 onClick={handleDeleteRule}
               >
-                {saving ? "刪除中..." : "刪除"}
+                {saving ? t("AdvancedSettingsTab.deleting") : t("AdvancedSettingsTab.delete")}
               </button>
             </div>
           </div>

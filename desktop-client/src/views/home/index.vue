@@ -183,6 +183,16 @@ onMounted(() => {
   on(ipcRouters.TUNNEL.getStatus, (data: TunnelStatusInfo) => {
     if (data) appStore.tunnelStatus = data;
   });
+  on(
+    ipcRouters.SYSTEM.openSsh,
+    () => undefined,
+    (_code, message) => ElMessage.error(message)
+  );
+  on(
+    ipcRouters.SYSTEM.openRdp,
+    () => undefined,
+    (_code, message) => ElMessage.error(message)
+  );
 
   refresh();
   window.addEventListener("online", refreshAfterNetworkRecovery);
@@ -197,6 +207,8 @@ onUnmounted(() => {
   removeRouterListeners(ipcRouters.TUNNEL.stop);
   removeRouterListeners(ipcRouters.TUNNEL.refresh);
   removeRouterListeners(ipcRouters.TUNNEL.getStatus);
+  removeRouterListeners(ipcRouters.SYSTEM.openSsh);
+  removeRouterListeners(ipcRouters.SYSTEM.openRdp);
   window.removeEventListener("online", refreshAfterNetworkRecovery);
 });
 </script>
@@ -240,12 +252,20 @@ onUnmounted(() => {
           :disabled="loading"
           @click="handleConnect"
         >
-          <IconifyIconOffline
-            :icon="loading ? 'refresh-rounded' : 'settings-ethernet-rounded'"
-          />
-          <span>{{
-            loading ? t("home.connect.connecting") : t("home.connect.button")
-          }}</span>
+          <span class="connect-button__icon">
+            <IconifyIconOffline
+              :icon="loading ? 'refresh-rounded' : 'settings-ethernet-rounded'"
+            />
+          </span>
+          <span class="connect-button__copy">
+            <strong>{{
+              loading ? t("home.connect.connecting") : t("home.connect.button")
+            }}</strong>
+            <small>{{ t("home.connect.secureHint") }}</small>
+          </span>
+          <span class="connect-button__arrow">
+            <IconifyIconOffline icon="arrow-forward-rounded" />
+          </span>
         </button>
         <h1>{{ t("home.connect.title") }}</h1>
         <p>{{ t("home.connect.description") }}</p>
@@ -459,41 +479,120 @@ onUnmounted(() => {
 }
 
 .connect-button {
+  position: relative;
   display: flex;
-  width: 164px;
-  height: 164px;
-  flex-direction: column;
+  width: min(430px, 100%);
+  min-height: 112px;
   align-items: center;
-  justify-content: center;
-  gap: 11px;
+  gap: 16px;
+  padding: 18px 20px;
+  overflow: hidden;
   color: white;
-  font-size: 16px;
-  font-weight: 700;
   background: linear-gradient(
-    145deg,
-    var(--color-primary),
-    var(--color-primary-dark)
+    125deg,
+    #6d86d0 0%,
+    var(--color-primary) 42%,
+    var(--color-primary-dark) 100%
   );
-  border: 0;
-  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 24px;
   box-shadow:
-    0 18px 40px color-mix(in srgb, var(--color-primary) 34%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    0 20px 44px color-mix(in srgb, var(--color-primary) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
   cursor: pointer;
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    filter 0.22s ease;
 }
 
-.connect-button svg {
-  font-size: 50px;
+.connect-button::before,
+.connect-button::after {
+  position: absolute;
+  content: "";
+  pointer-events: none;
+  border-radius: 999px;
+}
+
+.connect-button::before {
+  top: -74px;
+  right: -38px;
+  width: 190px;
+  height: 190px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.connect-button::after {
+  bottom: -80px;
+  left: 80px;
+  width: 150px;
+  height: 150px;
+  border: 24px solid rgba(255, 255, 255, 0.05);
+}
+
+.connect-button__icon,
+.connect-button__arrow {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.connect-button__icon {
+  width: 64px;
+  height: 64px;
+  font-size: 35px;
+  background: rgba(255, 255, 255, 0.17);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 19px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+}
+
+.connect-button__copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.connect-button__copy strong {
+  font-size: 19px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.connect-button__copy small {
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.connect-button__arrow {
+  width: 36px;
+  height: 36px;
+  font-size: 21px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  transition: transform 0.22s ease;
 }
 
 .connect-button:hover:not(:disabled) {
   box-shadow:
-    0 22px 48px color-mix(in srgb, var(--color-primary) 44%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  transform: translateY(-4px) scale(1.02);
+    0 24px 52px color-mix(in srgb, var(--color-primary) 40%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  filter: saturate(1.08);
+  transform: translateY(-3px);
+}
+
+.connect-button:hover:not(:disabled) .connect-button__arrow {
+  transform: translateX(3px);
 }
 
 .connect-button--loading {
@@ -501,12 +600,12 @@ onUnmounted(() => {
   animation: connect-pulse 1.6s ease-in-out infinite;
 }
 
-.connect-button--loading svg {
+.connect-button--loading .connect-button__icon svg {
   animation: connect-spin 1.2s linear infinite;
 }
 
 .connect-hero h1 {
-  margin-top: 30px;
+  margin-top: 28px;
   color: var(--color-text-primary);
   font-size: 26px;
   font-weight: 700;
@@ -674,9 +773,9 @@ onUnmounted(() => {
 @keyframes connect-pulse {
   50% {
     box-shadow:
-      0 20px 50px color-mix(in srgb, var(--color-primary) 48%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.35);
-    transform: scale(1.025);
+      0 23px 54px color-mix(in srgb, var(--color-primary) 45%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    transform: translateY(-2px);
   }
 }
 

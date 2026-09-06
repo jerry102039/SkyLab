@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./MonitoringPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -8,20 +9,6 @@ import MiningIncidentsPanel from "./MiningIncidentsPanel";
 import { MonitoringService } from "../../../services/monitoring";
 import { useToast } from "../../../hooks/useToast";
 import PageHeader from "../../../components/PageHeader/PageHeader";
-
-const TIMEFRAMES = [
-  { value: "hour", label: "最近 1 小時" },
-  { value: "day",  label: "最近 1 天" },
-  { value: "week", label: "最近 1 週" },
-];
-
-const METRIC_LABELS = { cpu: "CPU", memory: "記憶體", disk: "磁碟" };
-const SCOPE_LABELS  = { cluster: "叢集", node: "節點", vm: "VM" };
-
-const RRD_SERIES = [
-  { key: "cpu",    label: "CPU %",    color: "--color-info" },
-  { key: "memory", label: "記憶體 %", color: "--color-success" },
-];
 
 function formatBytes(bytes) {
   if (!bytes) return "0 B";
@@ -33,13 +20,13 @@ function formatBytes(bytes) {
   return `${mb.toFixed(0)} MB`;
 }
 
-function formatUptime(seconds) {
+function formatUptime(seconds, t) {
   if (!seconds) return "—";
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
-  if (days > 0) return `${days} 天 ${hours} 小時`;
+  if (days > 0) return t("MonitoringPage.uptimeDaysHours", { days, hours });
   const minutes = Math.floor((seconds % 3600) / 60);
-  return `${hours} 小時 ${minutes} 分`;
+  return t("MonitoringPage.uptimeHoursMinutes", { hours, minutes });
 }
 
 /** 將 PVE 節點 RRD 原始點位轉為圖表資料（CPU%、記憶體%） */
@@ -90,6 +77,11 @@ function OverviewCard({ title, pct, detail }) {
 
 /** 節點展開後的趨勢圖（每 60 秒輪詢） */
 function NodeTrends({ node, timeframe }) {
+  const { t } = useTranslation("system");
+  const RRD_SERIES = [
+    { key: "cpu",    label: "CPU %",    color: "--color-info" },
+    { key: "memory", label: t("MonitoringPage.memoryPercentLabel"), color: "--color-success" },
+  ];
   const [data, setData] = useState(null);
 
   useEffect(() => {
@@ -111,7 +103,7 @@ function NodeTrends({ node, timeframe }) {
   }, [node, timeframe]);
 
   if (data === null) {
-    return <LoadingState text="載入趨勢中…" />;
+    return <LoadingState text={t("MonitoringPage.loadingTrends")} />;
   }
 
   return (
@@ -131,7 +123,10 @@ function NodeTrends({ node, timeframe }) {
 }
 
 function AlertsCard() {
+  const { t } = useTranslation("system");
   const toast = useToast();
+  const METRIC_LABELS = { cpu: "CPU", memory: t("MonitoringPage.memoryLabel"), disk: t("MonitoringPage.diskLabel") };
+  const SCOPE_LABELS  = { cluster: t("MonitoringPage.scopeCluster"), node: t("MonitoringPage.scopeNode"), vm: "VM" };
   const [alerts, setAlerts] = useState(null);
   const [ackBusy, setAckBusy] = useState(null);
 
@@ -155,7 +150,7 @@ function AlertsCard() {
       await MonitoringService.ackAlert(alertId);
       await load();
     } catch (e) {
-      toast.error(e?.message ?? "確認警告失敗");
+      toast.error(e?.message ?? t("MonitoringPage.toastAckFailed"));
     } finally {
       setAckBusy(null);
     }
@@ -167,9 +162,9 @@ function AlertsCard() {
         <div>
           <h2 className={styles.cardTitle}>
             <MIcon name="notifications" size={18} />
-            活動警告
+            {t("MonitoringPage.activeAlertsTitle")}
           </h2>
-          <p className={styles.cardDesc}>超過閾值的資源使用警告（每 30 秒更新）</p>
+          <p className={styles.cardDesc}>{t("MonitoringPage.activeAlertsDesc")}</p>
         </div>
         {alerts && alerts.length > 0 && (
           <span className={styles.alertCount}>{alerts.length}</span>
@@ -179,7 +174,7 @@ function AlertsCard() {
       {alerts === null ? (
         <LoadingState />
       ) : alerts.length === 0 ? (
-        <EmptyState icon="notifications_off" title="目前沒有活動警告" />
+        <EmptyState icon="notifications_off" title={t("MonitoringPage.emptyNoAlerts")} />
       ) : (
         <div className={styles.alertList}>
           {alerts.map((alert) => (
@@ -196,12 +191,12 @@ function AlertsCard() {
                       {METRIC_LABELS[alert.metric] ?? alert.metric} {alert.value.toFixed(0)}%
                     </span>
                     <span className={styles.alertThreshold}>
-                      （閾值 {alert.threshold.toFixed(0)}%）
+                      {t("MonitoringPage.thresholdSuffix", { threshold: alert.threshold.toFixed(0) })}
                     </span>
                   </div>
                   <p className={styles.alertTime}>
                     {new Date(alert.created_at).toLocaleString("zh-TW")}
-                    {alert.acknowledged_at && " · 已確認"}
+                    {alert.acknowledged_at && ` · ${t("MonitoringPage.acknowledged")}`}
                   </p>
                 </div>
               </div>
@@ -213,7 +208,7 @@ function AlertsCard() {
                   onClick={() => handleAck(alert.id)}
                 >
                   <MIcon name="check" size={14} />
-                  確認
+                  {t("MonitoringPage.acknowledge")}
                 </button>
               )}
             </div>
@@ -225,23 +220,24 @@ function AlertsCard() {
 }
 
 function TopVmTable({ title, entries, metric }) {
+  const { t } = useTranslation("system");
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
         <h2 className={styles.cardTitle}>{title}</h2>
       </div>
       {entries.length === 0 ? (
-        <EmptyState icon="dns" title="無運行中的資源" />
+        <EmptyState icon="dns" title={t("MonitoringPage.emptyNoRunningResources")} />
       ) : (
         <table className={styles.table}>
           <thead>
             <tr>
               <th className={styles.th}>VMID</th>
-              <th className={styles.th}>名稱</th>
-              <th className={styles.th}>節點</th>
-              <th className={styles.th}>類型</th>
+              <th className={styles.th}>{t("MonitoringPage.colName")}</th>
+              <th className={styles.th}>{t("MonitoringPage.colNode")}</th>
+              <th className={styles.th}>{t("MonitoringPage.colType")}</th>
               <th className={`${styles.th} ${styles.thRight}`}>
-                {metric === "cpu" ? "CPU" : "記憶體"}
+                {metric === "cpu" ? "CPU" : t("MonitoringPage.memoryLabel")}
               </th>
             </tr>
           </thead>
@@ -269,6 +265,12 @@ function TopVmTable({ title, entries, metric }) {
 }
 
 export default function MonitoringPage() {
+  const { t } = useTranslation("system");
+  const TIMEFRAMES = [
+    { value: "hour", label: t("MonitoringPage.timeframeHour") },
+    { value: "day",  label: t("MonitoringPage.timeframeDay") },
+    { value: "week", label: t("MonitoringPage.timeframeWeek") },
+  ];
   const [timeframe, setTimeframe] = useState("hour");
   const [expandedNode, setExpandedNode] = useState(null);
   const [overview, setOverview] = useState(null);
@@ -297,7 +299,7 @@ export default function MonitoringPage() {
   }, [load]);
 
   if (loading) {
-    return <LoadingState fullPage text="載入監控資料中…" />;
+    return <LoadingState fullPage text={t("MonitoringPage.loadingOverview")} />;
   }
 
   if (error || !overview) {
@@ -305,7 +307,7 @@ export default function MonitoringPage() {
       <div className={styles.page}>
         <div className={`${styles.card} ${styles.cardEmpty}`}>
           <MIcon name="warning" size={24} />
-          <p>無法取得監控資料，請確認 Proxmox 連線狀態。</p>
+          <p>{t("MonitoringPage.errorFetchOverview")}</p>
         </div>
       </div>
     );
@@ -318,7 +320,7 @@ export default function MonitoringPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="資源監控" subtitle="叢集資源使用、節點趨勢與閾值警告">
+      <PageHeader title={t("MonitoringPage.pageTitle")} subtitle={t("MonitoringPage.pageSubtitle")}>
         <div className={styles.pageActions}>
           <div className={styles.segment}>
             {TIMEFRAMES.map((t) => (
@@ -338,38 +340,38 @@ export default function MonitoringPage() {
       {/* 叢集用量卡片 */}
       <div className={styles.statRow}>
         <OverviewCard
-          title="CPU 用量"
+          title={t("MonitoringPage.cpuUsage")}
           pct={cpuPct}
-          detail={`${overview.cpu_used.toFixed(1)} / ${overview.cpu_total} 核心`}
+          detail={t("MonitoringPage.coresDetail", { used: overview.cpu_used.toFixed(1), total: overview.cpu_total })}
         />
         <OverviewCard
-          title="記憶體用量"
+          title={t("MonitoringPage.memoryUsage")}
           pct={memPct}
           detail={`${formatBytes(overview.mem_used)} / ${formatBytes(overview.mem_total)}`}
         />
         <OverviewCard
-          title="磁碟用量"
+          title={t("MonitoringPage.diskUsage")}
           pct={diskPct}
           detail={`${formatBytes(overview.disk_used)} / ${formatBytes(overview.disk_total)}`}
         />
         <div className={styles.overviewCard}>
           <div className={styles.overviewTop}>
             <div className={styles.overviewInfo}>
-              <span className={styles.overviewLabel}>運行狀態</span>
+              <span className={styles.overviewLabel}>{t("MonitoringPage.runningStatus")}</span>
               <span className={styles.statusLine}>
-                節點在線{" "}
+                {t("MonitoringPage.nodesOnline")}{" "}
                 <strong>
                   {overview.nodes_online}/{overview.nodes_total}
                 </strong>
               </span>
               <span className={styles.statusLine}>
-                VM 運行 <strong>{overview.vms_running}</strong>
+                {t("MonitoringPage.vmRunning")} <strong>{overview.vms_running}</strong>
                 <span className={styles.mutedText}>
                   /{overview.vms_running + overview.vms_stopped}
                 </span>
               </span>
               <span className={styles.statusLine}>
-                LXC 運行 <strong>{overview.lxc_running}</strong>
+                {t("MonitoringPage.lxcRunning")} <strong>{overview.lxc_running}</strong>
                 <span className={styles.mutedText}>
                   /{overview.lxc_running + overview.lxc_stopped}
                 </span>
@@ -392,20 +394,20 @@ export default function MonitoringPage() {
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <div>
-            <h2 className={styles.cardTitle}>節點用量</h2>
-            <p className={styles.cardDesc}>點擊節點列展開使用趨勢圖</p>
+            <h2 className={styles.cardTitle}>{t("MonitoringPage.nodeUsageTitle")}</h2>
+            <p className={styles.cardDesc}>{t("MonitoringPage.nodeUsageDesc")}</p>
           </div>
         </div>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th className={styles.th}>節點</th>
-              <th className={styles.th}>狀態</th>
+              <th className={styles.th}>{t("MonitoringPage.colNode")}</th>
+              <th className={styles.th}>{t("MonitoringPage.colStatus")}</th>
               <th className={`${styles.th} ${styles.thWide}`}>CPU</th>
-              <th className={`${styles.th} ${styles.thWide}`}>記憶體</th>
-              <th className={`${styles.th} ${styles.thWide}`}>磁碟</th>
+              <th className={`${styles.th} ${styles.thWide}`}>{t("MonitoringPage.memoryLabel")}</th>
+              <th className={`${styles.th} ${styles.thWide}`}>{t("MonitoringPage.diskLabel")}</th>
               <th className={`${styles.th} ${styles.thRight}`}>VM / LXC</th>
-              <th className={styles.th}>運行時間</th>
+              <th className={styles.th}>{t("MonitoringPage.colUptime")}</th>
             </tr>
           </thead>
           <tbody>
@@ -435,14 +437,14 @@ export default function MonitoringPage() {
                       <span
                         className={`${styles.badge} ${online ? styles.badge_ok : styles.badge_err}`}
                       >
-                        {online ? "在線" : node.status}
+                        {online ? t("MonitoringPage.online") : node.status}
                       </span>
                     </td>
                     <td className={styles.td}>
                       <div className={styles.usageCell}>
                         <div className={styles.usageMeta}>
                           <span>{nodeCpu.toFixed(1)}%</span>
-                          <span className={styles.mutedText}>{node.maxcpu} 核心</span>
+                          <span className={styles.mutedText}>{t("MonitoringPage.coresLabel", { count: node.maxcpu })}</span>
                         </div>
                         <UsageBar pct={nodeCpu} />
                       </div>
@@ -473,7 +475,7 @@ export default function MonitoringPage() {
                       {node.vm_count}
                     </td>
                     <td className={`${styles.td} ${styles.mutedCell}`}>
-                      {formatUptime(node.uptime)}
+                      {formatUptime(node.uptime, t)}
                     </td>
                   </tr>
                   {expanded && (
@@ -492,8 +494,8 @@ export default function MonitoringPage() {
 
       {/* Top VMs */}
       <div className={styles.topGrid}>
-        <TopVmTable title="CPU 用量 Top 5" entries={overview.top_cpu} metric="cpu" />
-        <TopVmTable title="記憶體用量 Top 5" entries={overview.top_mem} metric="mem" />
+        <TopVmTable title={t("MonitoringPage.topCpuTitle")} entries={overview.top_cpu} metric="cpu" />
+        <TopVmTable title={t("MonitoringPage.topMemTitle")} entries={overview.top_mem} metric="mem" />
       </div>
     </div>
   );

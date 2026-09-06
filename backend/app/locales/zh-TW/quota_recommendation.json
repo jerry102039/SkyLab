@@ -1,0 +1,19 @@
+{
+  "quota.violation.cpu": "CPU超出配額（目前 {used} + 新增 {delta} > 上限 {limit} cores）",
+  "quota.violation.memory": "記憶體超出配額（目前 {used} + 新增 {delta} > 上限 {limit} MB）",
+  "quota.violation.disk": "磁碟超出配額（目前 {used} + 新增 {delta} > 上限 {limit} GB）",
+  "quota.violation.instances": "實例數超出配額（目前 {used} + 新增 {delta} > 上限 {limit} 台）",
+  "recommendation.usageLabel.coursework": "課程作業",
+  "recommendation.usageLabel.teaching": "教學服務",
+  "recommendation.usageLabel.research": "研究用途",
+  "recommendation.usageLabel.general": "一般用途",
+  "recommendation.scopeLabel.personal": "個人使用",
+  "recommendation.scopeLabel.shared": "共享使用",
+  "recommendation.submissionReason": "申請 {env} 執行 {service}，供{scope}的{usage}使用，配置 {cores} vCPU、{memory} MB RAM、{disk} GB Disk，以符合目前功能需求並避免資源浪費。",
+  "recommendation.gpuCandidateReason": "此 GPU 目前有可用額度，適合作為預設推薦。",
+  "recommendation.gpuReasonSelected": "AI 依目前可用 GPU 與節點狀況挑選最適合的映射。",
+  "recommendation.gpuReasonInsufficient": "使用者明確需要 GPU，但目前可用 GPU 不足。",
+  "recommendation.recommendedPathWhy": "AI 依需求與可用設備規劃推薦路徑。",
+  "recommendation.environmentReason.vm": "使用 VM 以符合作業系統或環境需求。",
+  "recommendation.environmentReason.lxc": "使用 LXC 以提供較精簡的服務部署方式。"
+}

@@ -69,14 +69,14 @@ def test_unregistered_pve_template_is_a_plain_base_image(registered) -> None:
 def test_unregistered_source_is_rejected_for_lxc(registered) -> None:
     registered(None)
 
-    with pytest.raises(BadRequestError, match="not registered"):
+    with pytest.raises(BadRequestError, match="尚未註冊"):
         _validate(make_user("student"), resource_type="lxc")
 
 
 def test_student_cannot_request_a_private_template(registered) -> None:
     registered(make_template())
 
-    with pytest.raises(BadRequestError, match="not open to students"):
+    with pytest.raises(BadRequestError, match="未開放給學生使用"):
         _validate(make_user("student"))
 
 
@@ -95,7 +95,7 @@ def test_visible_template_still_has_to_be_ready(registered) -> None:
         )
     )
 
-    with pytest.raises(BadRequestError, match="not ready"):
+    with pytest.raises(BadRequestError, match="尚未就緒"):
         _validate(make_user("student"))
 
 
@@ -104,7 +104,7 @@ def test_template_type_must_match_the_request(registered) -> None:
         make_template(visibility=VMTemplateVisibility.global_, resource_type="lxc")
     )
 
-    with pytest.raises(BadRequestError, match="does not match"):
+    with pytest.raises(BadRequestError, match="不符"):
         _validate(make_user("student"))
 
 
@@ -118,7 +118,7 @@ def test_teacher_cannot_use_another_teachers_private_template(
         lambda **kwargs: False,
     )
 
-    with pytest.raises(BadRequestError, match="not accessible"):
+    with pytest.raises(BadRequestError, match="沒有權限使用"):
         _validate(make_user("teacher"))
 
 

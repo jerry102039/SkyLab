@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     WIREGUARD_RECONCILE_ENABLED: bool = True
     WIREGUARD_RECONCILE_INTERVAL_SECONDS: int = 60
     WIREGUARD_REVOKED_RETENTION_DAYS: int = 30
+    # Local/test convenience for switching accounts on one physical device.
+    # Production should keep this disabled so public keys remain account-bound.
+    WIREGUARD_ALLOW_INACTIVE_PEER_TRANSFER: bool = False
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
     ENABLE_SIGNUP: bool = True
 

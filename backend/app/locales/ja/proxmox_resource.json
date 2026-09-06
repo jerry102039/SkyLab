@@ -1,0 +1,16 @@
+{
+  "provisioning.gpu_no_available_quota": "GPU {mapping_id} には利用可能なクォータがありません (used={used}/{capacity})",
+  "provisioning.gpu_profile_not_found": "GPU {mapping_id} には vGPU プロファイル '{profile}' がありません",
+  "provisioning.gpu_profile_not_creatable": "vGPU プロファイル '{profile}' は現在 GPU メモリ不足のため作成できません",
+  "provisioning.gpu_memory_full": "GPU {mapping_id} のメモリが満杯のため、現在 vGPU を作成できません",
+  "provisioning.gpu_verification_failed": "GPU '{mapping_id}' を確認できません: {error}",
+  "provisioning.gpu_fallback_node_incompatible": "'{target_node}' へのノード間クローンに失敗し、テンプレートノード '{template_node}' には GPU マッピング '{mapping_id}' がないため、テンプレートノードへのフォールバックはできません。",
+  "provisioning.template_node_unavailable": "ノード '{node}' はテンプレート '{template}' にアクセスできません（テンプレートは次のノードにのみ存在します: {nodes}）。",
+  "provisioning.lxc_template_node_unavailable": "ノード '{node}' は LXC テンプレート '{template}' にアクセスできません（テンプレートは次のノードにのみ存在します: {nodes}）。",
+  "provisioning.no_nodes_available": "ノードなし",
+  "provisioning.lxc_network_incomplete": "ネットワーク設定が不完全なため、LXC VMID={vmid} を作成できません（allocated_ip={allocated_ip}, net_cfg={net_cfg}）。IP 管理のサブネット設定を確認してください。",
+  "provisioning.vm_network_incomplete": "ネットワーク設定が不完全なため、VM VMID={vmid} を作成できません。IP 管理のサブネット設定を確認してください。",
+  "reset.init_snapshot_exists": "初期スナップショット skylab-init は既に存在します",
+  "reset.no_init_snapshot": "このリソースには skylab-init 初期スナップショットがないためリセットできません。講師または管理者に作成を依頼してください",
+  "quota.exceeded": "クォータ不足: {violations}"
+}

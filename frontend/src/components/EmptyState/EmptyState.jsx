@@ -3,7 +3,7 @@ import styles from "./EmptyState.module.scss";
 
 /**
  * 全站共用的「無資料 / 空狀態」呈現。
- * 預設外觀對齊「課程學習」頁：置中圖示 + 一行灰字。
+ * 預設為置中圖示搭配簡短說明文字。
  *
  * @param {string}  icon        MIcon 圖示名稱（如 "school"、"inbox"）
  * @param {number}  iconSize    圖示大小，預設 44

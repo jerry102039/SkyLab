@@ -27,8 +27,6 @@ def get_placement_tuning(*, session: Session) -> PlacementTuning:
             disk_contention_warn_share=0.7,
             disk_contention_high_share=0.9,
             disk_penalty_weight=0.75,
-            search_max_reassignments=2,
-            search_depth=3,
         )
     return PlacementTuning(
         reassignment_cost=max(float(config.placement_reassignment_cost or 0.15), 0.0),
@@ -46,8 +44,6 @@ def get_placement_tuning(*, session: Session) -> PlacementTuning:
             0.01,
         ),
         disk_penalty_weight=max(float(config.placement_disk_penalty_weight or 0.75), 0.0),
-        search_max_reassignments=max(int(config.placement_search_max_reassignments or 2), 0),
-        search_depth=max(int(config.placement_search_depth or 3), 0),
         cpu_peak_warn_share=max(
             float(config.placement_cpu_peak_warn_share or DEFAULT_CPU_PEAK_WARN_SHARE),
             0.0,
@@ -89,12 +85,15 @@ def get_node_priorities(session: Session) -> dict[str, int]:
 
 
 def get_placement_strategy(session: Session) -> str:
-    config = proxmox_config_repo.get_proxmox_config(session)
-    if not config:
-        return DEFAULT_PLACEMENT_STRATEGY
-    return normalize_strategy(config.placement_strategy)
+    """目前只有一種排程策略。
 
+    評分行為由 PlacementTuning 的各項權重決定（見 get_placement_tuning），
+    不再由「策略」切換。過去這裡會讀取 proxmox_config.placement_strategy，
+    但回傳值一律被正規化成 DEFAULT_PLACEMENT_STRATEGY —— 等於讓管理員以為
+    切換生效。設定頁的選項已移除，這裡也不再做無意義的 DB 讀取。
 
-def normalize_strategy(strategy: str | None) -> str:
-    del strategy
+    保留此函式與 placement_strategy_used 欄位，是為了讓落點紀錄仍能標示
+    當時採用的策略名稱；日後真的支援多策略時，從這裡擴充。
+    """
+    del session
     return DEFAULT_PLACEMENT_STRATEGY

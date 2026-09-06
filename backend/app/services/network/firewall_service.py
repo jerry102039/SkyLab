@@ -10,10 +10,12 @@
 
 import logging
 import re
+from typing import Any
 
 from sqlmodel import Session
 
 from app.core.authorizers import can_bypass_resource_ownership
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError, ProxmoxError
 from app.infrastructure.proxmox import get_proxmox_api_for_node
 from app.infrastructure.proxmox.operations import ResourceType
@@ -90,7 +92,7 @@ def _upsert_marker_rule(
             node, vmid, comment, e,
         )
         raise ProxmoxError(
-            f"無法取得 {resource_type}/{vmid} 防火牆規則: {e}"
+            t("firewall.getRulesFailed", resourceType=resource_type, vmid=vmid, error=e)
         ) from e
     existing = next(
         (r for r in rules if (r.get("comment") or "").strip() == comment), None
@@ -185,7 +187,7 @@ def create_rule(
     try:
         _firewall_api(node, vmid, resource_type).rules.post(**rule)
     except Exception as e:
-        raise ProxmoxError(f"建立防火牆規則失敗: {e}")
+        raise ProxmoxError(t("firewall.createRuleFailed", error=e))
 
 
 def update_rule(
@@ -195,7 +197,7 @@ def update_rule(
     try:
         _firewall_api(node, vmid, resource_type).rules(pos).put(**rule)
     except Exception as e:
-        raise ProxmoxError(f"更新防火牆規則 pos={pos} 失敗: {e}")
+        raise ProxmoxError(t("firewall.updateRuleFailed", pos=pos, error=e))
 
 
 def delete_rule_by_pos(
@@ -205,7 +207,7 @@ def delete_rule_by_pos(
     try:
         _firewall_api(node, vmid, resource_type).rules(pos).delete()
     except Exception as e:
-        raise ProxmoxError(f"刪除防火牆規則 pos={pos} 失敗: {e}")
+        raise ProxmoxError(t("firewall.deleteRuleFailed", pos=pos, error=e))
 
 
 def get_firewall_options(node: str, vmid: int, resource_type: ResourceType) -> dict:
@@ -224,19 +226,33 @@ def _set_firewall_options(
     try:
         _firewall_api(node, vmid, resource_type).options.put(**options)
     except Exception as e:
-        raise ProxmoxError(f"設定防火牆選項失敗: {e}")
+        raise ProxmoxError(t("firewall.setOptionsFailed", error=e))
 
 
 # ─── 防火牆強制啟用 ────────────────────────────────────────────────────────────
 
 
 def ensure_firewall_enabled(node: str, vmid: int, resource_type: ResourceType) -> None:
-    """確保防火牆已啟用（VM 啟動時呼叫）"""
+    """確保防火牆已啟用且入站仍為 DROP（VM 啟動時呼叫）。
+
+    學生之間的隔離完全靠這兩件事：機器都在同一個 bridge、同一個 IP 子網，
+    沒有 VLAN 隔離，擋下來的是每台自己的 policy_in=DROP。只檢查 enable
+    不夠 —— 防火牆開著但 policy_in 被改成 ACCEPT 的話，這台就對整個實驗室
+    子網敞開，拓樸的白名單也失去意義。
+
+    policy_in 沒有值時代表沿用 PVE 預設（DROP），不需要處理。
+    """
     try:
         opts = get_firewall_options(node, vmid, resource_type)
+        fixes: dict[str, Any] = {}
         if not opts.get("enable"):
-            _set_firewall_options(node, vmid, resource_type, enable=1)
-            logger.info(f"VM {vmid}: 已強制啟用防火牆")
+            fixes["enable"] = 1
+        policy_in = opts.get("policy_in")
+        if policy_in and str(policy_in).upper() != "DROP":
+            fixes["policy_in"] = "DROP"
+        if fixes:
+            _set_firewall_options(node, vmid, resource_type, **fixes)
+            logger.warning(f"VM {vmid}: 已回復防火牆設定 {fixes}")
     except Exception as e:
         logger.error(f"VM {vmid}: 確認防火牆啟用失敗: {e}")
 
@@ -363,7 +379,7 @@ def setup_default_rules(node: str, vmid: int, resource_type: ResourceType) -> No
 
     except Exception as e:
         logger.error(f"VM {vmid}: 設定防火牆預設規則失敗: {e}")
-        raise ProxmoxError(f"Failed to configure default firewall rules for {vmid}: {e}")
+        raise ProxmoxError(t("firewall.setupDefaultRulesFailed", vmid=vmid, error=e))
 
 
 # ─── 連線管理（高階 API）─────────────────────────────────────────────────────
@@ -528,16 +544,16 @@ def create_connection(
     雙向連線：同時在兩個 VM 上建立規則。
     """
     if not ports:
-        raise BadRequestError("至少需要指定一個端口")
+        raise BadRequestError(t("firewall.atLeastOnePortRequired"))
 
     # ── Internet → VM（入站開放）────────────────────────────────────────────
     if source_vmid is None:
         if target_vmid is None:
-            raise BadRequestError("來源和目標不能同時為網關")
+            raise BadRequestError(t("firewall.sourceAndTargetCannotBothBeGateway"))
         try:
             tgt_resource = proxmox_service.find_resource(target_vmid)
         except NotFoundError:
-            raise BadRequestError(f"目標 VM {target_vmid} 不存在")
+            raise BadRequestError(t("firewall.targetVmNotFound", vmid=target_vmid))
         tgt_node = tgt_resource["node"]
         tgt_type = tgt_resource["type"]
 
@@ -549,12 +565,12 @@ def create_connection(
         )
         if needs_gateway:
             if session is None:
-                raise BadRequestError("建立 Port Forwarding / 反向代理需要 DB session")
+                raise BadRequestError(t("firewall.dbSessionRequiredForPortForwarding"))
             from app.repositories import gateway_config as gw_repo  # noqa: PLC0415
             gw_cfg = gw_repo.get_gateway_config(session)  # type: ignore[arg-type]
             if gw_cfg is None or not gw_cfg.host or not gw_cfg.encrypted_private_key:
                 raise BadRequestError(
-                    "請先至「Gateway VM 管理」設定 SSH 連線並生成金鑰，才能建立外部存取"
+                    t("firewall.gatewayNotConfiguredForExternalAccess")
                 )
 
         # 取得 VM IP（NAT / 反向代理規則需要）——在建立任何規則前先驗證
@@ -562,7 +578,7 @@ def create_connection(
             tgt_ip = _get_vm_ip(target_vmid, session)
             if tgt_ip is None:
                 raise BadRequestError(
-                    f"目標 VM {target_vmid} 沒有 IP 位址，無法建立外部存取規則"
+                    t("firewall.targetVmNoIpForExternalAccess", vmid=target_vmid)
                 )
         else:
             tgt_ip = None
@@ -640,7 +656,7 @@ def create_connection(
     try:
         src_resource = proxmox_service.find_resource(source_vmid)
     except NotFoundError:
-        raise BadRequestError(f"來源 VM {source_vmid} 不存在")
+        raise BadRequestError(t("firewall.sourceVmNotFound", vmid=source_vmid))
 
     src_node = src_resource["node"]
     src_type = src_resource["type"]
@@ -679,13 +695,13 @@ def create_connection(
     src_ip = _get_vm_ip(source_vmid, session)
     if not src_ip:
         raise BadRequestError(
-            f"來源 VM {source_vmid} 沒有 IP 位址，請確認 VM 已啟動"
+            t("firewall.sourceVmNoIp", vmid=source_vmid)
         )
 
     try:
         tgt_resource = proxmox_service.find_resource(target_vmid)
     except NotFoundError:
-        raise BadRequestError(f"目標 VM {target_vmid} 不存在")
+        raise BadRequestError(t("firewall.targetVmNotFound", vmid=target_vmid))
 
     tgt_node = tgt_resource["node"]
     tgt_type = tgt_resource["type"]
@@ -693,7 +709,7 @@ def create_connection(
     tgt_ip = _get_vm_ip(target_vmid, session)
     if not tgt_ip:
         raise BadRequestError(
-            f"目標 VM {target_vmid} 沒有 IP 位址，請確認 VM 已啟動"
+            t("firewall.targetVmNoIp", vmid=target_vmid)
         )
 
     for port_spec in ports:

@@ -5,6 +5,7 @@ from sqlmodel import Session
 
 from app.core import security
 from app.core.config import settings
+from app.core.i18n import t
 from app.exceptions import AuthenticationError, BadRequestError, NotFoundError
 from app.models import AuditAction
 from app.repositories import user as user_repo
@@ -42,7 +43,7 @@ def login(*, session: Session, email: str, password: str) -> Token:
             action=AuditAction.login_failed,
             details=f"Failed login attempt for email: {email}",
         )
-        raise BadRequestError("Incorrect email or password")
+        raise BadRequestError(t("auth.incorrectCredentials"))
     if not user.is_active:
         audit_service.log_action(
             session=session,
@@ -50,7 +51,7 @@ def login(*, session: Session, email: str, password: str) -> Token:
             action=AuditAction.login_failed,
             details=f"Login blocked: inactive user {email}",
         )
-        raise BadRequestError("Inactive user")
+        raise BadRequestError(t("auth.inactiveUser"))
     audit_service.log_action(
         session=session,
         user_id=user.id,
@@ -78,14 +79,14 @@ async def google_login(*, session: Session, id_token: str) -> Token:
             )
     except httpx.RequestError as exc:
         _fail("network error")
-        raise BadRequestError("Unable to verify Google token") from exc
+        raise BadRequestError(t("auth.googleTokenVerifyFailed")) from exc
     if r.status_code != 200:
         _fail("invalid token")
-        raise BadRequestError("Invalid Google token")
+        raise BadRequestError(t("auth.googleTokenInvalid"))
     data = r.json()
     if settings.GOOGLE_CLIENT_ID and data.get("aud") != settings.GOOGLE_CLIENT_ID:
         _fail("invalid audience")
-        raise BadRequestError("Invalid Google token audience")
+        raise BadRequestError(t("auth.googleTokenAudienceInvalid"))
     email_verified_raw = data.get("email_verified")
     if isinstance(email_verified_raw, bool):
         email_verified = email_verified_raw
@@ -95,18 +96,18 @@ async def google_login(*, session: Session, id_token: str) -> Token:
         email_verified = False
     if not email_verified:
         _fail("email not verified", data.get("email"))
-        raise BadRequestError("Google email not verified")
+        raise BadRequestError(t("auth.googleEmailNotVerified"))
     email = data.get("email")
     if not email:
         _fail("missing email")
-        raise BadRequestError("Could not retrieve email from Google token")
+        raise BadRequestError(t("auth.googleEmailMissing"))
     user = user_repo.get_user_by_email(session=session, email=email)
     if not user:
         _fail("user not found", email)
-        raise BadRequestError("Google account is not registered")
+        raise BadRequestError(t("auth.googleAccountNotRegistered"))
     if not user.is_active:
         _fail("inactive user", email, user.id)
-        raise BadRequestError("Inactive user")
+        raise BadRequestError(t("auth.inactiveUser"))
     audit_service.log_action(
         session=session,
         user_id=user.id,
@@ -134,25 +135,25 @@ async def refresh_access_token(*, session: Session, refresh_token: str) -> Token
         )
         token_data = TokenPayload(**payload)
     except (InvalidTokenError, ValidationError):
-        raise AuthenticationError("Invalid refresh token")
+        raise AuthenticationError(t("auth.refreshTokenInvalid"))
 
     if token_data.type != "refresh":
-        raise AuthenticationError("Invalid token type")
+        raise AuthenticationError(t("auth.tokenTypeInvalid"))
 
     # Logout revokes the refresh token's jti — honour that here, otherwise a
     # logged-out refresh token could still mint new token pairs.
     if token_data.jti:
         redis = await get_redis()
         if await is_jti_revoked(redis, token_data.jti):
-            raise AuthenticationError("Token has been revoked")
+            raise AuthenticationError(t("auth.tokenRevoked"))
 
     user = session.get(User, token_data.sub)
     if not user:
-        raise AuthenticationError("Invalid refresh token")
+        raise AuthenticationError(t("auth.refreshTokenInvalid"))
     if not user.is_active:
-        raise AuthenticationError("Inactive user")
+        raise AuthenticationError(t("auth.inactiveUser"))
     if user.token_version != token_data.ver:
-        raise AuthenticationError("Token has been revoked")
+        raise AuthenticationError(t("auth.tokenRevoked"))
 
     return _create_token_pair(user)
 
@@ -181,12 +182,12 @@ def recover_password(*, session: Session, email: str) -> None:
 def reset_password(*, session: Session, token: str, new_password: str) -> None:
     email = verify_password_reset_token(token=token)
     if not email:
-        raise BadRequestError("Invalid token")
+        raise BadRequestError(t("auth.tokenInvalid"))
     user = user_repo.get_user_by_email(session=session, email=email)
     if not user:
-        raise BadRequestError("Invalid token")
+        raise BadRequestError(t("auth.tokenInvalid"))
     if not user.is_active:
-        raise BadRequestError("Inactive user")
+        raise BadRequestError(t("auth.inactiveUser"))
     user_repo.update_user(
         session=session, db_user=user, user_in=UserUpdate(password=new_password)
     )
@@ -209,9 +210,7 @@ def get_password_recovery_html(
     """Returns (html_content, subject) for password recovery email."""
     user = user_repo.get_user_by_email(session=session, email=email)
     if not user:
-        raise NotFoundError(
-            "The user with this username does not exist in the system."
-        )
+        raise NotFoundError(t("auth.usernameNotFound"))
     token = generate_password_reset_token(email=email)
     email_data = generate_reset_password_email(
         email_to=user.email, email=email, token=token

@@ -276,6 +276,13 @@ class ClassCapacityReservation(SQLModel, table=True):
         default="{}",
         sa_column=Column(sa.Text, nullable=False),
     )
+    # {machine_node_id: {user_id: 節點名}} —— 整班固定在同一個叢集，但叢集內
+    # 依容量把學生分散到不同節點（同一個叢集不代表同一台 server）。預留時
+    # 定案並存下，建機時查表，避免兩個時間點各自重算而與預留不一致。
+    student_placements: str = Field(
+        default="{}",
+        sa_column=Column(sa.Text, nullable=False, server_default="{}"),
+    )
     status: str = Field(default="reserved", max_length=24)
     created_at: datetime = Field(
         default_factory=get_datetime_utc,

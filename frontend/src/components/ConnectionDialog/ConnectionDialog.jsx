@@ -9,13 +9,12 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./ConnectionDialog.module.scss";
 import MIcon from "../MIcon";
 import { focusInvalidField } from "../../utils/focusField";
 
 const PROTOCOLS = ["tcp", "udp", "icmp", "icmpv6", "sctp"];
-
-const GATEWAY_LABEL = "網際網路";
 
 let _uid = 0;
 function uid() { return ++_uid; }
@@ -30,6 +29,7 @@ function newForwardRow() {
 
 /* ── 入站模式：純防火牆 ── */
 function FirewallOnlyForm({ rows, setRows, invalid }) {
+  const { t } = useTranslation("components");
   const add = () => setRows((r) => [...r, newPortRow()]);
   const remove = (id) => setRows((r) => r.filter((x) => x.id !== id));
   const update = (id, key, val) =>
@@ -37,7 +37,7 @@ function FirewallOnlyForm({ rows, setRows, invalid }) {
 
   return (
     <div className={styles.portSection}>
-      <p className={styles.modeDesc}>直接開放指定 port，不進行外部路由對應</p>
+      <p className={styles.modeDesc}>{t("ConnectionDialog.firewallOnlyDesc")}</p>
       {rows.map((row) => (
         <div key={row.id} className={styles.portRow}>
           <input
@@ -64,7 +64,7 @@ function FirewallOnlyForm({ rows, setRows, invalid }) {
       ))}
       <button type="button" className={styles.addBtn} onClick={add}>
         <MIcon name="add" size={16} />
-        新增 Port
+        {t("ConnectionDialog.addPort")}
       </button>
     </div>
   );
@@ -72,6 +72,7 @@ function FirewallOnlyForm({ rows, setRows, invalid }) {
 
 /* ── 入站模式：Port Forwarding ── */
 function PortForwardForm({ rows, setRows, invalid }) {
+  const { t } = useTranslation("components");
   const add = () => setRows((r) => [...r, newForwardRow()]);
   const remove = (id) => setRows((r) => r.filter((x) => x.id !== id));
   const update = (id, key, val) =>
@@ -79,24 +80,24 @@ function PortForwardForm({ rows, setRows, invalid }) {
 
   return (
     <div className={styles.portSection}>
-      <p className={styles.modeDesc}>將外部 Port 對應到 VM 內部 Port（需 Gateway VM 設定）</p>
+      <p className={styles.modeDesc}>{t("ConnectionDialog.portForwardDesc")}</p>
       <div className={styles.portRowHeader}>
-        <span>外部 Port</span>
-        <span>內部 Port</span>
-        <span>協定</span>
+        <span>{t("ConnectionDialog.externalPort")}</span>
+        <span>{t("ConnectionDialog.internalPort")}</span>
+        <span>{t("ConnectionDialog.protocol")}</span>
         <span />
       </div>
       {rows.map((row) => (
         <div key={row.id} className={styles.portRow}>
           <input
-            type="number" min="1" max="65535" placeholder="外部"
+            type="number" min="1" max="65535" placeholder={t("ConnectionDialog.externalPlaceholder")}
             value={row.externalPort}
             onChange={(e) => update(row.id, "externalPort", e.target.value)}
             aria-invalid={Boolean(invalid && !row.externalPort)}
             className={`${styles.portInput} ${invalid && !row.externalPort ? styles.portInputInvalid : ""}`}
           />
           <input
-            type="number" min="1" max="65535" placeholder="內部"
+            type="number" min="1" max="65535" placeholder={t("ConnectionDialog.internalPlaceholder")}
             value={row.internalPort}
             onChange={(e) => update(row.id, "internalPort", e.target.value)}
             aria-invalid={Boolean(invalid && !row.internalPort)}
@@ -116,7 +117,7 @@ function PortForwardForm({ rows, setRows, invalid }) {
       ))}
       <button type="button" className={styles.addBtn} onClick={add}>
         <MIcon name="add" size={16} />
-        新增對應
+        {t("ConnectionDialog.addMapping")}
       </button>
     </div>
   );
@@ -126,6 +127,8 @@ function PortForwardForm({ rows, setRows, invalid }) {
 export default function ConnectionDialog({
   nodes, onConfirm, onClose, closing = false, initialSource, initialTarget,
 }) {
+  const { t } = useTranslation("components");
+  const GATEWAY_LABEL = t("ConnectionDialog.gatewayLabel");
   // 節點選擇（拉線開啟時由 initialSource / initialTarget 帶入；手動開啟預設 網際網路 → 第一台 VM）
   const isKnownKey = (key) => key === "internet" || nodes.some((n) => n.key === key);
   const defaultSource = isKnownKey(initialSource) ? initialSource : "internet";
@@ -230,7 +233,7 @@ export default function ConnectionDialog({
         direction: isVmToVm ? direction : "one_way",
       });
     } catch (err) {
-      setError(err?.message ?? "建立失敗");
+      setError(err?.message ?? t("ConnectionDialog.createFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -244,7 +247,7 @@ export default function ConnectionDialog({
       <div className={styles.dialog}>
         {/* Title */}
         <div className={styles.dialogHeader}>
-          <h2 className={styles.dialogTitle}>新增連線</h2>
+          <h2 className={styles.dialogTitle}>{t("ConnectionDialog.title")}</h2>
           <button type="button" className={styles.closeBtn} onClick={onClose}>
             <MIcon name="close" size={20} />
           </button>
@@ -254,7 +257,7 @@ export default function ConnectionDialog({
           {/* Source / Target 選擇 */}
           <div className={styles.nodeRow}>
             <div className={styles.nodeSelect}>
-              <label className={styles.nodeLabel}>來源</label>
+              <label className={styles.nodeLabel}>{t("ConnectionDialog.source")}</label>
               <select
                 value={sourceKey}
                 onChange={(e) => pickSource(e.target.value)}
@@ -268,14 +271,14 @@ export default function ConnectionDialog({
               type="button"
               className={styles.swapBtn}
               onClick={swapEnds}
-              title="交換來源與目標"
-              aria-label="交換來源與目標"
+              title={t("ConnectionDialog.swapAriaLabel")}
+              aria-label={t("ConnectionDialog.swapAriaLabel")}
             >
               <MIcon name="swap_horiz" size={20} />
             </button>
 
             <div className={styles.nodeSelect}>
-              <label className={styles.nodeLabel}>目標</label>
+              <label className={styles.nodeLabel}>{t("ConnectionDialog.target")}</label>
               <select
                 value={targetKey}
                 onChange={(e) => pickTarget(e.target.value)}
@@ -290,7 +293,7 @@ export default function ConnectionDialog({
           {isOutbound && (
             <p className={styles.outboundMsg}>
               <MIcon name="info" size={16} />
-              開放 <strong>{sourceName}</strong> 存取網際網路的出站連線
+              {t("ConnectionDialog.outboundMessagePrefix")} <strong>{sourceName}</strong> {t("ConnectionDialog.outboundMessageSuffix")}
             </p>
           )}
 
@@ -324,7 +327,7 @@ export default function ConnectionDialog({
           {isVmToVm && (
             <>
               <div className={styles.directionRow}>
-                <label className={styles.nodeLabel}>方向</label>
+                <label className={styles.nodeLabel}>{t("ConnectionDialog.direction")}</label>
                 <div className={styles.modeToggle}>
                   <button
                     type="button"
@@ -338,7 +341,7 @@ export default function ConnectionDialog({
                     className={`${styles.modeBtn} ${direction === "bidirectional" ? styles.modeBtnActive : ""}`}
                     onClick={() => setDirection("bidirectional")}
                   >
-                    雙向
+                    {t("ConnectionDialog.bidirectional")}
                   </button>
                 </div>
               </div>
@@ -350,9 +353,9 @@ export default function ConnectionDialog({
 
           {/* Actions */}
           <div className={styles.actions}>
-            <button type="button" className={styles.cancelBtn} onClick={onClose}>取消</button>
+            <button type="button" className={styles.cancelBtn} onClick={onClose}>{t("ConnectionDialog.cancel")}</button>
             <button type="submit" className={styles.confirmBtn} disabled={submitting}>
-              {submitting ? "建立中…" : "建立連線"}
+              {submitting ? t("ConnectionDialog.creating") : t("ConnectionDialog.createConnection")}
             </button>
           </div>
         </form>

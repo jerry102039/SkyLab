@@ -79,6 +79,12 @@ class VMRequest(SQLModel, table=True):
         sa.Index("ix_vm_requests_status_created", "status", "created_at"),
         sa.Index("ix_vm_requests_schedule", "status", "start_at", "end_at"),
         sa.Index("ix_vm_requests_gpu_window", "gpu_mapping_id", "start_at", "end_at"),
+        sa.Index(
+            "ix_vm_requests_placement_group",
+            "placement_group_id",
+            "start_at",
+            "end_at",
+        ),
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -173,6 +179,12 @@ class VMRequest(SQLModel, table=True):
             nullable=True,
         ),
     )
+
+    # 同一組機器（快速練習 Session／課堂班級／課程部署）共用的群組鍵。
+    # placement 以此把整組約束在同一 connection（跨叢集 L2 不通，硬約束）
+    # 與同一節點（連貫環境的 attacker/target 需要互通）。
+    # None = 不屬於任何群組，行為與加入此欄位前相同。
+    placement_group_id: uuid.UUID | None = Field(default=None)
 
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False),

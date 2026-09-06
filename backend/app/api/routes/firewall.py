@@ -12,6 +12,7 @@ from app.api.deps import (
     check_firewall_access,
 )
 from app.core.authorizers import can_bypass_resource_ownership
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError, ProxmoxError
 from app.models import AuditAction
 from app.repositories import firewall_layout as layout_repo
@@ -49,10 +50,10 @@ def get_topology(session: SessionDep, current_user: CurrentUser):
         raise HTTPException(status_code=e.status_code, detail=e.message)
     except ProxmoxError as e:
         logger.error(f"Proxmox error in get_topology: {e}")
-        raise HTTPException(status_code=502, detail="Proxmox 服務不可用")
+        raise HTTPException(status_code=502, detail=t("firewall.proxmox_unavailable"))
     except Exception:
         logger.exception("取得拓撲失敗")
-        raise HTTPException(status_code=500, detail="取得拓撲失敗")
+        raise HTTPException(status_code=500, detail=t("firewall.get_topology_failed"))
 
 
 # ─── 佈局管理 ──────────────────────────────────────────────────────────────────
@@ -83,7 +84,7 @@ def save_layout(
         action=AuditAction.firewall_layout_update,
         details=f"Saved firewall layout ({len(nodes)} nodes)",
     )
-    return Message(message="佈局已儲存")
+    return Message(message=t("firewall.layout_saved"))
 
 
 # ─── 連線管理（高階）─────────────────────────────────────────────────────────
@@ -133,7 +134,7 @@ def create_connection(
                 f"dst={conn.target_vmid} ports={conn.ports} dir={conn.direction}"
             ),
         )
-        return Message(message="連線已建立")
+        return Message(message=t("firewall.connection_created"))
     except (BadRequestError, NotFoundError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ProxmoxError as e:
@@ -188,7 +189,7 @@ def delete_connection(
                 f"dst={conn.target_vmid} ports={conn.ports}"
             ),
         )
-        return Message(message="連線已刪除")
+        return Message(message=t("firewall.connection_deleted"))
     except (BadRequestError, NotFoundError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except ProxmoxError as e:
@@ -252,7 +253,7 @@ def create_rule(
             action=AuditAction.firewall_rule_create,
             details=f"Created firewall rule on VM {vmid}: {rule_dict}",
         )
-        return Message(message="規則已建立")
+        return Message(message=t("firewall.rule_created"))
     except ProxmoxError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -276,7 +277,7 @@ def update_rule(
         if target_rule and str(target_rule.get("comment", "")).startswith("SkyLab:"):
             raise HTTPException(
                 status_code=400,
-                detail="此規則由 SkyLab 管理，不可修改",
+                detail=t("firewall.rule_managed_no_modify"),
             )
         rule_dict = {k: v for k, v in rule.model_dump().items() if v is not None}
         firewall_service.update_rule(
@@ -289,7 +290,7 @@ def update_rule(
             action=AuditAction.firewall_rule_update,
             details=f"Updated firewall rule pos={pos} on VM {vmid}: {rule_dict}",
         )
-        return Message(message="規則已更新")
+        return Message(message=t("firewall.rule_updated"))
     except ProxmoxError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -313,7 +314,7 @@ def delete_rule(
         if target_rule and str(target_rule.get("comment", "")).startswith("SkyLab:"):
             raise HTTPException(
                 status_code=400,
-                detail="此規則由 SkyLab 管理，請使用連線管理介面進行操作",
+                detail=t("firewall.rule_managed_use_connection_ui"),
             )
         firewall_service.delete_rule_by_pos(resource_info["node"], vmid, resource_info["type"], pos)
         audit_service.log_action(
@@ -323,7 +324,7 @@ def delete_rule(
             action=AuditAction.firewall_rule_delete,
             details=f"Deleted firewall rule pos={pos} on VM {vmid}",
         )
-        return Message(message="規則已刪除")
+        return Message(message=t("firewall.rule_deleted"))
     except HTTPException:
         raise
     except ProxmoxError as e:
@@ -378,11 +379,11 @@ def delete_nat_rule(
     try:
         rule_uuid = uuid.UUID(rule_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="無效的規則 ID")
+        raise HTTPException(status_code=400, detail=t("firewall.invalid_rule_id"))
 
     rule = nat_repo.get_rule(session, rule_uuid)
     if rule is None:
-        raise HTTPException(status_code=404, detail="NAT 規則不存在")
+        raise HTTPException(status_code=404, detail=t("firewall.nat_rule_not_found"))
 
     check_firewall_access(vmid=rule.vmid, current_user=current_user, session=session)
 
@@ -398,13 +399,17 @@ def delete_nat_rule(
                 f"ext={rule.external_port} → int={rule.internal_port}/{rule.protocol})"
             ),
         )
-        return Message(message="NAT 規則已刪除")
+        return Message(message=t("firewall.nat_rule_deleted"))
     except ProxmoxError as e:
         logger.error(f"Proxmox error removing NAT rule {rule_id}: {e}")
-        raise HTTPException(status_code=502, detail="Proxmox 操作失敗")
+        raise HTTPException(
+            status_code=502, detail=t("firewall.proxmox_operation_failed")
+        )
     except Exception:
         logger.exception(f"Failed to remove NAT rule {rule_id}")
-        raise HTTPException(status_code=500, detail="刪除 NAT 規則失敗")
+        raise HTTPException(
+            status_code=500, detail=t("firewall.delete_nat_rule_failed")
+        )
 
 
 @router.post("/nat-rules/sync", response_model=Message)
@@ -421,13 +426,17 @@ def sync_nat_rules(
             action=AuditAction.nat_rule_sync,
             details="Manually synced NAT rules to Gateway VM",
         )
-        return Message(message="NAT 規則已同步到 Gateway VM")
+        return Message(message=t("firewall.nat_rules_synced"))
     except ProxmoxError as e:
         logger.error(f"Proxmox error syncing NAT rules: {e}")
-        raise HTTPException(status_code=502, detail="Proxmox 操作失敗")
+        raise HTTPException(
+            status_code=502, detail=t("firewall.proxmox_operation_failed")
+        )
     except Exception:
         logger.exception("Failed to sync NAT rules")
-        raise HTTPException(status_code=500, detail="同步 NAT 規則失敗")
+        raise HTTPException(
+            status_code=500, detail=t("firewall.sync_nat_rules_failed")
+        )
 
 
 @router.get("/{vmid}/options", response_model=FirewallOptionsPublic)

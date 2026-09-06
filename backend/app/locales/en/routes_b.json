@@ -1,0 +1,67 @@
+{
+  "teachingClasses.notFound": "Teaching class not found.",
+  "teachingClasses.scheduleInvalid": "The end date and time must be later than the start time.",
+  "teachingClasses.fixedScheduleLocked": "The fixed schedule cannot be modified after provisioning has been submitted.",
+  "teachingClasses.archivedCannotExtend": "Archived teaching classes cannot be extended.",
+  "teachingClasses.extendDateMustBeLater": "The new end date must be later than the current end date.",
+  "teachingClasses.mustBeArchivedBeforeReclaim": "Teaching class must be archived before reclaim.",
+  "teachingClasses.studentsLocked": "The student list cannot be changed after provisioning has been submitted.",
+  "teachingClasses.studentNotFound": "Class student not found.",
+  "teachingClasses.csvDecodeFailed": "Unable to decode the CSV file encoding.",
+  "teachingClasses.machinesManagedByCourseEnvironment": "Please publish a version from the course environment, then select the course environment in class management.",
+  "teachingClasses.courseLockedCannotChange": "The class is locked and the course cannot be changed.",
+  "teachingClasses.onlyPublishedCourseVersion": "Only a published course version can be selected.",
+  "teachingClasses.courseEnvironmentNotFound": "Course environment not found.",
+  "teachingClasses.environmentNotForFormalCourse": "This environment is for quick practice only and cannot be applied to a formal course.",
+  "teachingClasses.courseVersionNoMachines": "The course version has no machines to assign.",
+  "teachingClasses.archivedCannotEditWeeklyContent": "Weekly content cannot be modified for a class that has ended.",
+  "teachingClasses.weekDatesMustMatchSchedule": "Weekly dates must be generated from the class's fixed schedule and cannot be added or removed manually.",
+  "teachingClasses.weekNotFound": "The specified week was not found.",
+  "teachingClasses.invalidFileName": "Invalid file name.",
+  "teachingClasses.taskFileNameTooLong": "Task file name must be 255 characters or fewer.",
+  "teachingClasses.taskFileTooLarge": "Task files cannot exceed 100 MB.",
+  "teachingClasses.taskFileNotFound": "The specified task file was not found.",
+  "teachingClasses.onlyPlanningCanRecheckCapacity": "Only a class in planning status can re-run the capacity precheck.",
+  "teachingClasses.studentsAndMachinesRequired": "The student list and course machines must be completed.",
+  "teachingClasses.classLockedOrSubmitted": "The class is locked or provisioning has already been submitted.",
+  "teachingClasses.selectPublishedCourseFirst": "Please select a published course version first.",
+  "teachingClasses.onlyFailedCanRetry": "Only a class that failed to be created can be retried.",
+  "teachingClasses.noFailedOrStaleTasksToRetry": "No failed or stale provisioning tasks to retry.",
+  "teachingClasses.topologyRetryFailed": "Network topology retry failed: {details}",
+  "teachingClasses.cannotVerifyResourceRetryLater": "Cannot verify existing resource; retry later.",
+  "teachingClasses.provisionedUserNoLongerInClass": "Provisioned resource user is no longer in the class.",
+  "teachingClasses.onlyFailedCanResetToEdit": "Only a class that failed to be created can be reset to edit mode.",
+  "teachingClasses.partialMachinesUseRetry": "Some machines have already been created; please use \"Retry Failed Machines\".",
+
+  "teacherJudgeFiles.classNotFound": "Teaching class not found.",
+  "teacherJudgeFiles.unknownTemplate": "Unknown grading environment template.",
+
+  "teacherJudgeScripts.classNotFound": "Teaching class not found.",
+  "teacherJudgeScripts.unknownTemplate": "Unknown grading environment template.",
+
+  "teacherJudgeSessions.selectedFileInUse": "This rubric is already in use by another review; please use \"Regenerate\" to create an independent copy, or upload a new rubric.",
+  "teacherJudgeSessions.classNotFound": "Teaching class not found.",
+  "teacherJudgeSessions.weekNotInClass": "The selected week does not belong to this class.",
+  "teacherJudgeSessions.archivedReadOnly": "An archived review is read-only.",
+  "teacherJudgeSessions.archivedCannotPin": "An archived review cannot be pinned.",
+  "teacherJudgeSessions.invalidMessageCursor": "Invalid message cursor.",
+  "teacherJudgeSessions.analysisRevisionConflict": "The rubric has been updated by another change; please reload before requesting an AI proposal again.",
+  "teacherJudgeSessions.runResultNotFound": "The execution result for this review was not found.",
+  "teacherJudgeSessions.scriptNotFound": "The script for this review was not found.",
+
+  "aiTemplateRecommendation.modelBindingMissing": "AI model binding is missing in config/system-ai.json.",
+  "aiTemplateRecommendation.upstreamError": "Upstream AI service error. Please check the vLLM server and model settings (VLLM_BASE_URL / VLLM_MODEL_NAME).",
+
+  "auditLogs.invalidUserIdFormat": "Invalid user_id format.",
+
+  "batchProvision.jobNotFound": "Batch provision job not found.",
+  "batchProvision.classNotFound": "Teaching class not found.",
+  "batchProvision.noPendingJobs": "Teaching class has no pending jobs to review.",
+
+  "aiPveLog.chatFailed": "AI-PVE conversation failed.",
+
+  "aiMonitoring.runtimeNotConfigured": "LiteLLM runtime monitoring is not configured.",
+  "aiMonitoring.runtimeUnavailable": "LiteLLM runtime is unavailable.",
+
+  "aiProxy.rateLimitExceeded": "Rate limit exceeded. Limit: {limit} requests per {window_seconds} seconds."
+}

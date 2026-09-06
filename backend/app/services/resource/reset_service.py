@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from sqlmodel import Session
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError, ConflictError
 from app.infrastructure.worker import background_tasks
 from app.services.proxmox import proxmox_service
@@ -88,7 +89,7 @@ def create_init_snapshot(
     node = str(resource_info["node"])
     rtype = _rtype(resource_info)
     if _has_init_snapshot(node, vmid, rtype):
-        raise ConflictError("初始快照 skylab-init 已存在")
+        raise ConflictError(t("reset.init_snapshot_exists"))
     proxmox_service.create_snapshot(
         node,
         vmid,
@@ -160,9 +161,7 @@ def start_reset(
     node = str(resource_info["node"])
     rtype = _rtype(resource_info)
     if not _has_init_snapshot(node, vmid, rtype):
-        raise BadRequestError(
-            "此資源沒有 skylab-init 初始快照，無法重置；請老師或管理員先補建"
-        )
+        raise BadRequestError(t("reset.no_init_snapshot"))
     audit_service.log_action(
         session=session,
         user_id=user.id,

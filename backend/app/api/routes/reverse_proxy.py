@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.deps import AdminUser, CurrentUser, SessionDep, check_firewall_access
 from app.core.authorizers import can_bypass_resource_ownership
+from app.core.i18n import t
 from app.exceptions import BadRequestError, ProxmoxError
 from app.models import AuditAction
 from app.repositories import resource as resource_repo
@@ -136,7 +137,9 @@ def get_runtime_snapshot(session: SessionDep, current_user: CurrentUser):
         return ReverseProxyRuntimeSnapshot(runtime_error=str(exc))
     except Exception:
         logger.exception("Failed to fetch Traefik runtime snapshot")
-        return ReverseProxyRuntimeSnapshot(runtime_error="無法取得 Traefik runtime 狀態")
+        return ReverseProxyRuntimeSnapshot(
+            runtime_error=t("reverseProxy.runtimeFetchFailed")
+        )
 
     return _filter_runtime_snapshot(snapshot, session, current_user)
 
@@ -163,7 +166,7 @@ def create_reverse_proxy_rule(
     if not vm_ip:
         raise HTTPException(
             status_code=400,
-            detail="無法取得 VM IP，請確認 VM 已開機且已取得網路位址",
+            detail=t("reverseProxy.vmIpUnavailable"),
         )
 
     try:
@@ -176,7 +179,7 @@ def create_reverse_proxy_rule(
             internal_port=body.internal_port,
             enable_https=body.enable_https,
         )
-        return Message(message="反向代理規則已建立")
+        return Message(message=t("reverseProxy.ruleCreated"))
     except BadRequestError as exc:
         raise HTTPException(status_code=400, detail=exc.message)
     except ProxmoxError as exc:
@@ -184,7 +187,7 @@ def create_reverse_proxy_rule(
         raise HTTPException(status_code=502, detail=str(exc))
     except Exception:
         logger.exception("Failed to create reverse proxy rule")
-        raise HTTPException(status_code=500, detail="建立反向代理規則失敗")
+        raise HTTPException(status_code=500, detail=t("reverseProxy.createFailed"))
 
 
 @router.put("/rules/{rule_id}", response_model=Message)
@@ -197,11 +200,11 @@ def update_reverse_proxy_rule(
     try:
         rule_uuid = uuid.UUID(rule_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="無效的規則 ID")
+        raise HTTPException(status_code=400, detail=t("reverseProxy.invalidRuleId"))
 
     existing_rule = rp_repo.get_rule(session, rule_uuid)
     if existing_rule is None:
-        raise HTTPException(status_code=404, detail="反向代理規則不存在")
+        raise HTTPException(status_code=404, detail=t("reverseProxy.ruleNotFound"))
 
     check_firewall_access(vmid=existing_rule.vmid, current_user=current_user, session=session)
     if body.vmid != existing_rule.vmid:
@@ -211,7 +214,7 @@ def update_reverse_proxy_rule(
     if not vm_ip:
         raise HTTPException(
             status_code=400,
-            detail="無法取得 VM IP，請確認 VM 已開機且已取得網路位址",
+            detail=t("reverseProxy.vmIpUnavailable"),
         )
 
     try:
@@ -225,7 +228,7 @@ def update_reverse_proxy_rule(
             internal_port=body.internal_port,
             enable_https=body.enable_https,
         )
-        return Message(message="反向代理規則已更新")
+        return Message(message=t("reverseProxy.ruleUpdated"))
     except BadRequestError as exc:
         raise HTTPException(status_code=400, detail=exc.message)
     except ProxmoxError as exc:
@@ -233,7 +236,7 @@ def update_reverse_proxy_rule(
         raise HTTPException(status_code=502, detail=str(exc))
     except Exception:
         logger.exception("Failed to update reverse proxy rule %s", rule_id)
-        raise HTTPException(status_code=500, detail="更新反向代理規則失敗")
+        raise HTTPException(status_code=500, detail=t("reverseProxy.updateFailed"))
 
 
 @router.delete("/rules/{rule_id}", response_model=Message)
@@ -245,11 +248,11 @@ def delete_reverse_proxy_rule(
     try:
         rule_uuid = uuid.UUID(rule_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="無效的規則 ID")
+        raise HTTPException(status_code=400, detail=t("reverseProxy.invalidRuleId"))
 
     rule = rp_repo.get_rule(session, rule_uuid)
     if rule is None:
-        raise HTTPException(status_code=404, detail="反向代理規則不存在")
+        raise HTTPException(status_code=404, detail=t("reverseProxy.ruleNotFound"))
 
     check_firewall_access(vmid=rule.vmid, current_user=current_user, session=session)
 
@@ -268,13 +271,15 @@ def delete_reverse_proxy_rule(
                 f"(vmid={rule.vmid} domain={rule.domain})"
             ),
         )
-        return Message(message="反向代理規則已刪除")
+        return Message(message=t("reverseProxy.ruleDeleted"))
     except ProxmoxError as exc:
         logger.error("Proxmox error removing reverse proxy rule %s: %s", rule_id, exc)
-        raise HTTPException(status_code=502, detail="Proxmox 操作失敗")
+        raise HTTPException(
+            status_code=502, detail=t("reverseProxy.proxmoxOperationFailed")
+        )
     except Exception:
         logger.exception("Failed to remove reverse proxy rule %s", rule_id)
-        raise HTTPException(status_code=500, detail="刪除反向代理規則失敗")
+        raise HTTPException(status_code=500, detail=t("reverseProxy.deleteFailed"))
 
 
 @router.post("/rules/sync", response_model=Message)
@@ -287,10 +292,12 @@ def sync_reverse_proxy_rules(session: SessionDep, current_user: AdminUser):
             action=AuditAction.reverse_proxy_rule_sync,
             details="Manually synced reverse proxy rules to Gateway VM",
         )
-        return Message(message="反向代理規則已同步到 Gateway VM")
+        return Message(message=t("reverseProxy.rulesSynced"))
     except ProxmoxError as exc:
         logger.error("Proxmox error syncing reverse proxy rules: %s", exc)
-        raise HTTPException(status_code=502, detail="Proxmox 操作失敗")
+        raise HTTPException(
+            status_code=502, detail=t("reverseProxy.proxmoxOperationFailed")
+        )
     except Exception:
         logger.exception("Failed to sync reverse proxy rules")
-        raise HTTPException(status_code=500, detail="同步反向代理規則失敗")
+        raise HTTPException(status_code=500, detail=t("reverseProxy.syncFailed"))

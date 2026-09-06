@@ -1717,35 +1717,65 @@ print(json.dumps({"schema_version": "teacher_judge_result.v1", "metadata": {"tim
     assert result["approved"] is True
 
 
-def test_script_policy_blocks_sensitive_file_open() -> None:
+def test_script_policy_allows_reading_env_file_without_masking() -> None:
     result = check_script_policy(
         """
 import json
 
-with open("/home/student/.ssh/id_rsa", "r", encoding="utf-8") as key_file:
-    key_file.read()
+with open("/srv/student/project/.env", "r", encoding="utf-8") as env_file:
+    raw = env_file.read()
 
 print(json.dumps({"schema_version": "teacher_judge_result.v1", "metadata": {"timestamp": "now", "platform": "test"}, "checks": [], "errors": []}, ensure_ascii=False))
 """.strip()
     )
 
-    assert result["approved"] is False
-    assert any("敏感檔案" in issue for issue in result["issues"])
+    assert result["approved"] is True
 
 
-def test_script_policy_blocks_sensitive_subprocess_path() -> None:
+def test_script_policy_allows_cat_env_with_timeout() -> None:
     result = check_script_policy(
         """
 import json
 import subprocess
 
-subprocess.run(["cat", "/home/student/.ssh/id_rsa"], timeout=5)
+subprocess.run(["cat", "/srv/student/project/.env"], timeout=5)
 print(json.dumps({"schema_version": "teacher_judge_result.v1", "metadata": {"timestamp": "now", "platform": "test"}, "checks": [], "errors": []}, ensure_ascii=False))
 """.strip()
     )
 
+    assert result["approved"] is True
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        '["bash", "-c", "echo hello"]',
+        '["sh", "-c", "cat .env"]',
+        '["git", "commit", "-m", "change"]',
+    ],
+)
+def test_script_policy_blocks_shell_launchers_and_writing_git(argv: str) -> None:
+    result = check_script_policy(
+        f'''\nimport json\nimport subprocess\n\nsubprocess.run({argv}, timeout=5)\nprint(json.dumps({{"schema_version": "teacher_judge_result.v1", "metadata": {{"timestamp": "now", "platform": "test"}}, "checks": [], "errors": []}}, ensure_ascii=False))\n'''.strip()
+    )
+
     assert result["approved"] is False
-    assert any("敏感檔案" in issue for issue in result["issues"])
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        '["echo", "hello"]',
+        '["git", "status", "--short"]',
+        '["ping", "-c", "1", "127.0.0.1"]',
+    ],
+)
+def test_script_policy_allows_generic_read_only_commands(argv: str) -> None:
+    result = check_script_policy(
+        f'''\nimport json\nimport subprocess\n\nsubprocess.run({argv}, cwd="/srv/student/project", timeout=5)\nprint(json.dumps({{"schema_version": "teacher_judge_result.v1", "metadata": {{"timestamp": "now", "platform": "test"}}, "checks": [], "errors": []}}, ensure_ascii=False))\n'''.strip()
+    )
+
+    assert result["approved"] is True
 
 
 def test_script_policy_blocks_external_network_requests() -> None:

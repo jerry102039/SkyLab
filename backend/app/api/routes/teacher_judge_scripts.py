@@ -30,6 +30,7 @@ from app.ai.teacher_judge.script_run_service import (
 from app.ai.teacher_judge.template_command_service import SUPPORTED_TEMPLATE_KEYS
 from app.api.deps import InstructorUser, SessionDep
 from app.core.authorizers import require_teaching_access
+from app.core.i18n import t
 from app.infrastructure.worker import submit
 from app.models import TeachingClass
 from app.models.teacher_judge_script_run import TeacherJudgeScriptRunTargetScope
@@ -48,14 +49,18 @@ def _ensure_class_access(
 ) -> None:
     teaching_class = session.get(TeachingClass, teaching_class_id)
     if not teaching_class:
-        raise HTTPException(status_code=404, detail="Teaching class not found")
+        raise HTTPException(
+            status_code=404, detail=t("teacherJudgeScripts.classNotFound")
+        )
     require_teaching_access(current_user, teaching_class.owner_id)
 
 
 def _normalize_supported_template_key(template_key: str) -> str:
     normalized = template_key.strip().lower() or "linux"
     if normalized not in SUPPORTED_TEMPLATE_KEYS:
-        raise HTTPException(status_code=400, detail="未知的評分環境 template。")
+        raise HTTPException(
+            status_code=400, detail=t("teacherJudgeScripts.unknownTemplate")
+        )
     return normalized
 
 

@@ -41,6 +41,7 @@ from app.ai.teacher_judge.script_quality_validator import check_script_quality
 from app.ai.teacher_judge.service import _call_vllm
 from app.ai.teacher_judge.template_command_service import get_enabled_template_commands
 from app.ai.utils import apply_thinking_control
+from app.core.i18n import t
 from app.models.teacher_judge_script_artifact import (
     TeacherJudgeScriptArtifact,
     TeacherJudgeScriptLanguage,
@@ -100,24 +101,27 @@ SCRIPT_GENERATION_SYSTEM_PROMPT = f"""
 
 # 任務
 根據 rubric snapshot 產生一份安全、受管、可重複執行的 Python managed data collection script。
-腳本負責收集同學 VM/LXC 內的服務、port、process、localhost HTTP 等資料；若 rubric 明確引用允許執行程式入口的 catalog command，才可依下列限制執行該入口。最後整理成 JSON，供後續解讀與評分使用。
+腳本負責收集同學 VM/LXC 內可客觀觀察的資料；若 rubric 明確引用 catalog command，可依下列限制執行唯讀／診斷命令。最後整理成 JSON，供後續解讀與評分使用。
 
 # 硬性規則
 - 只能輸出 JSON，不要 markdown。
 - JSON 欄位必須是 {{"script_content": "..."}}。
 - script_content 必須是完整 Python 程式。
-- 腳本預設只能收集本機服務狀態、port、process、HTTP localhost endpoint。
+- 腳本可收集本機檔案內容、目錄、command log、服務、port、process、localhost HTTP 與受控命令執行結果。
 - 腳本不得刪除、修改、修復、安裝、重啟、停用或重設任何環境。
-- 腳本不得讀取 .env、.ssh、private key 或把資料送到外部網路。
+- 指令輸出的 stdout/stderr 必須原樣帶回，不做遮蔽；仍不得把資料送到外部網路。
 - 若需要執行指令，只能使用 subprocess.run([...], timeout=秒數, capture_output=True, text=True, check=False)。
 - subprocess.run 第一個參數必須是 argv list，不得使用字串指令，不得使用 shell=True。
 - 不得使用 os.system、os.popen、subprocess.Popen 或任何未設定 timeout 的指令執行方式。
+- 不得以 bash、sh、zsh、cmd、PowerShell 等 shell launcher 間接執行指令。
 - 若 template command 含 pipe、redirect、grep 等 shell 寫法，請改用 Python 程式解析 stdout，不要原樣 shell=True 執行。
 - HTTP request 只允許 GET/HEAD localhost/127.0.0.1/::1，必須設定 timeout。
 - 腳本最後必須 print 單一 JSON，schema_version 固定為 {RESULT_SCHEMA_VERSION}，並使用 json.dumps(..., ensure_ascii=False)。
 - 輸出 JSON 的 metadata 必須包含 timestamp 與 platform。
 - 優先根據 rubric item 的 check_steps.command_key 對應 template_commands 產生收集項目。
 - `python.run_entrypoint` 是執行觀察能力，不是原始碼審查：只有 rubric item 已明確提供工作目錄、實際 Python 命令／參數與成功條件時才可執行。
+- `system.run_command` 是跨 template 的通用受控能力。cat、pwd、echo、唯讀 git、有限次數 ping 等命令使用同一能力，不要建立命令特例；`cd` 必須轉成 subprocess 的 `cwd`，不可啟動 shell。
+- `system.run_command` 只允許單一唯讀／診斷 argv；禁止 pipe、redirect、寫入型 Git 子命令及其他會改變環境的操作。
 - 執行 Python 入口時，必須使用 argv list、明確 `cwd`、有限 timeout，並把 exit code、stdout、stderr、未捕捉例外與 timeout 寫成該 check 的證據。
 - 若 rubric 缺少工作目錄、命令或「正常結束／常駐服務」判準，不得搜尋檔案系統或猜路徑；該 check 必須回傳 `unknown`，清楚寫出缺少的資訊。
 - 不得把 Python 執行檢查替換成 n8n、Port 或程序存在檢查；這些只能在 rubric 本來就要求時使用。
@@ -126,8 +130,8 @@ SCRIPT_GENERATION_SYSTEM_PROMPT = f"""
 
 # 簡潔程式碼骨架
 - 產生單檔 Python script；不要建立 class、plugin 架構、retry framework 或多層抽象。
-- helper 只保留這 5 個：`truncate_output`、`redact_sensitive_text`、`command_available`、`run_command`、`record_check`。
-- `run_command()` 只負責執行 argv list 並回傳 `stdout`、`stderr`、`returncode`；若捕捉例外，回傳 `returncode=None` 與錯誤文字，不要在 helper 內吞掉資訊。
+- helper 只保留這 4 個：`truncate_output`、`command_available`、`run_command`、`record_check`。
+- `run_command()` 只負責接受 argv list、cwd 與 timeout，並回傳未遮蔽的 `stdout`、`stderr`、`returncode`；若捕捉例外，回傳 `returncode=None` 與錯誤文字，不要在 helper 內吞掉資訊。
 - 每個收集項目使用同一個簡潔模式：
   1. 先決定 `check_id`
   2. 檢查工具是否存在；缺工具時 `record_check(..., "unknown", ...)`
@@ -167,8 +171,9 @@ AI_REVIEWER_SYSTEM_PROMPT = """
 只審查腳本，不執行腳本。請依 policy 判斷它是否只做 read-only inspection，或只執行 rubric 與 catalog 明確授權的受控程式入口。
 
 ## 安全審查
-若腳本可能刪除、修改、修復、安裝、重啟、讀取敏感檔案或對外傳資料，approved 必須是 false。
+若腳本可能刪除、修改、修復、安裝、重啟或對外傳資料，approved 必須是 false。讀取檔案與原樣回傳受控命令的 stdout/stderr 本身不是拒絕理由。
 若腳本使用 `python.run_entrypoint`，只有在 rubric 已提供明確 cwd、argv、timeout 與成功條件，且程式只收集 exit code/stdout/stderr、沒有安裝或修復動作時才可核准；risk_level 至少為 medium，後續仍需老師核准腳本與執行。
+若腳本使用 `system.run_command`，確認它採 argv list、cwd、有限 timeout、無 shell/pipe/redirect，且只做唯讀／診斷操作；stdout/stderr 不需遮蔽。
 
 ## 錯誤記錄完整性
 - 檢查腳本有 subprocess.run / HTTP 請求等外部呼叫時，是否有對應的 try/except 並在 except 中 call errors.append()。
@@ -507,7 +512,9 @@ async def generate_script_content(
     template_key: str,
 ) -> tuple[str, dict[str, Any]]:
     if not settings.VLLM_MODEL_NAME:
-        raise HTTPException(status_code=503, detail="VLLM_MODEL_NAME 未設定。")
+        raise HTTPException(
+            status_code=503, detail=t("artifact.model_not_configured")
+        )
 
     payload = apply_thinking_control(
         {
@@ -544,12 +551,12 @@ async def generate_script_content(
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
         raise HTTPException(
-            status_code=502, detail="AI 產生腳本格式不是 JSON。"
+            status_code=502, detail=t("artifact.generation_not_json")
         ) from exc
 
     script_content = str(parsed.get("script_content") or "").strip()
     if not script_content:
-        raise HTTPException(status_code=502, detail="AI 未產生 script_content。")
+        raise HTTPException(status_code=502, detail=t("artifact.no_script_content"))
     return script_content, dict(metrics)
 
 
@@ -559,7 +566,9 @@ async def review_script_with_ai(
     rubric_snapshot: dict[str, Any],
 ) -> tuple[AIReviewResult, dict[str, Any]]:
     if not settings.VLLM_MODEL_NAME:
-        raise HTTPException(status_code=503, detail="VLLM_MODEL_NAME 未設定。")
+        raise HTTPException(
+            status_code=503, detail=t("artifact.model_not_configured")
+        )
 
     payload = apply_thinking_control(
         {
@@ -598,13 +607,17 @@ def _apply_line_replacements(
     raw_replacements: Any,
 ) -> str:
     if not isinstance(raw_replacements, list) or not raw_replacements:
-        raise HTTPException(status_code=502, detail="AI 未產生 line_replacements。")
+        raise HTTPException(
+            status_code=502, detail=t("artifact.no_line_replacements")
+        )
 
     lines = script_content.split("\n")
     replacements: list[tuple[int, int, str]] = []
     for raw in raw_replacements:
         if not isinstance(raw, dict):
-            raise HTTPException(status_code=502, detail="AI 修正腳本格式不正確。")
+            raise HTTPException(
+                status_code=502, detail=t("artifact.fix_format_invalid")
+            )
         start_line = raw.get("start_line")
         end_line = raw.get("end_line")
         replacement = raw.get("replacement")
@@ -615,16 +628,22 @@ def _apply_line_replacements(
             or isinstance(end_line, bool)
             or not isinstance(replacement, str)
         ):
-            raise HTTPException(status_code=502, detail="AI 修正腳本行號格式不正確。")
+            raise HTTPException(
+                status_code=502, detail=t("artifact.fix_line_number_invalid")
+            )
         if start_line < 1 or end_line < start_line or end_line > len(lines):
-            raise HTTPException(status_code=502, detail="AI 修正腳本行號超出範圍。")
+            raise HTTPException(
+                status_code=502, detail=t("artifact.fix_line_out_of_range")
+            )
         replacements.append((start_line, end_line, replacement))
 
     sorted_replacements = sorted(replacements, key=lambda item: item[0])
     previous_end = 0
     for start_line, end_line, _replacement in sorted_replacements:
         if start_line <= previous_end:
-            raise HTTPException(status_code=502, detail="AI 修正腳本行號區間重疊。")
+            raise HTTPException(
+                status_code=502, detail=t("artifact.fix_line_overlap")
+            )
         previous_end = end_line
 
     patched_lines = list(lines)
@@ -634,7 +653,7 @@ def _apply_line_replacements(
 
     result = "\n".join(patched_lines).strip()
     if not result:
-        raise HTTPException(status_code=502, detail="AI 未產生修正後腳本。")
+        raise HTTPException(status_code=502, detail=t("artifact.fix_no_result"))
     return result
 
 
@@ -644,7 +663,9 @@ async def fix_script_content(
     fix_hints: list[FixHint],
 ) -> tuple[str, dict[str, Any]]:
     if not settings.VLLM_MODEL_NAME:
-        raise HTTPException(status_code=503, detail="VLLM_MODEL_NAME 未設定。")
+        raise HTTPException(
+            status_code=503, detail=t("artifact.model_not_configured")
+        )
 
     lines = script_content.split("\n")
     numbered = "\n".join(f"{i + 1:04d}|{line}" for i, line in enumerate(lines))
@@ -684,7 +705,7 @@ async def fix_script_content(
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
         raise HTTPException(
-            status_code=502, detail="AI 修正腳本格式不是 JSON。"
+            status_code=502, detail=t("artifact.fix_not_json")
         ) from exc
 
     logger.info(
@@ -1034,7 +1055,7 @@ async def create_artifact(
 ) -> TeacherJudgeScriptArtifactPublic:
     artifact_name = name.strip()
     if not artifact_name:
-        raise HTTPException(status_code=400, detail="腳本名稱不可空白。")
+        raise HTTPException(status_code=400, detail=t("artifact.name_blank"))
 
     if template_commands is None:
         template_commands = get_enabled_template_commands(
@@ -1110,7 +1131,9 @@ async def regenerate_artifact(
         artifact_id=artifact_id,
     )
     if artifact.status == TeacherJudgeScriptStatus.archived:
-        raise HTTPException(status_code=400, detail="已封存的腳本不能重新生成。")
+        raise HTTPException(
+            status_code=400, detail=t("artifact.archived_cannot_regenerate")
+        )
     template_key = artifact.template_key
     if template_commands is None:
         template_commands = get_enabled_template_commands(
@@ -1213,11 +1236,13 @@ def approve_artifact(
         artifact_id=artifact_id,
     )
     if artifact.status != TeacherJudgeScriptStatus.reviewed:
-        raise HTTPException(status_code=400, detail="只有審查通過的腳本可以核准。")
+        raise HTTPException(status_code=400, detail=t("artifact.not_reviewed"))
     if artifact.policy_check_result_json.get("approved") is not True:
-        raise HTTPException(status_code=400, detail="腳本未通過安全/品質檢查。")
+        raise HTTPException(
+            status_code=400, detail=t("artifact.policy_check_failed")
+        )
     if artifact.ai_review_result_json.get("approved") is not True:
-        raise HTTPException(status_code=400, detail="腳本未通過 AI reviewer。")
+        raise HTTPException(status_code=400, detail=t("artifact.ai_review_failed"))
 
     artifact.status = TeacherJudgeScriptStatus.approved
     artifact.approved_by = approved_by

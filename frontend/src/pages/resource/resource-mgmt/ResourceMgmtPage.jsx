@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import styles from "./ResourceMgmtPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import PowerMenu from "../../../components/PowerMenu/PowerMenu";
@@ -16,39 +17,62 @@ import { QuickPracticeService } from "../../../services/quickPractice";
 import { buildEnvironmentGroups, groupedResourceKeys } from "../../../utils/environmentGroups";
 
 /* ── Constants ── */
-const STATUS_MAP = {
-  scheduled:    { label: "已排程",   color: "info"    },
-  provisioning: { label: "建立中",   color: "info"    },
-  running:      { label: "執行中",   color: "success" },
-  stopped:      { label: "已關機",   color: "muted"   },
-  paused:       { label: "已暫停",   color: "muted"   },
-  failed:       { label: "建立失敗", color: "danger"  },
-  deleted:      { label: "已刪除",   color: "danger"  },
-  unknown:      { label: "狀態未知", color: "muted"   },
-};
+function useStatusMap() {
+  const { t } = useTranslation("resource");
+  return {
+    scheduled:    { label: t("ResourceMgmtPage.statusScheduled"),    color: "info"    },
+    provisioning: { label: t("ResourceMgmtPage.statusProvisioning"), color: "info"    },
+    running:      { label: t("ResourceMgmtPage.statusRunning"),      color: "success" },
+    stopped:      { label: t("ResourceMgmtPage.statusStopped"),      color: "muted"   },
+    paused:       { label: t("ResourceMgmtPage.statusPaused"),       color: "muted"   },
+    failed:       { label: t("ResourceMgmtPage.statusFailed"),       color: "danger"  },
+    deleted:      { label: t("ResourceMgmtPage.statusDeleted"),      color: "danger"  },
+    unknown:      { label: t("ResourceMgmtPage.statusUnknown"),      color: "muted"   },
+  };
+}
 
-const TYPE_MAP = {
-  lxc:  { label: "容器 (LXC)",  icon: "terminal" },
-  qemu: { label: "虛擬機 (VM)", icon: "computer" },
-};
+function useTypeMap() {
+  const { t } = useTranslation("resource");
+  return {
+    lxc:  { label: t("ResourceMgmtPage.typeLxc"), icon: "terminal" },
+    qemu: { label: t("ResourceMgmtPage.typeVm"),  icon: "computer" },
+  };
+}
 
-const ACTION_LABEL = {
-  start:    "啟動",
-  stop:     "強制停止",
-  shutdown: "關機",
-  reset:    "強制重置",
-  reboot:   "重新啟動",
-};
+function useActionLabel() {
+  const { t } = useTranslation("resource");
+  return {
+    start:    t("ResourceMgmtPage.actionStart"),
+    stop:     t("ResourceMgmtPage.actionStop"),
+    shutdown: t("ResourceMgmtPage.actionShutdown"),
+    reset:    t("ResourceMgmtPage.actionReset"),
+    reboot:   t("ResourceMgmtPage.actionReboot"),
+  };
+}
 
-const COLUMNS = ["名稱", "環境 / 系統", "狀態", "IP 位址", "到期日", "節點", "動作"];
+function useColumns() {
+  const { t } = useTranslation("resource");
+  return [
+    t("ResourceMgmtPage.columnName"),
+    t("ResourceMgmtPage.columnEnvOs"),
+    t("ResourceMgmtPage.columnStatus"),
+    t("ResourceMgmtPage.columnIp"),
+    t("ResourceMgmtPage.columnExpiry"),
+    t("ResourceMgmtPage.columnNode"),
+    t("ResourceMgmtPage.columnActions"),
+  ];
+}
 
-const BATCH_ACTIONS = [
-  { action: "start",    label: "啟動",     icon: "play_arrow" },
-  { action: "shutdown", label: "關機",     icon: "power_settings_new" },
-  { action: "reboot",   label: "重新啟動", icon: "restart_alt" },
-  { action: "stop",     label: "強制停止", icon: "stop" },
-  { action: "reset",    label: "強制重置", icon: "cancel" },
-];
+function useBatchActions() {
+  const { t } = useTranslation("resource");
+  return [
+    { action: "start",    label: t("ResourceMgmtPage.actionStart"),    icon: "play_arrow" },
+    { action: "shutdown", label: t("ResourceMgmtPage.actionShutdown"), icon: "power_settings_new" },
+    { action: "reboot",   label: t("ResourceMgmtPage.actionReboot"),   icon: "restart_alt" },
+    { action: "stop",     label: t("ResourceMgmtPage.actionStop"),     icon: "stop" },
+    { action: "reset",    label: t("ResourceMgmtPage.actionReset"),    icon: "cancel" },
+  ];
+}
 
 const LIVE_STATUSES = new Set(["running", "stopped", "paused"]);
 
@@ -74,9 +98,17 @@ function statusAfterAction(action) {
   return action === "stop" || action === "shutdown" ? "stopped" : "running";
 }
 
+function machineSpecLabel(machine) {
+  const parts = [];
+  if (machine.cpu) parts.push(`${machine.cpu} CPU`);
+  if (machine.memoryBytes) parts.push(`${Math.round(machine.memoryBytes / 1024 ** 3)} GB`);
+  return parts.join(" · ");
+}
+
 /* ── Primitive sub-components ── */
 function StatusBadge({ status }) {
-  const s = STATUS_MAP[status] ?? { label: status, color: "muted" };
+  const statusMap = useStatusMap();
+  const s = statusMap[status] ?? { label: status, color: "muted" };
   return (
     <span className={`${styles.badge} ${styles[`badge_${s.color}`]}`}>
       {s.label}
@@ -85,28 +117,39 @@ function StatusBadge({ status }) {
 }
 
 function EnvironmentMachineRow({ machine, onUpdated }) {
+  const { t } = useTranslation("resource");
   const toast = useToast();
-  const type = TYPE_MAP[machine.type] ?? { label: machine.type, icon: "computer" };
+  const navigate = useNavigate();
+  const typeMap = useTypeMap();
+  const type = typeMap[machine.type] ?? { label: machine.type, icon: "computer" };
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuClosing, setMenuClosing] = useState(false);
+  const menuBtnRef = useRef(null);
   const resource = machine.resource;
   const isLxc = machine.type === "lxc";
   const canControl = Boolean(resource?.vmid && resource.can_control !== false);
   const canOpen = canControl && resource.status === "running";
-  const controlAction = resource?.status === "running" ? "shutdown" : "start";
+  const specLabel = machineSpecLabel(machine);
 
-  async function handleControl() {
+  function closeMenu() {
+    setMenuClosing(true);
+    setTimeout(() => { setMenuOpen(false); setMenuClosing(false); }, 130);
+  }
+
+  // 與單機列同一組電源控制；環境內的機器差別只在不能單台刪除。
+  async function handleControl(action) {
     if (!canControl || actionLoading) return;
-    setActionLoading(true);
+    setActionLoading(action);
     try {
-      await ResourcesService[controlAction](resource.vmid);
-      const status = controlAction === "start" ? "running" : "stopped";
-      onUpdated({ ...resource, status });
-      toast.success(controlAction === "start" ? "已送出啟動指令" : "已送出正常關機指令");
+      await ResourcesService[action](resource.vmid);
+      onUpdated({ ...resource, status: statusAfterAction(action) });
+      toast.success(t("ResourceMgmtPage.machineCommandSent"));
     } catch (error) {
-      toast.error(error?.message ?? "機器操作失敗");
+      toast.error(error?.message ?? t("ResourceMgmtPage.machineActionFailed"));
     } finally {
-      setActionLoading(false);
+      setActionLoading(null);
     }
   }
 
@@ -117,25 +160,31 @@ function EnvironmentMachineRow({ machine, onUpdated }) {
         <div className={`${styles.nameCell} ${styles.environmentMachineName}`}>
           <span className={styles.machineBranch} aria-hidden="true">└</span>
           <div>
-            <div className={styles.namePrimary}>{machine.name}</div>
-            <div className={styles.nameSub}>{machine.role} · {type.label}</div>
+            {resource?.vmid > 0
+              ? <button type="button" className={`${styles.namePrimary} ${styles.nameLink}`} title={t("ResourceMgmtPage.viewDetailTitle")} onClick={() => navigate(`/resource-mgmt/${resource.vmid}`)}>{machine.name}</button>
+              : <div className={styles.namePrimary}>{machine.name}</div>}
+            <div className={styles.nameSub}>{machine.role} · {type.label}{specLabel ? ` · ${specLabel}` : ""}</div>
           </div>
         </div>
       </td>
       <td className={styles.td}>
         <div className={styles.envPrimary}>{machine.os}</div>
-        <div className={styles.envSub}>{machine.resource ? "已連接實際資源" : "建立中"}</div>
+        <div className={styles.envSub}>{machine.resource ? t("ResourceMgmtPage.envConnected") : t("ResourceMgmtPage.envProvisioning")}</div>
       </td>
       <td className={styles.td}><StatusBadge status={machine.status} /></td>
       <td className={styles.td}><span className={styles.mono}>{machine.ip}</span></td>
-      <td className={styles.td}><span className={styles.noAction}>依環境統一管理</span></td>
+      <td className={styles.td}><span className={styles.noAction}>{t("ResourceMgmtPage.unifiedManagement")}</span></td>
       <td className={styles.td}>{machine.node}</td>
       <td className={styles.td}><div className={styles.actions}>
-        <button type="button" className={styles.consoleBtn} disabled={!canOpen} title={canOpen ? (isLxc ? "終端機" : "控制台") : "機器尚未完成或未開機"} onClick={() => setConsoleOpen(true)}>
+        <button type="button" className={styles.consoleBtn} disabled={!canOpen} title={canOpen ? (isLxc ? t("ResourceMgmtPage.terminalTitle") : t("ResourceMgmtPage.consoleTitle")) : t("ResourceMgmtPage.machineNotReadyTitle")} onClick={() => setConsoleOpen(true)}>
           <MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />
-          {isLxc ? "終端機" : "控制台"}
+          {isLxc ? t("ResourceMgmtPage.terminalTitle") : t("ResourceMgmtPage.consoleTitle")}
         </button>
-        <button type="button" className={styles.consoleBtn} disabled={!canControl || actionLoading || !["running", "stopped"].includes(resource?.status)} onClick={handleControl}><MIcon name={actionLoading ? "hourglass_empty" : controlAction === "start" ? "play_arrow" : "power_settings_new"} size={14} />{controlAction === "start" ? "啟動" : "關機"}</button>
+        {actionLoading && <MIcon name="hourglass_empty" size={16} />}
+        {canControl && <div className={styles.menuWrap}>
+          {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onClose={closeMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
+          <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)} title={t("ResourceMgmtPage.powerControlTitle")}><MIcon name="more_vert" size={18} /></button>
+        </div>}
       </div></td>
     </tr>
     {consoleOpen && isLxc && createPortal(<TerminalDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
@@ -143,10 +192,30 @@ function EnvironmentMachineRow({ machine, onUpdated }) {
   </>;
 }
 
-function EnvironmentGroupRows({ group, onUpdated }) {
+function EnvironmentGroupRows({ group, onUpdated, onRefresh }) {
+  const { t } = useTranslation("resource");
+  const toast = useToast();
   const [expanded, setExpanded] = useState(true);
+  const [groupAction, setGroupAction] = useState(null);
   const running = group.machines.filter((machine) => machine.status === "running").length;
   const allRunning = running === group.machines.length;
+  const controllableVmids = group.machines
+    .filter((machine) => machine.resource?.vmid && machine.resource.can_control !== false)
+    .map((machine) => machine.resource.vmid);
+
+  async function runGroupAction(action) {
+    if (!controllableVmids.length || groupAction) return;
+    setGroupAction(action);
+    try {
+      await ResourcesService.batchAction(controllableVmids, action);
+      toast.success(t("ResourceMgmtPage.groupCommandSent"));
+      onRefresh?.();
+    } catch (error) {
+      toast.error(error?.message ?? t("ResourceMgmtPage.groupCommandFailed"));
+    } finally {
+      setGroupAction(null);
+    }
+  }
   return (
     <>
       <tr
@@ -166,20 +235,25 @@ function EnvironmentGroupRows({ group, onUpdated }) {
             onClick={() => setExpanded((value) => !value)}
           >
             <MIcon name={expanded ? "expand_more" : "chevron_right"} size={20} />
-            <span><strong>{group.kindLabel}｜{group.title}</strong><small>{group.machines.length} 台機器 · 整組管理</small></span>
+            <span><strong>{group.kindLabel}｜{group.title}</strong><small>{t("ResourceMgmtPage.machineCountLabel", { count: group.machines.length })}</small></span>
           </button>
         </td>
         <td className={styles.td}>
-          <div className={styles.envPrimary}>{group.kind === "course" ? "課程多機環境" : "快速練習環境"}</div>
-          <div className={styles.envSub}>整組檢視</div>
+          <div className={styles.envPrimary}>{group.kind === "course" ? t("ResourceMgmtPage.courseEnvironment") : t("ResourceMgmtPage.quickPracticeEnvironment")}</div>
+          <div className={styles.envSub}>{t("ResourceMgmtPage.groupView")}</div>
         </td>
         <td className={styles.td}>
-          <span className={`${styles.badge} ${styles[`badge_${allRunning ? "success" : "info"}`]}`}>{running}/{group.machines.length} 執行中</span>
+          <span className={`${styles.badge} ${styles[`badge_${allRunning ? "success" : "info"}`]}`}>{t("ResourceMgmtPage.runningCount", { running, total: group.machines.length })}</span>
         </td>
-        <td className={styles.td}><span className={styles.noAction}>展開查看</span></td>
+        <td className={styles.td}><span className={styles.noAction}>—</span></td>
         <td className={styles.td}><strong className={styles.environmentTiming}>{group.timingLabel}</strong></td>
         <td className={styles.td}>{group.nodeLabel}</td>
-        <td className={styles.td}><span className={styles.noAction}>展開後逐台操作</span></td>
+        <td className={styles.td}>{controllableVmids.length > 0
+          ? <div className={styles.actions}>
+              <button type="button" className={styles.consoleBtn} disabled={Boolean(groupAction) || allRunning} onClick={() => runGroupAction("start")}><MIcon name={groupAction === "start" ? "hourglass_empty" : "play_arrow"} size={14} />{t("ResourceMgmtPage.startAll")}</button>
+              <button type="button" className={styles.consoleBtn} disabled={Boolean(groupAction) || running === 0} onClick={() => runGroupAction("shutdown")}><MIcon name={groupAction === "shutdown" ? "hourglass_empty" : "power_settings_new"} size={14} />{t("ResourceMgmtPage.shutdownAll")}</button>
+            </div>
+          : <span className={styles.noAction}>—</span>}</td>
       </tr>
       {expanded && group.machines.map((machine) => (
         <EnvironmentMachineRow key={machine.id} machine={machine} onUpdated={onUpdated} />
@@ -189,8 +263,10 @@ function EnvironmentGroupRows({ group, onUpdated }) {
 }
 
 /* ── Confirm Modal ── */
-function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, loading = false, onConfirm, onClose }) {
+function ConfirmModal({ title, desc, confirmLabel, danger = false, loading = false, onConfirm, onClose }) {
+  const { t } = useTranslation("resource");
   const [closing, setClosing] = useState(false);
+  const resolvedConfirmLabel = confirmLabel ?? t("ResourceMgmtPage.confirmDefault");
 
   function close() {
     if (closing) return;
@@ -212,7 +288,7 @@ function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, lo
         {desc && <p className={styles.modalDesc}>{desc}</p>}
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnSecondary} onClick={close}>
-            取消
+            {t("ResourceMgmtPage.cancel")}
           </button>
           <button
             type="button"
@@ -220,7 +296,7 @@ function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, lo
             disabled={loading}
             onClick={onConfirm}
           >
-            {loading ? "處理中…" : confirmLabel}
+            {loading ? t("ResourceMgmtPage.processing") : resolvedConfirmLabel}
           </button>
         </div>
       </div>
@@ -230,7 +306,10 @@ function ConfirmModal({ title, desc, confirmLabel = "確定", danger = false, lo
 
 /* ── 批次操作列（有勾選才顯示） ── */
 function BatchActionBar({ selectedVmids, onDone, onClear }) {
+  const { t } = useTranslation("resource");
   const toast = useToast();
+  const actionLabel = useActionLabel();
+  const batchActions = useBatchActions();
   const [pending, setPending] = useState(null); // 進行中的 action
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const count = selectedVmids.length;
@@ -239,15 +318,15 @@ function BatchActionBar({ selectedVmids, onDone, onClear }) {
     setPending(action);
     try {
       const res = await ResourcesService.batchAction(selectedVmids, action);
-      const label = action === "delete" ? "刪除" : ACTION_LABEL[action];
+      const label = action === "delete" ? t("ResourceMgmtPage.delete") : actionLabel[action];
       if ((res?.failed ?? 0) === 0) {
-        toast.success(`已對 ${res?.succeeded ?? count} 台送出「${label}」`);
+        toast.success(t("ResourceMgmtPage.batchSuccessToast", { count: res?.succeeded ?? count, label }));
       } else {
-        toast.error(`「${label}」成功 ${res?.succeeded ?? 0} 台、失敗 ${res?.failed} 台`);
+        toast.error(t("ResourceMgmtPage.batchPartialFailToast", { label, succeeded: res?.succeeded ?? 0, failed: res?.failed }));
       }
       onDone();
     } catch (err) {
-      toast.error(err?.message ?? "批次操作失敗");
+      toast.error(err?.message ?? t("ResourceMgmtPage.batchActionFailed"));
     } finally {
       setPending(null);
       setDeleteConfirm(false);
@@ -258,9 +337,9 @@ function BatchActionBar({ selectedVmids, onDone, onClear }) {
 
   return (
     <div className={styles.batchBar}>
-      <span className={styles.batchCount}>已選 {count} 台</span>
+      <span className={styles.batchCount}>{t("ResourceMgmtPage.selectedCount", { count })}</span>
       <span className={styles.batchDivider} />
-      {BATCH_ACTIONS.map(({ action, label, icon }) => (
+      {batchActions.map(({ action, label, icon }) => (
         <button
           key={action}
           type="button"
@@ -280,7 +359,7 @@ function BatchActionBar({ selectedVmids, onDone, onClear }) {
         onClick={() => setDeleteConfirm(true)}
       >
         <MIcon name="delete" size={14} />
-        刪除
+        {t("ResourceMgmtPage.delete")}
       </button>
       <button
         type="button"
@@ -288,14 +367,14 @@ function BatchActionBar({ selectedVmids, onDone, onClear }) {
         disabled={pending !== null}
         onClick={onClear}
       >
-        取消選取
+        {t("ResourceMgmtPage.clearSelection")}
       </button>
 
       {deleteConfirm && (
         <ConfirmModal
-          title={`刪除 ${count} 台資源？`}
-          desc="將對所有勾選的虛擬機/容器送出刪除請求，此操作無法復原。"
-          confirmLabel={pending === "delete" ? "刪除中…" : "確認刪除"}
+          title={t("ResourceMgmtPage.batchDeleteTitle", { count })}
+          desc={t("ResourceMgmtPage.batchDeleteDesc")}
+          confirmLabel={pending === "delete" ? t("ResourceMgmtPage.deleting") : t("ResourceMgmtPage.confirmDelete")}
           danger
           loading={pending !== null}
           onConfirm={() => run("delete")}
@@ -307,8 +386,12 @@ function BatchActionBar({ selectedVmids, onDone, onClear }) {
 }
 
 function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggleSelect = null }) {
+  const { t } = useTranslation("resource");
   const toast = useToast();
   const navigate = useNavigate();
+  const typeMap = useTypeMap();
+  const statusMap = useStatusMap();
+  const actionLabel = useActionLabel();
   const [actionLoading, setActionLoading] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting]           = useState(false);
@@ -322,7 +405,7 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
     setTimeout(() => { setMenuOpen(false); setMenuClosing(false); }, 130);
   }
 
-  const type  = TYPE_MAP[resource.type] ?? { label: resource.type, icon: "computer" };
+  const type  = typeMap[resource.type] ?? { label: resource.type, icon: "computer" };
   const isLxc = resource.type === "lxc";
   const canControl = resource.can_control !== false && resource.vmid != null && resource.vmid > 0;
   const isLive = canControl && LIVE_STATUSES.has(resource.status);
@@ -331,10 +414,10 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
     setActionLoading(action);
     try {
       await ResourcesService[action](resource.vmid);
-      toast.success(`已送出「${ACTION_LABEL[action]}」指令（${resource.name}）`);
+      toast.success(t("ResourceMgmtPage.controlCommandSent", { action: actionLabel[action], name: resource.name }));
       onUpdated({ ...resource, status: statusAfterAction(action) });
     } catch (err) {
-      toast.error(err?.message ?? `${ACTION_LABEL[action]}失敗`);
+      toast.error(err?.message ?? t("ResourceMgmtPage.controlActionFailed", { action: actionLabel[action] }));
     } finally {
       setActionLoading(null);
     }
@@ -344,10 +427,10 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
     setDeleting(true);
     try {
       await ResourcesService.delete(resource.vmid);
-      toast.success(`已送出刪除請求（${resource.name}）`);
+      toast.success(t("ResourceMgmtPage.deleteRequestSent", { name: resource.name }));
       onDeleted(resource.vmid);
     } catch (err) {
-      toast.error(err?.message ?? "刪除失敗");
+      toast.error(err?.message ?? t("ResourceMgmtPage.deleteFailed"));
     } finally {
       setDeleting(false);
       setDeleteConfirm(false);
@@ -365,7 +448,7 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
               className={styles.checkbox}
               checked={selected}
               onChange={() => onToggleSelect(resource.vmid)}
-              aria-label={`選取 ${resource.name}`}
+              aria-label={t("ResourceMgmtPage.selectRowAria", { name: resource.name })}
             />
           ) : null}
         </td>
@@ -377,7 +460,7 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
                 <button
                   type="button"
                   className={`${styles.namePrimary} ${styles.nameLink}`}
-                  title="查看詳情"
+                  title={t("ResourceMgmtPage.viewDetailTitle")}
                   onClick={() => navigate(`/resource-mgmt/${resource.vmid}`)}
                 >
                   {resource.name}
@@ -387,7 +470,7 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
               )}
               <div className={styles.nameSub}>
                 {type.label}
-                {resource.vmid > 0 && ` · VMID ${resource.vmid}`}
+                {resource.vmid > 0 && t("ResourceMgmtPage.vmidSuffix", { vmid: resource.vmid })}
               </div>
             </div>
           </div>
@@ -413,7 +496,7 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
         <td className={styles.td}>
           {resource.expiry_date
             ? formatDate(resource.expiry_date)
-            : <span className={styles.noExpiry}>∞ 無期限</span>
+            : <span className={styles.noExpiry}>{t("ResourceMgmtPage.noExpiry")}</span>
           }
         </td>
 
@@ -427,12 +510,12 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
               <button
                 type="button"
                 className={styles.consoleBtn}
-                title={isLxc ? "終端機" : "控制台"}
+                title={isLxc ? t("ResourceMgmtPage.terminalTitle") : t("ResourceMgmtPage.consoleTitle")}
                 disabled={resource.status !== "running"}
                 onClick={() => setConsoleOpen(true)}
               >
                 <MIcon name={isLxc ? "terminal" : "desktop_windows"} size={14} />
-                {isLxc ? "終端機" : "控制台"}
+                {isLxc ? t("ResourceMgmtPage.terminalTitle") : t("ResourceMgmtPage.consoleTitle")}
               </button>
               {actionLoading && <MIcon name="hourglass_empty" size={16} />}
               <div className={styles.menuWrap}>
@@ -452,7 +535,7 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
                   type="button"
                   className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`}
                   onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)}
-                  title="電源控制"
+                  title={t("ResourceMgmtPage.powerControlTitle")}
                 >
                   <MIcon name="more_vert" size={18} />
                 </button>
@@ -460,7 +543,7 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
             </div>
           ) : (
             <span className={styles.noAction}>
-              {STATUS_MAP[resource.status]?.label ?? "—"}
+              {statusMap[resource.status]?.label ?? "—"}
             </span>
           )}
         </td>
@@ -470,9 +553,9 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
           且 .tableWrap 的 backdrop-filter 會讓 fixed 遮罩只蓋住表格範圍 */}
       {deleteConfirm && createPortal(
         <ConfirmModal
-          title="確定刪除資源？"
-          desc={`「${resource.name}」(VMID ${resource.vmid}) 刪除後無法復原，所有資料將會消失。`}
-          confirmLabel="刪除"
+          title={t("ResourceMgmtPage.deleteResourceTitle")}
+          desc={t("ResourceMgmtPage.deleteResourceDesc", { name: resource.name, vmid: resource.vmid })}
+          confirmLabel={t("ResourceMgmtPage.delete")}
           danger
           loading={deleting}
           onConfirm={handleDelete}
@@ -495,18 +578,20 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
 
 /* ── Empty / Error states ── */
 function EmptyState() {
-  return <SharedEmptyState icon="dns" title="尚無虛擬機或容器" />;
+  const { t } = useTranslation("resource");
+  return <SharedEmptyState icon="dns" title={t("ResourceMgmtPage.emptyTitle")} />;
 }
 
 function ErrorState({ onRetry }) {
+  const { t } = useTranslation("resource");
   return (
     <EmptyState
       icon="error_outline"
-      title="載入失敗"
+      title={t("ResourceMgmtPage.loadErrorTitle")}
       action={
         <button type="button" className={styles.btnSecondary} onClick={onRetry}>
           <MIcon name="refresh" size={16} />
-          重試
+          {t("ResourceMgmtPage.retry")}
         </button>
       }
     />
@@ -515,6 +600,7 @@ function ErrorState({ onRetry }) {
 
 /* ── Page ── */
 export default function ResourceMgmtPage() {
+  const { t } = useTranslation("resource");
   const navigate = useNavigate();
   const [resources, setResources] = useState([]);
   const [quickSessions, setQuickSessions] = useState([]);
@@ -587,14 +673,16 @@ export default function ResourceMgmtPage() {
     });
   }
 
+  const columns = useColumns();
+
   return (
     <div className={styles.page}>
       {/* ── 頁首 ── */}
-      <PageHeader title="資源管理" subtitle="查看與管理系統中所有虛擬機與 LXC 容器">
+      <PageHeader title={t("ResourceMgmtPage.pageTitle")} subtitle={t("ResourceMgmtPage.pageSubtitle")}>
         <div className={styles.pageActions}>
           <button type="button" className={styles.btnPrimary} onClick={() => navigate("/my-requests")}>
             <MIcon name="add" size={16} />
-            建立資源
+            {t("ResourceMgmtPage.createResource")}
           </button>
         </div>
       </PageHeader>
@@ -611,10 +699,6 @@ export default function ResourceMgmtPage() {
 
       {/* ── 內容 ── */}
       <div className={styles.content}>
-        <div className={styles.previewNotice} role="note">
-          <MIcon name="account_tree" size={17} />
-          <span><strong>多機環境</strong>課堂機器與快速練習會整組顯示，展開後可操作實際機器。</span>
-        </div>
         {error ? (
           <ErrorState onRetry={fetchResources} />
         ) : loading ? (
@@ -643,16 +727,16 @@ export default function ResourceMgmtPage() {
                       checked={allSelected}
                       disabled={selectableVmids.length === 0}
                       onChange={toggleSelectAll}
-                      aria-label="全選"
+                      aria-label={t("ResourceMgmtPage.selectAllAria")}
                     />
                   </th>
-                  {COLUMNS.map((col) => (
+                  {columns.map((col) => (
                     <th key={col} className={styles.th}>{col}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {environmentGroups.map((group) => <EnvironmentGroupRows key={group.id} group={group} onUpdated={handleUpdated} />)}
+                {environmentGroups.map((group) => <EnvironmentGroupRows key={group.id} group={group} onUpdated={handleUpdated} onRefresh={() => fetchResources(true)} />)}
                 {visibleResources.map((r, index) => (
                   <ResourceRow
                     key={resourceRowKey(r, index)}

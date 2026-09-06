@@ -75,6 +75,7 @@
 
 .tabToolbar {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: $spacing-8;
@@ -235,56 +236,9 @@
   strong { color: var(--color-info); }
 }
 
-/* ── 已保存評分表列表 ── */
-.fileList {
-  @include flex-column;
-  gap: $spacing-8;
-}
-
-.fileRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: $spacing-8 $spacing-16;
-  padding: $spacing-8 $spacing-16;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  transition: border-color $transition-base, background $transition-base;
-}
-
-.fileRowActive {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
-}
-
-.fileMain {
-  @include flex-column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  padding: 0;
-}
-
-.fileName {
-  font-size: $font-size-14;
-  font-weight: $font-weight-500;
-  color: var(--color-text-primary);
-  @include text-truncate;
-}
-
 .fileMeta {
   font-size: $font-size-12;
   color: var(--color-text-muted);
-}
-
-.fileActions {
-  display: flex;
-  gap: $spacing-8;
-  flex-shrink: 0;
 }
 
 /* ── 上傳區 ── */
@@ -426,7 +380,8 @@
   align-items: start;
 
   @include respond-to(xl) {
-    grid-template-columns: minmax(0, 1fr) 400px;
+    grid-template-columns: minmax(0, 1fr) 440px;
+    align-items: stretch;
   }
 }
 
@@ -441,236 +396,205 @@
   min-width: 0;
   flex-direction: column;
   gap: $spacing-16;
+  align-self: stretch;
 }
 
-/* ── 統計 ── */
-.assessmentSummary {
-  @include flex-column;
+/* ── 評分項目表格 ── */
+.rubricTableCard {
+  overflow: hidden;
+
+  @include respond-to(xl) {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+.rubricTableWrap {
+  overflow-x: auto;
+  margin: 0 (-$spacing-24) (-$spacing-24);
+}
+
+.rubricTable {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  color: var(--color-text-primary);
+  font-size: $font-size-14;
+}
+
+.rubricTable th {
+  padding: 0 $spacing-16 $spacing-8;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
+  font-weight: $font-weight-500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.rubricTable th:first-child,
+.rubricDetailToggleCell {
+  width: 44px;
+  padding-right: $spacing-8;
+  padding-left: $spacing-8;
+}
+
+.rubricTable th:nth-child(2),
+.rubricNumberCell {
+  width: 52px;
+  text-align: center;
+}
+
+.rubricTable th:nth-child(3) { width: 25%; }
+.rubricTable th:nth-child(4) { width: 38%; }
+.rubricTable th:nth-child(5) { width: 150px; }
+.rubricTable th:last-child { width: 72px; }
+
+.rubricTableRow > td {
+  padding: $spacing-16;
+  border-bottom: 1px solid var(--color-divider);
+  vertical-align: top;
+}
+
+.rubricTableRow:hover > td,
+.rubricTableRowExpanded > td {
+  background: color-mix(in srgb, var(--color-primary) 3%, var(--color-surface));
+}
+
+.rubricNumberCell {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: $font-weight-700;
+}
+
+.tableField {
+  display: block;
+
+  input,
+  textarea {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid transparent;
+    border-radius: $radius-8;
+    background: transparent;
+    color: var(--color-text-primary);
+    font: inherit;
+    line-height: 1.45;
+    outline: none;
+    resize: vertical;
+    transition: border-color $transition-base, background $transition-base, box-shadow $transition-base;
+  }
+
+  input { min-height: 36px; font-weight: $font-weight-500; }
+  textarea { min-height: 56px; }
+
+  input:hover:not(:disabled),
+  textarea:hover:not(:disabled) {
+    border-color: var(--color-border);
+    background: var(--color-surface);
+  }
+
+  input:focus,
+  textarea:focus {
+    border-color: var(--color-primary);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
+  }
+
+  input:disabled,
+  textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+}
+
+.rubricDescriptionCell { min-width: 260px; }
+.rubricDetailToggleCell { vertical-align: middle !important; }
+.rubricDetectabilityCell { vertical-align: middle !important; }
+.rubricActionsCell { vertical-align: middle !important; }
+
+.tableActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detailToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: $radius-8;
+  color: var(--color-text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.detailToggle:hover {
+  color: var(--color-primary);
+  background: var(--color-hover);
+}
+
+.rubricDetailRow > td {
+  padding: 0 $spacing-16 $spacing-16;
+  border-bottom: 1px solid var(--color-divider);
+  background: color-mix(in srgb, var(--color-primary) 3%, var(--color-surface));
+}
+
+.rubricDetail {
+  display: grid;
   gap: $spacing-16;
+  padding: $spacing-16;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  border-radius: $radius-8;
+  background: var(--color-surface);
 }
 
-.assessmentHead {
+.rubricDetailHead {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: $spacing-16;
 
   > div {
-    min-width: 0;
+    display: grid;
+    gap: 3px;
   }
 
-  p {
-    margin: 4px 0 0;
-    color: var(--color-text-muted);
-    font-size: $font-size-12;
-    line-height: $line-height-base;
-  }
-
-  @media (max-width: 520px) {
-    align-items: stretch;
-    flex-direction: column;
-
-    button {
-      justify-content: center;
-      width: 100%;
-    }
-  }
+  strong { font-size: $font-size-14; font-weight: $font-weight-700; }
+  span { color: var(--color-text-muted); font-size: $font-size-12; line-height: 1.5; }
 }
 
-.assessmentTitleRow {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: $spacing-8;
-
-  h4 {
-    margin: 0;
-    color: var(--color-text-primary);
-    font-size: $font-size-16;
-  }
-}
-
-.assessmentStatus_current,
-.assessmentStatus_stale {
-  @include badge-base;
-  padding: 3px 9px;
-  white-space: nowrap;
-}
-
-.assessmentStatus_current {
-  background: color-mix(in srgb, var(--color-success) 12%, transparent);
-  color: var(--color-success);
-}
-
-.assessmentStatus_stale {
-  background: color-mix(in srgb, var(--color-info) 12%, transparent);
-  color: var(--color-info);
-}
-
-.statsBar {
-  display: flex;
-  gap: 2px;
-  overflow: hidden;
-  height: 10px;
-  border-radius: $radius-pill;
+.rubricDetailEmpty {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-divider);
+  border-radius: $radius-8;
   background: var(--color-hover);
-
-  span {
-    min-width: 6px;
-  }
-}
-
-.statsSeg_auto { background: var(--color-success); }
-.statsSeg_partial { background: var(--color-info); }
-.statsSeg_manual { background: var(--color-danger); }
-
-.statsLegend {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: $spacing-8 $spacing-16;
+  color: var(--color-text-secondary);
   font-size: $font-size-12;
-  color: var(--color-text-secondary);
+  line-height: 1.5;
 }
 
-.legendItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-
-  i {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-  }
-}
-
-.legendDot_auto { background: var(--color-success); }
-.legendDot_partial { background: var(--color-info); }
-.legendDot_manual { background: var(--color-danger); }
-
-.legendTotal {
-  margin-left: auto;
-  color: var(--color-text-muted);
-}
-
-.summaryDetails {
-  border-radius: $radius-8;
-  background: var(--color-hover);
-  font-size: $font-size-14;
-  color: var(--color-text-secondary);
-
-  summary {
-    padding: $spacing-8 $spacing-16;
-    font-weight: $font-weight-500;
-    color: var(--color-text-primary);
-    cursor: pointer;
-  }
-
-  p {
-    margin: 0;
-    padding: 0 $spacing-16 $spacing-16;
-    line-height: $line-height-base;
-  }
-}
-
-/* ── 評分項目卡片 ── */
-.itemsList {
-  @include flex-column;
-  gap: $spacing-16;
-}
-
-.rubricCard {
-  @include flex-column;
-  gap: $spacing-8;
-  padding: $spacing-16;
-  border: 1px solid var(--color-border);
-  border-top-width: 3px;
-  border-radius: $radius-8;
-  transition: background $transition-base;
-
-  &:hover {
-    background: var(--color-hover);
-  }
-}
-
-.rubricCard_auto { border-top-color: var(--color-success); }
-.rubricCard_partial { border-top-color: var(--color-info); }
-.rubricCard_manual { border-top-color: var(--color-danger); }
-
-.rubricCardHead {
-  @include flex-between;
-  gap: $spacing-8;
-}
-
-.rubricCardHeadMain {
-  display: flex;
-  align-items: center;
-  gap: $spacing-8;
-}
-
-.rubricIndex {
-  font-size: $font-size-14;
-  font-weight: $font-weight-700;
-  color: var(--color-text-muted);
-}
+.detectItemWide { grid-column: 1 / -1; }
 
 .detBadge {
   @include badge-base;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 2px 10px;
   white-space: nowrap;
 }
 
 .detBadge_auto { background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); }
-.detBadge_partial { background: color-mix(in srgb, var(--color-info) 12%, transparent); color: var(--color-info); }
+.detBadge_partial { background: color-mix(in srgb, var(--color-pending) 14%, transparent); color: var(--color-pending); }
 .detBadge_manual { background: color-mix(in srgb, var(--color-danger) 12%, transparent); color: var(--color-danger); }
-
-.rubricField {
-  @include flex-column;
-  gap: 4px;
-  font-size: $font-size-12;
-  font-weight: $font-weight-500;
-  color: var(--color-text-secondary);
-
-  input {
-    min-height: 34px;
-    padding: 6px $spacing-16;
-    border: 1px solid var(--color-border);
-    border-radius: $radius-8;
-    background: var(--color-surface);
-    color: var(--color-text-primary);
-    outline: none;
-    font-size: $font-size-14;
-
-    &:focus {
-      border-color: var(--color-primary);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  }
-}
-
-.detectInfo {
-  @include flex-column;
-  gap: $spacing-8;
-  padding: $spacing-8 $spacing-16;
-  border: 1px dashed var(--color-border);
-  border-radius: $radius-8;
-  background: var(--color-hover);
-}
-
-.detectInfoHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: $font-size-12;
-  font-weight: $font-weight-500;
-  color: var(--color-text-muted);
-}
+.detBadge_stale { outline: 1px dashed currentColor; outline-offset: 2px; }
+.detBadge em { font-size: $font-size-10; font-style: normal; font-weight: $font-weight-700; }
 
 .detectGrid {
   display: grid;
@@ -684,7 +608,7 @@
 
 .detectItem {
   @include flex-column;
-  gap: 2px;
+  gap: 5px;
 
   span {
     font-size: $font-size-12;
@@ -694,12 +618,15 @@
 
   p {
     margin: 0;
-    padding: 6px 10px;
+    padding: 9px 12px;
+    border: 1px solid var(--color-divider);
     border-radius: $radius-8;
-    background: var(--color-surface);
-    font-size: $font-size-12;
-    color: var(--color-text-secondary);
-    line-height: $line-height-base;
+    background: var(--color-hover);
+    font-size: $font-size-14;
+    color: var(--color-text-primary);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 }
 
@@ -729,13 +656,27 @@
 /* ── AI 對話 ── */
 .chatCard {
   padding: $spacing-16 $spacing-24;
-  max-height: 640px;
   min-width: 0;
 
   @include respond-to(xl) {
     position: sticky;
     top: $spacing-24;
+    height: 100%;
+    min-height: min(640px, calc(100vh - 48px));
+    max-height: none;
+    box-sizing: border-box;
   }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .chatPanel {
@@ -849,6 +790,77 @@
     padding: 4px 10px;
     font-size: $font-size-12;
   }
+}
+
+.chatSourcesPanel {
+  padding: $spacing-8;
+  border: 1px solid var(--color-border);
+  border-radius: $radius-12;
+  background: color-mix(in srgb, var(--color-hover) 45%, var(--color-surface));
+}
+
+.chatAttachmentRail {
+  display: flex;
+  gap: $spacing-8;
+  overflow-x: auto;
+  padding: 2px 0;
+  scrollbar-width: thin;
+}
+
+.chatAttachmentChip,
+.chatMessageAttachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: $radius-8;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.chatAttachmentChip {
+  flex: 0 0 auto;
+  max-width: min(280px, 75vw);
+  padding: 6px 8px 6px 10px;
+  font-size: $font-size-12;
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  small { color: var(--color-text-muted); white-space: nowrap; }
+}
+
+.chatAttachmentRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+
+  &:hover { color: var(--color-danger); background: var(--color-hover); }
+}
+
+.chatMessageAttachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.chatMessageAttachment {
+  padding: 4px 7px;
+  font-size: $font-size-12;
 }
 
 .chatForm {
@@ -1279,14 +1291,40 @@
   color: var(--color-text-primary);
   text-align: left;
   cursor: pointer;
+}
 
-  > strong {
-    display: block;
-    width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.sessionTitleViewport {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sessionTitle {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateX(0);
+  transform-origin: left center;
+  transition: transform 220ms ease-out;
+}
+
+.sessionTitleViewport:hover .sessionTitleOverflowing,
+.sessionItem:focus-visible .sessionTitleOverflowing,
+.sessionItemActive:focus-visible .sessionTitleOverflowing {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  animation: sessionTitleMarquee 8s linear 1 both;
+  will-change: transform;
+}
+
+@keyframes sessionTitleMarquee {
+  0%, 18% { transform: translateX(0); }
+  82%, 100% { transform: translateX(calc(var(--session-title-shift, 0px) * -1)); }
 }
 
 .sessionRow {
@@ -1320,6 +1358,38 @@
 
 .sessionRowActions .iconBtn { width: 36px; height: 36px; }
 .pinActive { color: var(--color-primary); }
+
+.sessionRowRenaming {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
+.sessionRenameForm {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 5px 8px;
+}
+
+.sessionRenameInput {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-primary);
+  border-radius: $radius-8;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: $font-size-12;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.sessionRenameInput:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
 
 @keyframes menuIn {
   from { opacity: 0; transform: translateY(4px); }
@@ -1393,8 +1463,6 @@
 .sidebarEmpty, .mainEmpty { display: flex; flex-direction: column; align-items: center; gap: $spacing-8; padding: $spacing-16 $spacing-8; color: var(--color-text-muted); text-align: center; }
 .sidebarEmpty p, .mainEmpty p { margin: 0; font-size: $font-size-12; line-height: 1.45; }
 .mainEmpty { min-height: 240px; }.mainEmpty > .material-icons-outlined { color: var(--color-primary); }
-.archivedNotice { @include badge-base; gap: 5px; padding: 5px 8px; color: var(--color-pending); background: color-mix(in srgb, var(--color-pending) 10%, transparent); white-space: nowrap; }
-.renameDialog { width: min(420px, calc(100vw - 28px)); }
 
 .sourceRail {
   display: flex;
@@ -1404,6 +1472,14 @@
   padding: $spacing-16;
   @include glass-surface($shadow: var(--shadow-sm));
   border-radius: $radius-16;
+}
+
+.sourceRailEmbedded {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .sourceRailHead {
@@ -1425,8 +1501,7 @@
 .sourceRow { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px; align-items: start; padding: 4px; border: 1px solid transparent; border-radius: $radius-8; }
 .sourceRow:hover { background: var(--color-hover); }
 .sourceRowSelected { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 7%, transparent); }
-.sourceSelect { display: flex; min-width: 0; gap: $spacing-8; padding: 7px; border: 0; color: var(--color-text-primary); background: transparent; text-align: left; cursor: pointer; }
-.sourceSelect:disabled { cursor: default; }
+.sourceSelect { display: flex; min-width: 0; gap: $spacing-8; padding: 7px; border: 0; color: var(--color-text-primary); background: transparent; text-align: left; }
 .sourceIndicator { color: var(--color-primary); }
 .sourceText { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .sourceText b { overflow: hidden; font-size: $font-size-14; text-overflow: ellipsis; white-space: nowrap; }
@@ -1443,6 +1518,7 @@
 .createCheckDialog { width: min(620px, calc(100vw - 28px)); max-height: min(720px, calc(100vh - 28px)); overflow-y: auto; }
 .createCheckDialog form,
 .createCheckPanel form { display: flex; flex-direction: column; gap: $spacing-16; }
+.createCheckBody { display: flex; flex-direction: column; gap: $spacing-16; }
 .createCheckPanel,
 .createChooser {
   min-width: 0;
@@ -1466,6 +1542,7 @@
 }
 .inlineBackButton:hover:not(:disabled) { color: var(--color-primary); }
 .inlineBackButton:disabled { opacity: .55; cursor: not-allowed; }
+.inlineBackButton:focus-visible { outline: 3px solid color-mix(in srgb, var(--color-primary) 28%, transparent); outline-offset: 3px; }
 .createChooser { display: flex; min-height: 440px; flex-direction: column; justify-content: center; gap: $spacing-24; }
 .createChooserHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: $spacing-16; }
 .createChooserHeading { max-width: 62ch; }
@@ -1508,8 +1585,18 @@
 .dialogField input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent); }
 .modeFieldset { margin: 0; padding: 0; border: 0; }.modeFieldset legend { margin-bottom: 8px; color: var(--color-text-secondary); font-size: $font-size-12; font-weight: $font-weight-500; }
 .modeChoices { display: grid; gap: $spacing-8; }.modeChoice, .modeChoiceActive { display: flex; gap: 9px; padding: 11px; border: 1px solid var(--color-border); border-radius: $radius-8; cursor: pointer; }.modeChoiceActive { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 7%, transparent); }.modeChoice input, .modeChoiceActive input { margin-top: 3px; accent-color: var(--color-primary); }.modeChoice span, .modeChoiceActive span { display: flex; min-width: 0; flex-direction: column; gap: 3px; }.modeChoice b, .modeChoiceActive b { font-size: $font-size-14; }.modeChoice small, .modeChoiceActive small { color: var(--color-text-muted); font-size: $font-size-12; line-height: 1.4; }
-.modeFields { display: flex; flex-direction: column; gap: $spacing-16; }.dialogChips { display: flex; flex-wrap: wrap; gap: 7px; }.dialogChip, .dialogChipActive { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border: 1px solid var(--color-border); border-radius: $radius-pill; color: var(--color-text-secondary); background: var(--color-surface); font-size: $font-size-12; cursor: pointer; }.dialogChipActive { border-color: var(--color-primary); color: var(--color-primary-on-surface); background: color-mix(in srgb, var(--color-primary) 9%, transparent); }.dialogChip input { accent-color: var(--color-primary); }
-.existingPicker { display: flex; flex-direction: column; gap: $spacing-8; }.existingPickerHead { display: flex; align-items: center; justify-content: space-between; gap: $spacing-8; color: var(--color-text-secondary); font-size: $font-size-12; font-weight: $font-weight-500; }.existingList { display: flex; max-height: 200px; flex-direction: column; gap: 5px; overflow-y: auto; }.existingRow, .existingRowActive { display: flex; gap: 8px; padding: 8px; border: 1px solid var(--color-border); border-radius: $radius-8; cursor: pointer; }.existingRowActive { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 7%, transparent); }.existingRow input, .existingRowActive input { accent-color: var(--color-primary); }.existingRow span, .existingRowActive span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }.existingRow b, .existingRowActive b { overflow: hidden; font-size: $font-size-12; text-overflow: ellipsis; white-space: nowrap; }.existingRow small, .existingRowActive small { color: var(--color-text-muted); font-size: $font-size-12; }.dialogError { margin: 0; color: var(--color-danger); font-size: $font-size-12; }
+.modeFields { display: flex; flex-direction: column; gap: $spacing-16; }
+.dialogChips { display: flex; flex-wrap: wrap; gap: 7px; }.dialogChip, .dialogChipActive { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border: 1px solid var(--color-border); border-radius: $radius-pill; color: var(--color-text-secondary); background: var(--color-surface); font-size: $font-size-12; cursor: pointer; }.dialogChipActive { border-color: var(--color-primary); color: var(--color-primary-on-surface); background: color-mix(in srgb, var(--color-primary) 9%, transparent); }.dialogChip input { accent-color: var(--color-primary); }
+.existingPicker { display: flex; flex-direction: column; gap: $spacing-8; }
+.existingPickerHead { display: flex; align-items: center; justify-content: space-between; gap: $spacing-8; color: var(--color-text-secondary); font-size: $font-size-12; font-weight: $font-weight-500; }
+.existingList { display: flex; max-height: 200px; flex-direction: column; gap: 5px; overflow-y: auto; }
+.existingRow, .existingRowActive { display: flex; gap: 8px; padding: 8px; border: 1px solid var(--color-border); border-radius: $radius-8; cursor: pointer; }
+.existingRowActive { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 7%, transparent); }
+.existingRow input, .existingRowActive input { accent-color: var(--color-primary); }
+.existingRow span, .existingRowActive span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.existingRow b, .existingRowActive b { overflow: hidden; font-size: $font-size-12; text-overflow: ellipsis; white-space: nowrap; }
+.existingRow small, .existingRowActive small { color: var(--color-text-muted); font-size: $font-size-12; }
+.dialogError { margin: 0; color: var(--color-danger); font-size: $font-size-12; }
 .uploadSourceBlock,
 .savedRubricBlock { display: flex; flex-direction: column; gap: $spacing-8; }
 .uploadEnvironmentHint,
@@ -1528,25 +1615,6 @@
 
 .sessionMain {
   min-width: 0;
-}
-
-.sessionHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: $spacing-16;
-  margin-bottom: $spacing-16;
-
-  h3,
-  p {
-    margin: 0;
-  }
-
-  p {
-    margin-top: 4px;
-    color: var(--color-text-muted);
-    font-size: $font-size-12;
-  }
 }
 
 .proposalCard {
@@ -1618,14 +1686,6 @@
   gap: $spacing-8;
 }
 
-.metadataGrid {
-  display: grid;
-  // 兩欄合計最小 496px；容器窄於此值時改單欄，避免評分環境 chips 被裁切
-  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
-  gap: $spacing-16;
-  align-items: end;
-}
-
 .runHistory {
   display: grid;
   gap: $spacing-8;
@@ -1668,11 +1728,36 @@
   .createChoice { min-height: 190px; padding: $spacing-16; }
   .createCheckPanel { padding: $spacing-16; }
   .existingPickerHead { align-items: flex-start; flex-direction: column; }
+  .rubricTableWrap { margin-right: -$spacing-16; margin-left: -$spacing-16; }
+  .rubricTable { min-width: 780px; }
+  .rubricTable th,
+  .rubricTableRow > td { padding-right: $spacing-8; padding-left: $spacing-8; }
+  .rubricDetailRow > td { padding-right: $spacing-8; padding-left: $spacing-8; }
+  .rubricDetailHead { flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .createChoice { transition-duration: .01ms; }
   .createChoice:hover { transform: none; }
+  .sessionTitleViewport:hover .sessionTitleOverflowing,
+  .sessionItem:focus-visible .sessionTitleOverflowing,
+  .sessionItemActive:focus-visible .sessionTitleOverflowing {
+    animation: none;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transform: none;
+    transition-duration: .01ms;
+    will-change: auto;
+  }
+}
+
+.chatAttachButton {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
 
 /* ── 表單欄位 ── */
@@ -1698,4 +1783,21 @@
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
     }
   }
+}
+
+/* 送出時未填的欄位：紅框標示並被聚焦（雙類名壓過 .dialogField input 這類巢狀選擇器） */
+.fieldInvalid.fieldInvalid {
+  border-color: var(--color-danger);
+
+  &:focus {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 12%, transparent);
+  }
+}
+
+/* 群組型欄位（模式選擇、環境 chips、既有檔案清單）沒有自己的邊框，用外框標紅 */
+.groupInvalid.groupInvalid {
+  outline: 1px solid var(--color-danger);
+  outline-offset: 4px;
+  border-radius: $radius-8;
 }

@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from app.core.i18n import t
+
 
 @dataclass(frozen=True)
 class EffectiveQuota:
@@ -63,16 +65,14 @@ def check_quota_delta(
     """
     violations: list[str] = []
     checks = [
-        ("CPU", usage.cpu_cores, delta_cores, quota.max_cpu_cores, "cores"),
-        ("記憶體", usage.memory_mb, delta_memory_mb, quota.max_memory_mb, "MB"),
-        ("磁碟", usage.disk_gb, delta_disk_gb, quota.max_disk_gb, "GB"),
-        ("實例數", usage.instances, delta_instances, quota.max_instances, "台"),
+        ("quota.violation.cpu", usage.cpu_cores, delta_cores, quota.max_cpu_cores),
+        ("quota.violation.memory", usage.memory_mb, delta_memory_mb, quota.max_memory_mb),
+        ("quota.violation.disk", usage.disk_gb, delta_disk_gb, quota.max_disk_gb),
+        ("quota.violation.instances", usage.instances, delta_instances, quota.max_instances),
     ]
-    for label, used, delta, limit, unit in checks:
+    for key, used, delta, limit in checks:
         if limit == UNLIMITED:
             continue
         if delta > 0 and used + delta > limit:
-            violations.append(
-                f"{label}超出配額（目前 {used} + 新增 {delta} > 上限 {limit} {unit}）"
-            )
+            violations.append(t(key, used=used, delta=delta, limit=limit))
     return violations

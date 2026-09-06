@@ -5,11 +5,19 @@ from __future__ import annotations
 import json
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, desc, select
 
+from app.ai.teacher_judge.attachment_service import (
+    MAX_ATTACHMENT_COUNT,
+    attachment_context,
+    attachment_public,
+    create_attachment,
+    delete_attachment,
+    get_pending_attachments,
+)
 from app.ai.teacher_judge.file_service import create_blank_file
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
@@ -17,6 +25,7 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeScriptRunCreateRequest,
     TeacherJudgeScriptRunPublic,
     TeacherJudgeScriptRunSummary,
+    TeacherJudgeSessionAttachmentUploadResponse,
     TeacherJudgeSessionChatResponse,
     TeacherJudgeSessionCreateRequest,
     TeacherJudgeSessionForkRequest,
@@ -38,6 +47,7 @@ from app.ai.teacher_judge.session_service import (
     fork_session_data,
     get_session,
     maybe_summarize,
+    message_attachments,
     message_public,
     redact_message_content,
     require_selected_file,
@@ -48,8 +58,10 @@ from app.ai.teacher_judge.session_service import (
 from app.ai.teacher_judge.template_command_service import get_enabled_template_commands
 from app.api.deps import InstructorUser, SessionDep
 from app.core.authorizers import require_teaching_access
+from app.core.i18n import t
 from app.infrastructure.worker import submit
 from app.models import TeachingClass, TeachingClassWeek
+from app.models.teacher_judge_attachment import TeacherJudgeSessionAttachment
 from app.models.teacher_judge_script_artifact import TeacherJudgeScriptArtifact
 from app.models.teacher_judge_script_run import (
     TeacherJudgeScriptRun,
@@ -81,7 +93,7 @@ def _selected_file_conflict() -> HTTPException:
         status_code=409,
         detail={
             "code": "teacher_judge_file_in_use",
-            "message": "這份評分表已被其他檢查使用；請使用「重構」建立獨立副本，或上傳新的評分表。",
+            "message": t("teacherJudgeSessions.selectedFileInUse"),
         },
     )
 
@@ -89,7 +101,9 @@ def _selected_file_conflict() -> HTTPException:
 def _access(db: SessionDep, class_id: uuid.UUID, user: InstructorUser) -> None:
     teaching_class = db.get(TeachingClass, class_id)
     if not teaching_class:
-        raise HTTPException(status_code=404, detail="找不到班級。")
+        raise HTTPException(
+            status_code=404, detail=t("teacherJudgeSessions.classNotFound")
+        )
     require_teaching_access(user, teaching_class.owner_id)
 
 
@@ -100,7 +114,9 @@ def _validate_week(
         return
     week = db.get(TeachingClassWeek, week_id)
     if week is None or week.class_id != class_id:
-        raise HTTPException(status_code=400, detail="選擇的週次不屬於這個班級。")
+        raise HTTPException(
+            status_code=400, detail=t("teacherJudgeSessions.weekNotInClass")
+        )
 
 
 @router.get("/", response_model=list[TeacherJudgeSessionPublic])
@@ -218,7 +234,9 @@ def update_session(
     item = get_session(session, teaching_class_id, session_id)
     changes = payload.model_fields_set
     if item.status == TeacherJudgeSessionStatus.archived and changes - {"status"}:
-        raise HTTPException(status_code=409, detail="已封存的檢查為唯讀。")
+        raise HTTPException(
+            status_code=409, detail=t("teacherJudgeSessions.archivedReadOnly")
+        )
     if "title" in changes and payload.title is not None:
         item.title = payload.title.strip()
     if "teaching_class_week_id" in changes:
@@ -241,7 +259,9 @@ def update_session(
             item.pinned_at = None
     if payload.is_pinned is not None:
         if item.status == TeacherJudgeSessionStatus.archived and payload.is_pinned:
-            raise HTTPException(status_code=409, detail="已封存的檢查不能釘選。")
+            raise HTTPException(
+                status_code=409, detail=t("teacherJudgeSessions.archivedCannotPin")
+            )
         item.pinned_at = get_datetime_utc() if payload.is_pinned else None
 
     item.updated_at = get_datetime_utc()
@@ -286,6 +306,67 @@ def delete_session(
     delete_session_data(session, item)
 
 
+@router.post(
+    "/{session_id}/attachments",
+    response_model=TeacherJudgeSessionAttachmentUploadResponse,
+)
+async def upload_session_attachment(
+    teaching_class_id: uuid.UUID,
+    session_id: uuid.UUID,
+    session: SessionDep,
+    current_user: InstructorUser,
+    file: UploadFile = File(...),
+) -> TeacherJudgeSessionAttachmentUploadResponse:
+    _access(session, teaching_class_id, current_user)
+    item = get_session(session, teaching_class_id, session_id)
+    ensure_active(item)
+    pending_count = len(
+        session.exec(
+            select(TeacherJudgeSessionAttachment).where(
+                TeacherJudgeSessionAttachment.session_id == item.id,
+                TeacherJudgeSessionAttachment.message_id.is_(None),
+            )
+        ).all()
+    )
+    if pending_count >= MAX_ATTACHMENT_COUNT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"單次最多準備 {MAX_ATTACHMENT_COUNT} 個附件。",
+        )
+    file_bytes = await file.read()
+    try:
+        attachment = create_attachment(
+            session,
+            session_id=item.id,
+            uploaded_by=current_user.id,
+            filename=file.filename,
+            media_type=file.content_type,
+            file_bytes=file_bytes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    return TeacherJudgeSessionAttachmentUploadResponse(
+        attachment=attachment_public(attachment)
+    )
+
+
+@router.delete("/{session_id}/attachments/{attachment_id}", status_code=204)
+def delete_session_attachment(
+    teaching_class_id: uuid.UUID,
+    session_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    session: SessionDep,
+    current_user: InstructorUser,
+) -> None:
+    _access(session, teaching_class_id, current_user)
+    item = get_session(session, teaching_class_id, session_id)
+    ensure_active(item)
+    attachment = session.get(TeacherJudgeSessionAttachment, attachment_id)
+    if not attachment or attachment.session_id != item.id:
+        raise HTTPException(status_code=404, detail="找不到附件。")
+    delete_attachment(session, attachment)
+
+
 @router.get(
     "/{session_id}/messages", response_model=list[TeacherJudgeSessionMessagePublic]
 )
@@ -305,7 +386,9 @@ def list_messages(
     if before:
         cursor = session.get(TeacherJudgeSessionMessage, before)
         if not cursor or cursor.session_id != session_id:
-            raise HTTPException(status_code=400, detail="訊息游標無效。")
+            raise HTTPException(
+                status_code=400, detail=t("teacherJudgeSessions.invalidMessageCursor")
+            )
         query = query.where(
             (TeacherJudgeSessionMessage.created_at < cursor.created_at)
             | (
@@ -322,7 +405,7 @@ def list_messages(
         )
     )
     rows.reverse()
-    return [message_public(row) for row in rows]
+    return [message_public(row, message_attachments(session, row.id)) for row in rows]
 
 
 @router.delete(
@@ -363,10 +446,13 @@ async def create_message(
             status_code=409,
             detail={
                 "code": "teacher_judge_analysis_revision_conflict",
-                "message": "評分表已被其他變更更新，請重新載入後再請 AI 提案。",
+                "message": t("teacherJudgeSessions.analysisRevisionConflict"),
                 "analysis_revision": file.analysis_revision,
             },
         )
+    if not payload.content.strip() and not payload.attachment_ids:
+        raise HTTPException(status_code=422, detail="訊息或附件至少需要一項。")
+    attachments = get_pending_attachments(session, item.id, payload.attachment_ids)
     user_message = TeacherJudgeSessionMessage(
         session_id=item.id,
         role=TeacherJudgeMessageRole.user,
@@ -375,11 +461,19 @@ async def create_message(
         created_by=current_user.id,
     )
     session.add(user_message)
+    session.flush()
+    for attachment in attachments:
+        attachment.message_id = user_message.id
+        session.add(attachment)
     session.commit()
     session.refresh(user_message)
     try:
         reply, proposal, metrics = await chat_with_rubric(
-            bounded_history(session, item.id),
+            bounded_history(
+                session,
+                item.id,
+                exclude_attachments_for_message_id=user_message.id,
+            ),
             json.dumps(file.analysis_json, ensure_ascii=False) if file else "{}",
             is_refine=payload.is_refine,
             template_key=file.template_key if file else "linux",
@@ -389,6 +483,7 @@ async def create_message(
                 include_cross_template=True,
             ),
             environment_keys=file.environment_keys if file else None,
+            attachment_context=attachment_context(attachments),
         )
         # Without a selected rubric the conversation is general assistance only;
         # do not let an unconstrained model response create an unreviewed proposal.
@@ -429,7 +524,7 @@ async def create_message(
     session.refresh(assistant)
     await maybe_summarize(session, item, file)
     return TeacherJudgeSessionChatResponse(
-        user_message=message_public(user_message),
+        user_message=message_public(user_message, attachments),
         assistant_message=message_public(assistant),
         rubric_proposal=proposal,
         base_revision=base_revision,
@@ -525,7 +620,9 @@ def get_session_run(
         )
     ).first()
     if not run:
-        raise HTTPException(status_code=404, detail="找不到這項檢查的執行結果。")
+        raise HTTPException(
+            status_code=404, detail=t("teacherJudgeSessions.runResultNotFound")
+        )
     return _run_to_public(run)
 
 
@@ -550,7 +647,9 @@ def create_session_run(
         or artifact.teaching_class_id != teaching_class_id
         or artifact.session_id != session_id
     ):
-        raise HTTPException(status_code=404, detail="找不到這項檢查的腳本。")
+        raise HTTPException(
+            status_code=404, detail=t("teacherJudgeSessions.scriptNotFound")
+        )
     run = create_script_run(
         session=session,
         teaching_class_id=teaching_class_id,

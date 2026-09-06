@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./TemplatesPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import EmptyState from "../../../components/EmptyState/EmptyState";
@@ -13,10 +14,10 @@ import TemplateFormDialog from "./TemplateFormDialog";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-function visibilityLabel(template) {
+function visibilityLabel(template, t) {
   return template.visibility === "global"
-    ? "全部可見"
-    : "私人";
+    ? t("TemplatesPage.visibilityGlobal")
+    : t("TemplatesPage.visibilityPrivate");
 }
 
 const formatBytes = (bytes) => {
@@ -27,6 +28,7 @@ const formatBytes = (bytes) => {
 
 /** 使用手冊（附件）瀏覽與下載 */
 function ManualDialog({ template, closing = false, onClose }) {
+  const { t } = useTranslation("resource");
   const toast = useToast();
   const [attachments, setAttachments] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
@@ -37,14 +39,14 @@ function ManualDialog({ template, closing = false, onClose }) {
       .then((res) => !cancelled && setAttachments(res?.data ?? []))
       .catch((e) => {
         if (!cancelled) {
-          toast.error(e?.message ?? "附件載入失敗");
+          toast.error(e?.message ?? t("TemplatesPage.attachmentLoadFailed"));
           setAttachments([]);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [template.id, toast]);
+  }, [template.id, toast, t]);
 
   const handleDownload = async (attachment) => {
     setDownloadingId(attachment.id);
@@ -52,7 +54,7 @@ function ManualDialog({ template, closing = false, onClose }) {
       const blob = await TemplatesService.downloadAttachment(template.id, attachment.id);
       downloadBlob(blob, attachment.filename);
     } catch (e) {
-      toast.error(e?.message ?? "下載失敗");
+      toast.error(e?.message ?? t("TemplatesPage.downloadFailed"));
     } finally {
       setDownloadingId(null);
     }
@@ -66,12 +68,12 @@ function ManualDialog({ template, closing = false, onClose }) {
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <span className={styles.modalTitle}>
           <MIcon name="description" size={20} />
-          「{template.name}」使用手冊
+          {t("TemplatesPage.manualTitle", { name: template.name })}
         </span>
         {attachments === null ? (
-          <LoadingState text="載入附件中…" />
+          <LoadingState text={t("TemplatesPage.loadingAttachments")} />
         ) : attachments.length === 0 ? (
-          <p className={styles.stateText}>此範本目前沒有附件。</p>
+          <p className={styles.stateText}>{t("TemplatesPage.noAttachments")}</p>
         ) : (
           <div className={styles.attachList}>
             {attachments.map((a) => (
@@ -86,7 +88,7 @@ function ManualDialog({ template, closing = false, onClose }) {
                   onClick={() => handleDownload(a)}
                 >
                   <MIcon name="download" size={15} />
-                  {downloadingId === a.id ? "下載中…" : "下載"}
+                  {downloadingId === a.id ? t("TemplatesPage.downloading") : t("TemplatesPage.download")}
                 </button>
               </div>
             ))}
@@ -94,7 +96,7 @@ function ManualDialog({ template, closing = false, onClose }) {
         )}
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnSecondary} onClick={onClose}>
-            關閉
+            {t("TemplatesPage.close")}
           </button>
         </div>
       </div>
@@ -104,6 +106,7 @@ function ManualDialog({ template, closing = false, onClose }) {
 
 /** 單列的「⋯」操作選單 */
 function RowMenu({ template, cycleBusy, onClone, onEdit, onManual, onRetry, onCycle, onDelete, onClose, anchorRef, closing = false }) {
+  const { t } = useTranslation("resource");
   const ref = useRef(null);
 
   useEffect(() => {
@@ -123,7 +126,7 @@ function RowMenu({ template, cycleBusy, onClone, onEdit, onManual, onRetry, onCy
         onClick={() => { onClose(); onClone(template); }}
       >
         <MIcon name="content_copy" size={15} />
-        克隆開通
+        {t("TemplatesPage.menuClone")}
       </button>
       <button
         type="button"
@@ -131,7 +134,7 @@ function RowMenu({ template, cycleBusy, onClone, onEdit, onManual, onRetry, onCy
         onClick={() => { onClose(); onEdit(template); }}
       >
         <MIcon name="edit" size={15} />
-        編輯 / 可見範圍
+        {t("TemplatesPage.menuEdit")}
       </button>
       {template.attachment_count > 0 && (
         <button
@@ -140,7 +143,7 @@ function RowMenu({ template, cycleBusy, onClone, onEdit, onManual, onRetry, onCy
           onClick={() => { onClose(); onManual(template); }}
         >
           <MIcon name="description" size={15} />
-          使用手冊（{template.attachment_count}）
+          {t("TemplatesPage.menuManual", { count: template.attachment_count })}
         </button>
       )}
       <div className={styles.rowMenuDivider} />
@@ -152,7 +155,7 @@ function RowMenu({ template, cycleBusy, onClone, onEdit, onManual, onRetry, onCy
           onClick={() => { onClose(); onRetry(template.id); }}
         >
           <MIcon name="restart_alt" size={15} />
-          重新轉換
+          {t("TemplatesPage.menuRetry")}
         </button>
       )}
       {template.status === "ready" && (
@@ -163,7 +166,7 @@ function RowMenu({ template, cycleBusy, onClone, onEdit, onManual, onRetry, onCy
           onClick={() => { onClose(); onCycle(template.id, "start"); }}
         >
           <MIcon name="sync" size={15} />
-          開始更新循環
+          {t("TemplatesPage.menuStartCycle")}
         </button>
       )}
       {template.status === "updating" && (
@@ -175,7 +178,7 @@ function RowMenu({ template, cycleBusy, onClone, onEdit, onManual, onRetry, onCy
             onClick={() => { onClose(); onCycle(template.id, "finish"); }}
           >
             <MIcon name="sync" size={15} />
-            完成更新（轉為新版）
+            {t("TemplatesPage.menuFinishCycle")}
           </button>
           <button
             type="button"
@@ -183,7 +186,7 @@ function RowMenu({ template, cycleBusy, onClone, onEdit, onManual, onRetry, onCy
             disabled={cycleBusy}
             onClick={() => { onClose(); onCycle(template.id, "cancel"); }}
           >
-            取消更新循環
+            {t("TemplatesPage.menuCancelCycle")}
           </button>
         </>
       )}
@@ -194,13 +197,14 @@ function RowMenu({ template, cycleBusy, onClone, onEdit, onManual, onRetry, onCy
         onClick={() => { onClose(); onDelete(template); }}
       >
         <MIcon name="delete_outline" size={15} />
-        刪除範本
+        {t("TemplatesPage.menuDelete")}
       </button>
     </div>
   );
 }
 
 function ManagementRow({ template, cycleBusy, onClone, onEdit, onManual, onRetry, onCycle, onDelete }) {
+  const { t } = useTranslation("resource");
   const [menuOpen, setMenuOpen] = useState(false);
   const menu = useDialogPresence(menuOpen, 130);
   const menuBtnRef = useRef(null);
@@ -211,9 +215,9 @@ function ManagementRow({ template, cycleBusy, onClone, onEdit, onManual, onRetry
         <div className={styles.nameCell}>
           <span className={styles.namePrimary}>{template.name}</span>
           {template.pve_exists === false && template.status === "ready" && (
-            <span className={styles.pveMissing} title="PVE 端找不到這個範本，可能已被手動刪除">
+            <span className={styles.pveMissing} title={t("TemplatesPage.pveMissingTitle")}>
               <MIcon name="warning" size={13} />
-              PVE 不存在
+              {t("TemplatesPage.pveMissingLabel")}
             </span>
           )}
         </div>
@@ -232,9 +236,9 @@ function ManagementRow({ template, cycleBusy, onClone, onEdit, onManual, onRetry
         <TemplateStatusBadge status={template.status} />
       </td>
       <td className={`${styles.td} ${styles.mutedCell}`}>
-        {visibilityLabel(template)}
+        {visibilityLabel(template, t)}
       </td>
-      <td className={`${styles.td} ${styles.mutedCell}`}>v{template.version}</td>
+      <td className={`${styles.td} ${styles.mutedCell}`}>{t("TemplatesPage.versionLabel", { version: template.version })}</td>
       <td className={`${styles.td} ${styles.tdMenu}`}>
         <div className={styles.menuWrap}>
           {menu.open && (
@@ -257,7 +261,7 @@ function ManagementRow({ template, cycleBusy, onClone, onEdit, onManual, onRetry
             type="button"
             className={styles.menuBtn}
             onClick={() => setMenuOpen((v) => !v)}
-            title="更多操作"
+            title={t("TemplatesPage.moreActionsTitle")}
           >
             <MIcon name="more_horiz" size={18} />
           </button>
@@ -268,6 +272,7 @@ function ManagementRow({ template, cycleBusy, onClone, onEdit, onManual, onRetry
 }
 
 export default function TemplatesPage() {
+  const { t } = useTranslation("resource");
   const toast = useToast();
   const confirm = useConfirm();
   const [templates, setTemplates] = useState(null);
@@ -292,11 +297,11 @@ export default function TemplatesPage() {
       setTemplates(res?.data ?? []);
       return res?.data ?? [];
     } catch (e) {
-      toast.error(e?.message ?? "載入範本失敗");
+      toast.error(e?.message ?? t("TemplatesPage.loadFailed"));
       setTemplates((prev) => prev ?? []);
       return [];
     }
-  }, [toast]);
+  }, [toast, t]);
 
   /** 有 creating/updating 中的範本時 4 秒輪詢，否則 30 秒 */
   useEffect(() => {
@@ -305,7 +310,7 @@ export default function TemplatesPage() {
     const tick = async () => {
       const list = await load();
       if (cancelled) return;
-      const active = list.some((t) => t.status === "creating" || t.status === "updating");
+      const active = list.some((tpl) => tpl.status === "creating" || tpl.status === "updating");
       timerRef.current = setTimeout(tick, active ? 4_000 : 30_000);
     };
 
@@ -325,10 +330,9 @@ export default function TemplatesPage() {
   const handleCycle = async (templateId, action) => {
     if (action === "finish") {
       const ok = await confirm({
-        title: "完成更新並轉為新版範本？",
-        message:
-          "暫存母機會被關機，且其所有快照（備份點）會被移除，接著轉為新版唯讀範本並汰換舊版。此動作無法復原。",
-        confirmText: "關機並轉換",
+        title: t("TemplatesPage.finishCycleConfirmTitle"),
+        message: t("TemplatesPage.finishCycleConfirmMessage"),
+        confirmText: t("TemplatesPage.shutdownAndConvert"),
         danger: true,
       });
       if (!ok) return;
@@ -340,14 +344,14 @@ export default function TemplatesPage() {
       else await TemplatesService.cancelUpdateCycle(templateId);
       toast.success(
         action === "start"
-          ? "已開始更新循環：系統正在複製一台暫存母機，完成後會出現在你的資源列表，修改完再回到此頁按「完成更新」"
+          ? t("TemplatesPage.cycleStartedToast")
           : action === "finish"
-            ? "正在把暫存母機轉為新版範本"
-            : "已取消更新循環，暫存母機將被回收",
+            ? t("TemplatesPage.cycleFinishedToast")
+            : t("TemplatesPage.cycleCancelledToast"),
       );
       await load();
     } catch (e) {
-      toast.error(e?.message ?? "操作失敗");
+      toast.error(e?.message ?? t("TemplatesPage.cycleActionFailed"));
     } finally {
       setCycleBusy(false);
     }
@@ -355,20 +359,19 @@ export default function TemplatesPage() {
 
   const handleRetry = async (templateId) => {
     const ok = await confirm({
-      title: "重新轉換為範本？",
-      message:
-        "母機會被關機，且其所有快照（備份點）會被移除，再轉為唯讀範本。此動作無法復原。",
-      confirmText: "關機並轉換",
+      title: t("TemplatesPage.retryConfirmTitle"),
+      message: t("TemplatesPage.retryConfirmMessage"),
+      confirmText: t("TemplatesPage.shutdownAndConvert"),
       danger: true,
     });
     if (!ok) return;
     setCycleBusy(true);
     try {
       await TemplatesService.retry(templateId);
-      toast.success("已重新送出轉換；母機會先安全關機、移除所有快照，再轉為唯讀範本");
+      toast.success(t("TemplatesPage.retryToast"));
       await load();
     } catch (e) {
-      toast.error(e?.message ?? "重新轉換失敗");
+      toast.error(e?.message ?? t("TemplatesPage.retryFailed"));
     } finally {
       setCycleBusy(false);
     }
@@ -378,11 +381,11 @@ export default function TemplatesPage() {
     setDeleting(true);
     try {
       await TemplatesService.remove(deleteTarget.id);
-      toast.success("刪除任務已送出，進度請見側欄「背景任務」");
+      toast.success(t("TemplatesPage.deleteQueuedToast"));
       setDeleteTarget(null);
       await load();
     } catch (e) {
-      toast.error(e?.message ?? "刪除範本失敗");
+      toast.error(e?.message ?? t("TemplatesPage.deleteFailed"));
       setDeleteTarget(null);
     } finally {
       setDeleting(false);
@@ -393,7 +396,7 @@ export default function TemplatesPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="機器範本" subtitle="把設定好的母機轉為範本；設為「全部可見」後，學生就能在申請表單的資源設定選用">
+      <PageHeader title={t("TemplatesPage.pageTitle")} subtitle={t("TemplatesPage.pageSubtitle")}>
         <div className={styles.pageActions}>
           <button
             type="button"
@@ -402,7 +405,7 @@ export default function TemplatesPage() {
             disabled={refreshing}
           >
             <MIcon name="sync" size={16} />
-            {refreshing ? "載入中…" : "重新整理"}
+            {refreshing ? t("TemplatesPage.refreshing") : t("TemplatesPage.refresh")}
           </button>
           <button
             type="button"
@@ -410,18 +413,18 @@ export default function TemplatesPage() {
             onClick={() => setCreateOpen(true)}
           >
             <MIcon name="add" size={16} />
-            從 VM 建立範本
+            {t("TemplatesPage.createFromVm")}
           </button>
         </div>
       </PageHeader>
 
       {templates === null ? (
-        <LoadingState fullPage text="載入範本中…" />
+        <LoadingState fullPage text={t("TemplatesPage.loadingTemplates")} />
       ) : list.length === 0 ? (
         <div className={styles.card}>
           <EmptyState
             icon="widgets"
-            title="還沒有任何範本"
+            title={t("TemplatesPage.emptyTitle")}
           />
         </div>
       ) : (
@@ -429,12 +432,12 @@ export default function TemplatesPage() {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th className={styles.th}>名稱</th>
-                <th className={styles.th}>VMID</th>
-                <th className={styles.th}>類型</th>
-                <th className={styles.th}>狀態</th>
-                <th className={styles.th}>可見範圍</th>
-                <th className={styles.th}>版本</th>
+                <th className={styles.th}>{t("TemplatesPage.columnName")}</th>
+                <th className={styles.th}>{t("TemplatesPage.columnVmid")}</th>
+                <th className={styles.th}>{t("TemplatesPage.columnType")}</th>
+                <th className={styles.th}>{t("TemplatesPage.columnStatus")}</th>
+                <th className={styles.th}>{t("TemplatesPage.columnVisibility")}</th>
+                <th className={styles.th}>{t("TemplatesPage.columnVersion")}</th>
                 <th className={styles.th} />
               </tr>
             </thead>
@@ -494,10 +497,9 @@ export default function TemplatesPage() {
           onClick={() => setDeleteTarget(null)}
         >
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <span className={styles.modalTitle}>刪除範本「{deleteDialog.item.name}」？</span>
+            <span className={styles.modalTitle}>{t("TemplatesPage.deleteConfirmTitle", { name: deleteDialog.item.name })}</span>
             <p className={styles.modalDesc}>
-              PVE 端的範本磁碟會一併刪除，動作無法復原。如果還有從此範本克隆出的機器（linked
-              clone），系統會拒絕刪除。
+              {t("TemplatesPage.deleteConfirmDesc")}
             </p>
             <div className={styles.modalActions}>
               <button
@@ -505,7 +507,7 @@ export default function TemplatesPage() {
                 className={styles.btnSecondary}
                 onClick={() => setDeleteTarget(null)}
               >
-                取消
+                {t("TemplatesPage.cancel")}
               </button>
               <button
                 type="button"
@@ -513,7 +515,7 @@ export default function TemplatesPage() {
                 disabled={deleting}
                 onClick={handleDelete}
               >
-                {deleting ? "刪除中…" : "確認刪除"}
+                {deleting ? t("TemplatesPage.deleting") : t("TemplatesPage.confirmDelete")}
               </button>
             </div>
           </div>

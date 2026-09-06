@@ -14,6 +14,7 @@ from ldap3 import Connection, Server
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
+from app.core.i18n import t
 from app.core.security import decrypt_value
 from app.exceptions import (
     AppError,
@@ -25,8 +26,13 @@ from app.models import LdapConfig
 
 logger = logging.getLogger(__name__)
 
-_INVALID_CREDENTIALS = "帳號或密碼錯誤"
-_SERVER_UNAVAILABLE = "無法連線 LDAP 伺服器，請聯絡管理員"
+
+def _invalid_credentials() -> str:
+    return t("ldap.invalidCredentials")
+
+
+def _server_unavailable() -> str:
+    return t("ldap.serverUnavailable")
 
 
 @dataclass(frozen=True)
@@ -39,7 +45,7 @@ class LdapUserInfo:
 
 def _build_server(config: LdapConfig) -> Server:
     if not config.server_uri:
-        raise BadRequestError("LDAP server URI is not configured")
+        raise BadRequestError(t("ldap.serverUriNotConfigured"))
     return Server(
         config.server_uri,
         connect_timeout=config.connect_timeout_seconds,
@@ -51,7 +57,7 @@ def _service_connection(config: LdapConfig, server: Server) -> Connection:
     try:
         bind_password = decrypt_value(config.encrypted_bind_password)
     except Exception as exc:
-        raise BadRequestError("LDAP bind password cannot be decrypted") from exc
+        raise BadRequestError(t("ldap.bindPasswordDecryptFailed")) from exc
     try:
         conn = Connection(
             server,
@@ -62,15 +68,13 @@ def _service_connection(config: LdapConfig, server: Server) -> Connection:
         if config.use_starttls:
             conn.start_tls()
         if not conn.bind():
-            raise UpstreamServiceError(
-                "LDAP service bind 失敗，請檢查 bind DN 與密碼"
-            )
+            raise UpstreamServiceError(t("ldap.serviceBindFailed"))
         return conn
     except AppError:
         raise
     except LDAPException as exc:
         logger.warning("LDAP service bind failed: %s", exc)
-        raise UpstreamServiceError(_SERVER_UNAVAILABLE) from exc
+        raise UpstreamServiceError(_server_unavailable()) from exc
 
 
 def test_bind(config: LdapConfig) -> None:
@@ -89,7 +93,7 @@ def authenticate_user(
     連線類問題拋 AppError(502)。
     """
     if not username or not password:
-        raise AuthenticationError(_INVALID_CREDENTIALS)
+        raise AuthenticationError(_invalid_credentials())
 
     server = _build_server(config)
     conn = _service_connection(config, server)
@@ -106,9 +110,9 @@ def authenticate_user(
             )
         except LDAPException as exc:
             logger.warning("LDAP search failed: %s", exc)
-            raise UpstreamServiceError(_SERVER_UNAVAILABLE) from exc
+            raise UpstreamServiceError(_server_unavailable()) from exc
         if not found or not conn.entries:
-            raise AuthenticationError(_INVALID_CREDENTIALS)
+            raise AuthenticationError(_invalid_credentials())
 
         entry = conn.entries[0]
         user_dn = str(entry.entry_dn)
@@ -121,7 +125,7 @@ def authenticate_user(
         email = _first(config.email_attribute)
         if not email:
             logger.warning("LDAP user %s has no %s attribute", user_dn, config.email_attribute)
-            raise AuthenticationError(_INVALID_CREDENTIALS)
+            raise AuthenticationError(_invalid_credentials())
         full_name = _first(config.name_attribute)
         groups = [str(g) for g in (raw.get("memberOf") or [])]
     finally:
@@ -138,15 +142,15 @@ def authenticate_user(
         if config.use_starttls:
             user_conn.start_tls()
         if not user_conn.bind():
-            raise AuthenticationError(_INVALID_CREDENTIALS)
+            raise AuthenticationError(_invalid_credentials())
         user_conn.unbind()  # type: ignore[no-untyped-call]
     except AuthenticationError:
         raise
     except LDAPBindError as exc:
-        raise AuthenticationError(_INVALID_CREDENTIALS) from exc
+        raise AuthenticationError(_invalid_credentials()) from exc
     except LDAPException as exc:
         logger.warning("LDAP user bind failed: %s", exc)
-        raise UpstreamServiceError(_SERVER_UNAVAILABLE) from exc
+        raise UpstreamServiceError(_server_unavailable()) from exc
 
     return LdapUserInfo(dn=user_dn, email=email, full_name=full_name, groups=groups)
 

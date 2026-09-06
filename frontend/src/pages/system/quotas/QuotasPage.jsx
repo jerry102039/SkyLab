@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./QuotasPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -10,32 +11,37 @@ import { useToast } from "../../../hooks/useToast";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-// fallback：取消「無限制」勾選時回填的預設值；0 = 無限制
-const NUMBER_FIELDS = [
-  { key: "max_cpu_cores", label: "CPU cores", min: 1, max: 256, fallback: 8 },
-  { key: "max_memory_mb", label: "記憶體 (MB)", min: 256, max: 1048576, fallback: 16384 },
-  { key: "max_disk_gb", label: "磁碟 (GB)", min: 1, max: 65536, fallback: 100 },
-  { key: "max_instances", label: "實例數", min: 1, max: 100, fallback: 5 },
-];
+const FIELD_KEYS = ["max_cpu_cores", "max_memory_mb", "max_disk_gb", "max_instances"];
 
 const PICKER_MAX_ROWS = 50;
 
 /** 上限顯示：0 = 無限制。 */
-function fmtLimit(value, unit = "") {
-  if (Number(value) === 0) return "無限制";
+function fmtLimit(value, t, unit = "") {
+  if (Number(value) === 0) return t("QuotasPage.unlimited");
   return unit ? `${value} ${unit}` : String(value);
+}
+
+function useNumberFields() {
+  const { t } = useTranslation("system");
+  // fallback：取消「無限制」勾選時回填的預設值；0 = 無限制
+  return [
+    { key: "max_cpu_cores", label: "CPU cores", min: 1, max: 256, fallback: 8 },
+    { key: "max_memory_mb", label: t("QuotasPage.fieldMemoryMb"), min: 256, max: 1048576, fallback: 16384 },
+    { key: "max_disk_gb", label: t("QuotasPage.fieldDiskGb"), min: 1, max: 65536, fallback: 100 },
+    { key: "max_instances", label: t("QuotasPage.fieldInstances"), min: 1, max: 100, fallback: 5 },
+  ];
 }
 
 /** 只取出與基準值不同的欄位，配合後端 partial 更新。 */
 function changedFields(form, baseline) {
-  return NUMBER_FIELDS.reduce((acc, { key }) => {
+  return FIELD_KEYS.reduce((acc, key) => {
     if (Number(form[key]) !== Number(baseline[key])) acc[key] = Number(form[key]);
     return acc;
   }, {});
 }
 
 function pickNumbers(source) {
-  return NUMBER_FIELDS.reduce((acc, { key }) => {
+  return FIELD_KEYS.reduce((acc, key) => {
     acc[key] = Number(source?.[key] ?? 0);
     return acc;
   }, {});
@@ -43,7 +49,7 @@ function pickNumbers(source) {
 
 /** 表單值正規化：清空的輸入框回退基準值，其餘轉數字。 */
 function normNumbers(form, baseline) {
-  return NUMBER_FIELDS.reduce((acc, { key }) => {
+  return FIELD_KEYS.reduce((acc, key) => {
     const v = form[key];
     acc[key] = v === "" || Number.isNaN(Number(v)) ? Number(baseline[key]) : Number(v);
     return acc;
@@ -52,6 +58,7 @@ function normNumbers(form, baseline) {
 
 /** 上限輸入欄：數字輸入 + 無限制勾選（對應 0）。 */
 function LimitField({ idPrefix, field, value, onChange }) {
+  const { t } = useTranslation("system");
   const { key, label, min, max, fallback } = field;
   const unlimited = value === 0;
   return (
@@ -63,7 +70,7 @@ function LimitField({ idPrefix, field, value, onChange }) {
         min={min}
         max={max}
         value={unlimited ? "" : value}
-        placeholder={unlimited ? "無限制" : undefined}
+        placeholder={unlimited ? t("QuotasPage.unlimited") : undefined}
         disabled={unlimited}
         onChange={(e) =>
           onChange(e.target.value === "" ? "" : Number(e.target.value))
@@ -75,7 +82,7 @@ function LimitField({ idPrefix, field, value, onChange }) {
           checked={unlimited}
           onChange={(e) => onChange(e.target.checked ? 0 : fallback)}
         />
-        無限制
+        {t("QuotasPage.unlimited")}
       </label>
     </div>
   );
@@ -87,6 +94,7 @@ function formatUser(user) {
 
 /* ── 可搜尋的使用者選擇欄位 ───────────────────────────────────────────── */
 function UserPicker({ users, loading, value, onChange }) {
+  const { t } = useTranslation("system");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const list = useDialogPresence(open, 130);
@@ -122,13 +130,13 @@ function UserPicker({ users, loading, value, onChange }) {
 
   return (
     <div className={styles.field} ref={wrapRef}>
-      <label htmlFor="quota-user">使用者</label>
+      <label htmlFor="quota-user">{t("QuotasPage.userLabel")}</label>
       <div className={styles.picker}>
         <input
           id="quota-user"
           autoComplete="off"
           value={query || (selected ? formatUser(selected) : "")}
-          placeholder={loading ? "載入使用者中…" : "輸入姓名或 email 搜尋"}
+          placeholder={loading ? t("QuotasPage.loadingUsers") : t("QuotasPage.userSearchPlaceholder")}
           onFocus={() => setOpen(true)}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -140,7 +148,7 @@ function UserPicker({ users, loading, value, onChange }) {
           <ul className={`${styles.pickerList} ${list.closing ? styles.pickerListOut : ""}`}>
             {matches.length === 0 ? (
               <li className={styles.pickerEmpty}>
-                {loading ? "載入中…" : "查無符合的使用者"}
+                {loading ? t("QuotasPage.loading") : t("QuotasPage.noMatchingUsers")}
               </li>
             ) : (
               matches.map((user) => (
@@ -167,7 +175,9 @@ function UserPicker({ users, loading, value, onChange }) {
 
 /* ── 新增／編輯個人覆寫 ───────────────────────────────────────────────── */
 function QuotaDialog({ mode, quota, candidates, loadingUsers, defaults, closing = false, onClose, onSaved }) {
+  const { t } = useTranslation("system");
   const toast = useToast();
+  const NUMBER_FIELDS = useNumberFields();
   const isEdit = mode === "edit";
   const baseline = useMemo(
     () => pickNumbers(isEdit ? quota : defaults),
@@ -189,17 +199,17 @@ function QuotaDialog({ mode, quota, candidates, loadingUsers, defaults, closing 
           return;
         }
         await QuotasService.update(quota.id, patch);
-        toast.success("配額已更新");
+        toast.success(t("QuotasPage.toastUpdated"));
       } else {
         await QuotasService.create({
           user_id: userId,
           ...normNumbers(form, baseline),
         });
-        toast.success("配額已建立");
+        toast.success(t("QuotasPage.toastCreated"));
       }
       onSaved();
     } catch (e) {
-      toast.error(e?.message ?? (isEdit ? "更新失敗" : "建立失敗"));
+      toast.error(e?.message ?? (isEdit ? t("QuotasPage.toastUpdateFailed") : t("QuotasPage.toastCreateFailed")));
     } finally {
       setSaving(false);
     }
@@ -213,12 +223,12 @@ function QuotaDialog({ mode, quota, candidates, loadingUsers, defaults, closing 
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <span className={styles.modalTitle}>
           <MIcon name="data_usage" size={18} />
-          {isEdit ? "編輯配額" : "新增配額"}
+          {isEdit ? t("QuotasPage.editQuota") : t("QuotasPage.addQuota")}
         </span>
 
         {isEdit ? (
           <div className={styles.field}>
-            <label htmlFor="quota-target">使用者</label>
+            <label htmlFor="quota-target">{t("QuotasPage.userLabel")}</label>
             <input id="quota-target" value={quota.user_email ?? quota.user_id} disabled />
           </div>
         ) : (
@@ -244,13 +254,13 @@ function QuotaDialog({ mode, quota, candidates, loadingUsers, defaults, closing 
 
         {!isEdit && (
           <p className={styles.hint}>
-            欄位已帶入目前的全域預設值，改成這位使用者專屬的上限即可。勾選「無限制」代表該項目不設上限。
+            {t("QuotasPage.createHint")}
           </p>
         )}
 
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnGhost} onClick={onClose}>
-            取消
+            {t("QuotasPage.cancel")}
           </button>
           <button
             type="button"
@@ -258,7 +268,7 @@ function QuotaDialog({ mode, quota, candidates, loadingUsers, defaults, closing 
             disabled={saving || (!isEdit && !userId)}
             onClick={handleSave}
           >
-            {saving ? "儲存中…" : isEdit ? "儲存" : "建立"}
+            {saving ? t("QuotasPage.saving") : isEdit ? t("QuotasPage.save") : t("QuotasPage.create")}
           </button>
         </div>
       </div>
@@ -268,7 +278,9 @@ function QuotaDialog({ mode, quota, candidates, loadingUsers, defaults, closing 
 
 /* ── 全域預設配額卡片 ─────────────────────────────────────────────────── */
 function GlobalQuotaCard({ config, onSaved }) {
+  const { t } = useTranslation("system");
   const toast = useToast();
+  const NUMBER_FIELDS = useNumberFields();
   const baseline = useMemo(() => pickNumbers(config), [config]);
   const [form, setForm] = useState(baseline);
   const [saving, setSaving] = useState(false);
@@ -282,9 +294,9 @@ function GlobalQuotaCard({ config, onSaved }) {
     setSaving(true);
     try {
       onSaved(await QuotasService.updateGlobal(patch));
-      toast.success("全域預設配額已更新");
+      toast.success(t("QuotasPage.toastGlobalUpdated"));
     } catch (e) {
-      toast.error(e?.message ?? "更新失敗");
+      toast.error(e?.message ?? t("QuotasPage.toastUpdateFailed"));
     } finally {
       setSaving(false);
     }
@@ -296,16 +308,15 @@ function GlobalQuotaCard({ config, onSaved }) {
         <div className={styles.cardHeading}>
           <span className={styles.cardTitle}>
             <MIcon name="tune" size={18} />
-            全域預設配額
+            {t("QuotasPage.globalQuotaTitle")}
           </span>
           <p className={styles.cardSubtitle}>
-            沒有個人覆寫的使用者一律套用這組上限。調整只影響之後的新增與擴容，
-            不會回頭處理既有資源。
+            {t("QuotasPage.globalQuotaDesc")}
           </p>
         </div>
         {config?.updated_at && (
           <span className={styles.updatedAt}>
-            上次更新 {new Date(config.updated_at).toLocaleString("zh-TW")}
+            {t("QuotasPage.lastUpdated")} {new Date(config.updated_at).toLocaleString("zh-TW")}
           </span>
         )}
       </header>
@@ -333,7 +344,7 @@ function GlobalQuotaCard({ config, onSaved }) {
               disabled={saving}
               onClick={() => setForm(baseline)}
             >
-              還原
+              {t("QuotasPage.restore")}
             </button>
           )}
           <button
@@ -342,7 +353,7 @@ function GlobalQuotaCard({ config, onSaved }) {
             disabled={!dirty || saving}
             onClick={handleSave}
           >
-            {saving ? "儲存中…" : "儲存"}
+            {saving ? t("QuotasPage.saving") : t("QuotasPage.save")}
           </button>
         </div>
       </div>
@@ -351,6 +362,7 @@ function GlobalQuotaCard({ config, onSaved }) {
 }
 
 export default function QuotasPage() {
+  const { t } = useTranslation("system");
   const toast = useToast();
   const confirm = useConfirm();
   const [quotas, setQuotas] = useState(null);
@@ -370,10 +382,10 @@ export default function QuotasPage() {
       setQuotas(list);
       setGlobalQuota(config);
     } catch (e) {
-      toast.error(e?.message ?? "載入配額失敗");
+      toast.error(e?.message ?? t("QuotasPage.toastLoadFailed"));
       setQuotas((prev) => prev ?? []);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     load();
@@ -404,19 +416,19 @@ export default function QuotasPage() {
   const handleDelete = async (quota) => {
     const target = quota.user_email ?? quota.id;
     const ok = await confirm({
-      title: "刪除配額",
-      message: `確定要刪除「${target}」的配額？刪除後將套用全域預設。`,
-      confirmText: "刪除",
+      title: t("QuotasPage.deleteQuotaTitle"),
+      message: t("QuotasPage.deleteQuotaMessage", { target }),
+      confirmText: t("QuotasPage.delete"),
       danger: true,
     });
     if (!ok) return;
     setDeleting(quota.id);
     try {
       await QuotasService.remove(quota.id);
-      toast.success("已刪除");
+      toast.success(t("QuotasPage.toastDeleted"));
       load();
     } catch (e) {
-      toast.error(e?.message ?? "刪除失敗");
+      toast.error(e?.message ?? t("QuotasPage.toastDeleteFailed"));
     } finally {
       setDeleting(null);
     }
@@ -424,14 +436,14 @@ export default function QuotasPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="配額管理" subtitle="全域預設值與個別使用者的資源上限覆寫">
+      <PageHeader title={t("QuotasPage.pageTitle")} subtitle={t("QuotasPage.pageSubtitle")}>
         <button
           type="button"
           className={styles.btnPrimary}
           onClick={() => setDialog({ mode: "create" })}
         >
           <MIcon name="add" size={16} />
-          新增配額
+          {t("QuotasPage.addQuota")}
         </button>
       </PageHeader>
 
@@ -441,38 +453,38 @@ export default function QuotasPage() {
         {quotas === null ? (
           <LoadingState />
         ) : quotas.length === 0 ? (
-          <EmptyState icon="data_usage" title="尚未設定任何個人覆寫" />
+          <EmptyState icon="data_usage" title={t("QuotasPage.emptyNoOverrides")} />
         ) : (
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>範圍</th>
-                <th>對象</th>
+                <th>{t("QuotasPage.colScope")}</th>
+                <th>{t("QuotasPage.colTarget")}</th>
                 <th>CPU</th>
-                <th>記憶體 (MB)</th>
-                <th>磁碟 (GB)</th>
-                <th>台數</th>
-                <th className={styles.thRight}>操作</th>
+                <th>{t("QuotasPage.fieldMemoryMb")}</th>
+                <th>{t("QuotasPage.fieldDiskGb")}</th>
+                <th>{t("QuotasPage.colInstanceCount")}</th>
+                <th className={styles.thRight}>{t("QuotasPage.colActions")}</th>
               </tr>
             </thead>
             <tbody>
               {quotas.map((q) => (
                 <tr key={q.id}>
                   <td>
-                    <span className={`${styles.badge} ${styles.badge_user}`}>個人覆寫</span>
+                    <span className={`${styles.badge} ${styles.badge_user}`}>{t("QuotasPage.personalOverride")}</span>
                   </td>
                   <td>{q.user_email ?? "—"}</td>
-                  <td>{fmtLimit(q.max_cpu_cores)}</td>
-                  <td>{fmtLimit(q.max_memory_mb)}</td>
-                  <td>{fmtLimit(q.max_disk_gb)}</td>
-                  <td>{fmtLimit(q.max_instances)}</td>
+                  <td>{fmtLimit(q.max_cpu_cores, t)}</td>
+                  <td>{fmtLimit(q.max_memory_mb, t)}</td>
+                  <td>{fmtLimit(q.max_disk_gb, t)}</td>
+                  <td>{fmtLimit(q.max_instances, t)}</td>
                   <td className={styles.tdRight}>
                     <div className={styles.rowActions}>
                       <button
                         type="button"
                         className={styles.btnIcon}
                         onClick={() => setDialog({ mode: "edit", quota: q })}
-                        title="編輯配額"
+                        title={t("QuotasPage.editQuotaTitle")}
                       >
                         <MIcon name="edit" size={16} />
                       </button>
@@ -481,7 +493,7 @@ export default function QuotasPage() {
                         className={styles.btnDanger}
                         disabled={deleting === q.id}
                         onClick={() => handleDelete(q)}
-                        title="刪除配額"
+                        title={t("QuotasPage.deleteQuotaTitle")}
                       >
                         <MIcon name="delete" size={16} />
                       </button>

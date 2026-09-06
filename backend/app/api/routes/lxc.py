@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from sqlmodel import Session
 
 from app.api.deps import AdminUser, CurrentUser, LxcInfoDep, SessionDep
+from app.core.i18n import t
 from app.exceptions import ProxmoxError
 from app.infrastructure.worker import background_tasks
 from app.schemas import (
@@ -73,5 +74,5 @@ def create_lxc(
     )
     return LXCCreateResponse(
         task_id=task_id or None,
-        message="LXC 建立中，請稍後於資源列表查看",
+        message=t("lxc.creating"),
     )

@@ -22,6 +22,7 @@ from sqlmodel import Session
 
 from app.core.config import settings
 from app.core.db import engine
+from app.core.i18n import t
 from app.exceptions import BadRequestError, ConflictError
 from app.models.wireguard_peer import WireGuardPeer
 from app.repositories import gateway_config as gateway_config_repo
@@ -55,9 +56,9 @@ def _validate_public_key(value: str) -> str:
     try:
         decoded = base64.b64decode(value, validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise BadRequestError("Invalid WireGuard public key") from exc
+        raise BadRequestError(t("wireguard.invalidPublicKey")) from exc
     if len(decoded) != 32 or decoded == bytes(32):
-        raise BadRequestError("Invalid WireGuard public key")
+        raise BadRequestError(t("wireguard.invalidPublicKey"))
     return value
 
 
@@ -65,9 +66,9 @@ def _client_network() -> ipaddress.IPv4Network:
     try:
         network = ipaddress.ip_network(settings.WIREGUARD_CLIENT_SUBNET, strict=False)
     except ValueError as exc:
-        raise BadRequestError("WIREGUARD_CLIENT_SUBNET is invalid") from exc
+        raise BadRequestError(t("wireguard.clientSubnetInvalid")) from exc
     if not isinstance(network, ipaddress.IPv4Network) or network.prefixlen > 30:
-        raise BadRequestError("WIREGUARD_CLIENT_SUBNET must be an IPv4 client subnet")
+        raise BadRequestError(t("wireguard.clientSubnetNotIpv4"))
     return network
 
 
@@ -75,9 +76,9 @@ def _vm_network() -> ipaddress.IPv4Network:
     try:
         network = ipaddress.ip_network(settings.WIREGUARD_VM_SUBNET, strict=False)
     except ValueError as exc:
-        raise BadRequestError("WIREGUARD_VM_SUBNET is invalid") from exc
+        raise BadRequestError(t("wireguard.vmSubnetInvalid")) from exc
     if not isinstance(network, ipaddress.IPv4Network):
-        raise BadRequestError("WIREGUARD_VM_SUBNET must be IPv4")
+        raise BadRequestError(t("wireguard.vmSubnetNotIpv4"))
     return network
 
 
@@ -91,7 +92,7 @@ def _allocate_tunnel_ip(session: Session) -> str:
         value = str(candidate)
         if value not in used:
             return value
-    raise ConflictError("WireGuard client address pool is exhausted")
+    raise ConflictError(t("wireguard.addressPoolExhausted"))
 
 
 def _lock_ip_allocation(session: Session) -> None:
@@ -120,9 +121,19 @@ def _get_or_create_peer(
                 session=session, public_key=public_key
             )
             if conflict is not None and (peer is None or conflict.id != peer.id):
-                raise ConflictError(
-                    "This WireGuard public key belongs to another device"
+                can_transfer = (
+                    settings.WIREGUARD_ALLOW_INACTIVE_PEER_TRANSFER
+                    and peer is None
+                    and not conflict.active
+                    and conflict.device_id == device_id
                 )
+                if not can_transfer:
+                    raise ConflictError(
+                        t("wireguard.publicKeyBelongsToAnotherDevice")
+                    )
+                conflict.user_id = user_id
+                conflict.updated_at = _now()
+                return peer_repo.save(session=session, peer=conflict)
             if peer is not None:
                 return peer
             peer = WireGuardPeer(
@@ -138,9 +149,9 @@ def _get_or_create_peer(
             session.rollback()
             if attempt + 1 >= _ALLOCATION_RETRIES:
                 raise ConflictError(
-                    "Unable to allocate a unique WireGuard address; retry the connection"
+                    t("wireguard.uniqueAddressAllocationFailed")
                 ) from None
-    raise ConflictError("Unable to allocate a WireGuard address")
+    raise ConflictError(t("wireguard.addressAllocationFailed"))
 
 
 def _resource_targets(
@@ -202,21 +213,21 @@ def _validated_endpoint_tuple(endpoint: dict[str, object]) -> tuple[str, str, in
         host = ipaddress.ip_address(str(endpoint.get("host", "")))
         port = int(endpoint.get("port", 0))
     except (TypeError, ValueError) as exc:
-        raise BadRequestError("Stored WireGuard ACL endpoint is invalid") from exc
+        raise BadRequestError(t("wireguard.storedAclEndpointInvalid")) from exc
     if (
         vmid <= 0
         or not isinstance(host, ipaddress.IPv4Address)
         or host not in _vm_network()
         or port != expected_port
     ):
-        raise BadRequestError("Stored WireGuard ACL endpoint is invalid")
+        raise BadRequestError(t("wireguard.storedAclEndpointInvalid"))
     return service, str(host), port
 
 
 def _gateway_client(session: Session):
     config = gateway_config_repo.get_gateway_config(session)
     if config is None or not config.host or not config.encrypted_private_key:
-        raise BadRequestError("Gateway VM is not configured")
+        raise BadRequestError(t("wireguard.gatewayNotConfigured"))
     private_key = gateway_config_repo.get_decrypted_private_key(config)
     client = gateway_service._make_client(  # noqa: SLF001
         config.host,
@@ -309,7 +320,7 @@ def _sync_gateway_peer(
         gateway_public_key = _run_locked(
             client,
             "\n".join(lines),
-            "Unable to synchronize the WireGuard peer on Gateway VM",
+            t("wireguard.syncPeerFailed"),
         ).strip()
     finally:
         client.close()
@@ -339,7 +350,7 @@ def _remove_gateway_access(
         _run_locked(
             client,
             "\n".join(lines),
-            "Unable to revoke the WireGuard peer on Gateway VM",
+            t("wireguard.revokePeerFailed"),
         )
     finally:
         client.close()
@@ -366,7 +377,7 @@ def _endpoint_host(session: Session) -> str:
     config = gateway_config_repo.get_gateway_config(session)
     host = settings.WIREGUARD_ENDPOINT_HOST.strip() or (config.host if config else "")
     if not host:
-        raise BadRequestError("WireGuard endpoint host is not configured")
+        raise BadRequestError(t("wireguard.endpointHostNotConfigured"))
     return host
 
 
@@ -458,7 +469,7 @@ def connect(
     public_key: str,
 ) -> WireGuardConnectResponse:
     if settings.DESKTOP_TUNNEL_MODE != "wireguard":
-        raise BadRequestError("WireGuard desktop connections are disabled")
+        raise BadRequestError(t("wireguard.desktopConnectionsDisabled"))
     public_key = _validate_public_key(public_key)
     peer = _get_or_create_peer(
         session=session,
@@ -478,7 +489,7 @@ def refresh(
     *, session: Session, user_id: uuid.UUID, device_id: str
 ) -> WireGuardConnectResponse:
     if settings.DESKTOP_TUNNEL_MODE != "wireguard":
-        raise BadRequestError("WireGuard desktop connections are disabled")
+        raise BadRequestError(t("wireguard.desktopConnectionsDisabled"))
     peer = peer_repo.get_by_user_device(
         session=session, user_id=user_id, device_id=device_id
     )
@@ -489,7 +500,7 @@ def refresh(
         or peer.expires_at is None
         or peer.expires_at <= now
     ):
-        raise ConflictError("WireGuard session is inactive or expired; reconnect")
+        raise ConflictError(t("wireguard.sessionInactiveOrExpired"))
     return _activate_peer(
         session=session,
         peer=peer,
@@ -535,7 +546,7 @@ def _gateway_state_id(session: Session) -> str:
         state_id = gateway_service._exec_checked(  # noqa: SLF001
             client,
             command,
-            "Unable to inspect WireGuard state on Gateway VM",
+            t("wireguard.inspectStateFailed"),
         ).strip()
     finally:
         client.close()

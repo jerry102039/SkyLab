@@ -11,6 +11,7 @@
  */
 
 import { useId } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Area,
   AreaChart,
@@ -32,6 +33,7 @@ function resolveColor(color) {
 }
 
 export default function RrdChart({ data, series, unit = "", height = 200, title }) {
+  const { t } = useTranslation("components");
   // useId 可能含冒號等非法字元，清掉才能安全用於 SVG url(#...)
   const gradientId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const axisColor = resolveColor("--color-text-muted");
@@ -50,7 +52,7 @@ export default function RrdChart({ data, series, unit = "", height = 200, title 
       {title && <p className={styles.chartTitle}>{title}</p>}
       {!data || data.length === 0 ? (
         <div className={styles.empty} style={{ height }}>
-          尚無趨勢資料
+          {t("RrdChart.noTrendData")}
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={height}>

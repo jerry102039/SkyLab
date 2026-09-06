@@ -1,4 +1,4 @@
-export const CLASS_TIMEZONES = ["Asia/Taipei", "Asia/Tokyo", "UTC"];
+import i18n from "../../i18n";
 
 function localDate(date) {
   const value = new Date(date);
@@ -15,7 +15,6 @@ export function createClassScheduleForm(item = null, today = new Date()) {
 
   return {
     name: item?.name ?? "",
-    code: item?.code ?? "",
     term: item?.term ?? `${rocYear}-1`,
     location: item?.location ?? "",
     startDate: item?.startDate ?? item?.start_date ?? localDate(start),
@@ -24,23 +23,26 @@ export function createClassScheduleForm(item = null, today = new Date()) {
     startTime:
       item?.startTime ?? String(item?.start_time ?? "13:10").slice(0, 5),
     endTime: item?.endTime ?? String(item?.end_time ?? "16:00").slice(0, 5),
-    timezone: item?.timezone ?? "Asia/Taipei",
     bootLeadMinutes: item?.bootLeadMinutes ?? item?.boot_lead_minutes ?? 10,
+    shutdownGraceMinutes:
+      item?.shutdownGraceMinutes ?? item?.shutdown_grace_minutes ?? 30,
   };
 }
 
 export function classSchedulePayload(form) {
   return {
     name: form.name.trim(),
-    code: form.code.trim() || `CLASS-${Date.now().toString().slice(-8)}`,
-    term: form.term.trim() || "未指定",
+    term: form.term.trim() || i18n.t("classScheduleForm.unspecifiedTerm", { ns: "teaching" }),
     location: form.location.trim() || null,
     start_date: form.startDate,
     end_date: form.endDate,
     weekday: Number(form.weekday),
     start_time: form.startTime,
     end_time: form.endTime,
-    timezone: form.timezone,
     boot_lead_minutes: Number(form.bootLeadMinutes),
+    shutdown_grace_minutes: Number(form.shutdownGraceMinutes),
   };
 }
+
+export const BOOT_LEAD_OPTIONS = [0, 5, 10, 15, 30];
+export const SHUTDOWN_GRACE_OPTIONS = [0, 10, 30, 60];

@@ -18,7 +18,56 @@
   margin: 0;
 }
 
-.hintError { color: var(--color-danger); }
+/* ── Error state ── */
+/* 文案引導使用者改用上方輸入框，附重新載入按鈕。 */
+.errorBox {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 12px;
+  border-radius: $radius-8;
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+}
+
+.errorText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.errorTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.errorDesc {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.retryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 5px 10px;
+  border-radius: $radius-8;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background $transition-base;
+
+  &:hover { background: var(--color-hover); }
+}
 
 /* ── Summary bar ── */
 .summary {

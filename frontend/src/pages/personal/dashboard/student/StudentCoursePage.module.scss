@@ -176,24 +176,6 @@
   }
 }
 
-.primaryActions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: $spacing-8;
-}
-
-.primaryButton {
-  @include student-action-button;
-  min-height: 42px;
-  padding: 9px 16px;
-  border-radius: $radius-8;
-  background: var(--color-primary);
-  color: var(--color-text-on-primary);
-
-  &:hover:not(:disabled) { background: var(--color-primary-dark); }
-}
-
 /* ── 課堂機器 ── */
 
 .machinePicker {
@@ -543,7 +525,7 @@
 
 .aiRequirementItem {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 22px auto minmax(0, 1fr) auto;
   align-items: start;
   gap: 10px;
   padding: 10px 12px;
@@ -552,10 +534,70 @@
   background: var(--color-surface-glass);
 }
 
+.aiRequirementItemCompleted {
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-border));
+  background: color-mix(in srgb, var(--color-success) 6%, var(--color-surface));
+}
+
+.requirementCheckbox {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--color-text-muted);
+
+  input {
+    display: grid;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    appearance: none;
+    place-content: center;
+    border: 2px solid var(--color-border);
+    border-radius: 50%;
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color $transition-base, background $transition-base;
+
+    &::before {
+      width: 8px;
+      height: 4px;
+      border-bottom: 2px solid var(--color-text-on-primary);
+      border-left: 2px solid var(--color-text-on-primary);
+      content: "";
+      transform: translateY(-1px) rotate(-45deg) scale(0);
+      transition: transform $transition-base;
+    }
+
+    &:checked {
+      border-color: var(--color-success);
+      background: var(--color-success);
+    }
+
+    &:checked::before {
+      transform: translateY(-1px) rotate(-45deg) scale(1);
+    }
+
+    &:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--color-success) 28%, transparent);
+      outline-offset: 2px;
+    }
+  }
+
+  input:disabled {
+    cursor: wait;
+    opacity: .55;
+  }
+}
+
 .aiRequirementNumber {
   @include flex-center;
   width: 26px;
   height: 26px;
+  align-self: center;
   border-radius: 50%;
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
   color: var(--color-primary);
@@ -710,43 +752,32 @@
   }
 }
 
-.assignmentActions {
+.assignmentNote {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-
-  > span {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--color-text-muted);
-    font-size: $font-size-12;
-  }
-}
-
-.aiCheckButton {
-  display: inline-flex;
-  min-height: 40px;
-  padding: 8px 14px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 1px solid var(--color-primary);
-  border-radius: $radius-8;
-  color: var(--color-text-on-primary);
-  background: var(--color-primary);
-  font: inherit;
+  gap: 6px;
+  margin: 0;
+  color: var(--color-text-muted);
   font-size: $font-size-12;
-  font-weight: $font-weight-700;
-  cursor: pointer;
-
-  &:hover:not(:disabled) { background: var(--color-primary-dark); }
-  &:disabled { cursor: not-allowed; opacity: .4; }
 }
 
 /* ── 手機版 ── */
 
 @media (max-width: $breakpoint-sm) {
-  
+  .assignmentToggle {
+    grid-template-columns: 30px minmax(0, 1fr) 22px;
+  }
+
+  .assignmentStatus {
+    display: none;
+  }
+
+  .aiRequirementItem {
+    grid-template-columns: 22px auto minmax(0, 1fr);
+  }
+
+  .aiCheckBadge {
+    grid-column: 3;
+    justify-self: start;
+  }
 }

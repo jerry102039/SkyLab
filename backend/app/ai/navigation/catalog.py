@@ -29,8 +29,19 @@ _ROUTES: tuple[NavigationRoute, ...] = (
     NavigationRoute(
         path="/dashboard",
         title="首頁",
-        summary="依身分顯示的總覽與快速入口。",
-        keywords=("首頁", "儀表板", "dashboard", "總覽", "主頁"),
+        summary="依身分顯示課程總覽與快速入口。",
+        keywords=(
+            "首頁",
+            "儀表板",
+            "dashboard",
+            "總覽",
+            "主頁",
+            "課程",
+            "關卡",
+            "course",
+            "學習",
+            "練習",
+        ),
     ),
     NavigationRoute(
         path="/my-resources",
@@ -49,12 +60,6 @@ _ROUTES: tuple[NavigationRoute, ...] = (
         title="帳號設定",
         summary="修改個人資料與密碼。",
         keywords=("帳號", "個人設定", "改密碼", "account", "profile"),
-    ),
-    NavigationRoute(
-        path="/courses",
-        title="課程",
-        summary="瀏覽課程與練習關卡。",
-        keywords=("課程", "關卡", "course", "學習", "練習"),
     ),
     NavigationRoute(
         path="/jobs",
@@ -105,8 +110,8 @@ _ROUTES: tuple[NavigationRoute, ...] = (
     NavigationRoute(
         path="/course-template-management",
         title="課程環境範本",
-        summary="設計課堂要用的多機環境並開放快速練習。",
-        keywords=("課程環境", "環境範本", "多機環境", "快速練習"),
+        summary="設計課堂要用的學習環境並開放快速練習。",
+        keywords=("課程環境", "環境範本", "學習環境", "多機環境", "快速練習"),
         access="staff",
     ),
     NavigationRoute(
@@ -199,13 +204,6 @@ _ROUTES: tuple[NavigationRoute, ...] = (
         title="管理主頁",
         summary="系統管理總覽入口。",
         keywords=("管理主頁", "後台", "admin"),
-        access="admin",
-    ),
-    NavigationRoute(
-        path="/ai-pve",
-        title="AI 維運助手",
-        summary="用自然語言查詢 PVE 狀態並協助維運。",
-        keywords=("ai pve", "維運", "節點狀態", "pve"),
         access="admin",
     ),
     NavigationRoute(

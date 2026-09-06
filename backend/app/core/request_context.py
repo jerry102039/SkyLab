@@ -12,11 +12,30 @@ from dataclasses import dataclass
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+SUPPORTED_LANGUAGES = ("zh-TW", "en", "ja")
+DEFAULT_LANGUAGE = "zh-TW"
+
+
+def resolve_language(accept_language: str | None) -> str:
+    """Pick a supported language from an Accept-Language header value."""
+    if not accept_language:
+        return DEFAULT_LANGUAGE
+    for part in accept_language.split(","):
+        tag = part.split(";")[0].strip()
+        if tag in SUPPORTED_LANGUAGES:
+            return tag
+        base = tag.split("-")[0].lower()
+        for lang in SUPPORTED_LANGUAGES:
+            if lang.split("-")[0].lower() == base:
+                return lang
+    return DEFAULT_LANGUAGE
+
 
 @dataclass
 class RequestContext:
     ip_address: str | None = None
     user_agent: str | None = None
+    language: str = DEFAULT_LANGUAGE
 
 
 _request_context: ContextVar[RequestContext] = ContextVar(
@@ -61,10 +80,14 @@ def _extract_client_ip(headers: list[tuple[bytes, bytes]], client_host: str | No
 
 
 def _extract_user_agent(headers: list[tuple[bytes, bytes]]) -> str | None:
-    for name, value in headers:
-        if name.lower() == b"user-agent":
+    return _extract_header(headers, b"user-agent", max_len=512)
+
+
+def _extract_header(headers: list[tuple[bytes, bytes]], name: bytes, max_len: int = 256) -> str | None:
+    for header_name, value in headers:
+        if header_name.lower() == name:
             try:
-                return value.decode("latin-1")[:512]
+                return value.decode("latin-1")[:max_len]
             except Exception:
                 return None
     return None
@@ -91,6 +114,7 @@ class RequestContextMiddleware:
         ctx = RequestContext(
             ip_address=_extract_client_ip(headers, client_host),
             user_agent=_extract_user_agent(headers),
+            language=resolve_language(_extract_header(headers, b"accept-language")),
         )
         token = _request_context.set(ctx)
         try:

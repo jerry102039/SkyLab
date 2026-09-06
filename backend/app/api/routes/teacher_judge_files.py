@@ -36,6 +36,7 @@ from app.ai.teacher_judge.template_command_service import (
 )
 from app.api.deps import InstructorUser, SessionDep
 from app.core.authorizers import require_teaching_access
+from app.core.i18n import t
 from app.models import TeachingClass
 
 router = APIRouter(
@@ -52,14 +53,16 @@ def _ensure_class_access(
 ) -> None:
     teaching_class = session.get(TeachingClass, teaching_class_id)
     if not teaching_class:
-        raise HTTPException(status_code=404, detail="找不到班級。")
+        raise HTTPException(status_code=404, detail=t("teacherJudgeFiles.classNotFound"))
     require_teaching_access(current_user, teaching_class.owner_id)
 
 
 def _normalize_supported_template_key(template_key: str) -> str:
     normalized = template_key.strip().lower() or "linux"
     if normalized not in SUPPORTED_TEMPLATE_KEYS:
-        raise HTTPException(status_code=400, detail="未知的評分環境 template。")
+        raise HTTPException(
+            status_code=400, detail=t("teacherJudgeFiles.unknownTemplate")
+        )
     return normalized
 
 
@@ -72,7 +75,9 @@ def _normalize_supported_environment_keys(
         dict.fromkeys(str(key).strip().lower() for key in values if str(key).strip())
     )
     if any(key not in SUPPORTED_TEMPLATE_KEYS for key in normalized):
-        raise HTTPException(status_code=400, detail="未知的評分環境 template。")
+        raise HTTPException(
+            status_code=400, detail=t("teacherJudgeFiles.unknownTemplate")
+        )
     return [
         primary_template_key,
         *[key for key in normalized if key != primary_template_key],
@@ -115,7 +120,7 @@ async def upload_class_teacher_judge_file(
         original_filename, file_hash, raw_text = prepare_file_payload(
             filename=file.filename or "unknown",
             file_bytes=file_bytes,
-            allowed_suffixes={".docx", ".pdf"},
+            allowed_suffixes={".md", ".txt", ".doc", ".docx", ".pdf"},
             max_upload_size_bytes=settings.VLLM_MAX_UPLOAD_SIZE_MB * 1024 * 1024,
         )
     except ValueError as exc:

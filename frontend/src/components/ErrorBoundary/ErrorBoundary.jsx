@@ -1,6 +1,7 @@
 import { Component } from "react";
 import styles from "./ErrorBoundary.module.scss";
 import MIcon from "../MIcon";
+import i18n from "../../i18n";
 
 /**
  * React error boundary：攔截子樹 render / lifecycle 錯誤，
@@ -32,23 +33,23 @@ export default class ErrorBoundary extends Component {
         <span className={styles.icon}>
           <MIcon name="error_outline" size={40} />
         </span>
-        <h2 className={styles.title}>頁面發生錯誤</h2>
-        <p className={styles.desc}>這個區塊出了點問題，你可以重試或重新整理頁面。</p>
+        <h2 className={styles.title}>{i18n.t("ErrorBoundary.title", { ns: "common" })}</h2>
+        <p className={styles.desc}>{i18n.t("ErrorBoundary.desc", { ns: "common" })}</p>
         <details className={styles.details}>
-          <summary>錯誤詳情</summary>
+          <summary>{i18n.t("ErrorBoundary.details", { ns: "common" })}</summary>
           <pre>{error?.message ?? String(error)}</pre>
         </details>
         <div className={styles.actions}>
           <button type="button" className={styles.btnPrimary} onClick={this.reset}>
             <MIcon name="refresh" size={16} />
-            重試
+            {i18n.t("ErrorBoundary.retry", { ns: "common" })}
           </button>
           <button
             type="button"
             className={styles.btnSecondary}
             onClick={() => window.location.reload()}
           >
-            重新整理頁面
+            {i18n.t("ErrorBoundary.reload", { ns: "common" })}
           </button>
         </div>
       </div>

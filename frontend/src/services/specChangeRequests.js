@@ -47,7 +47,7 @@ export const SpecChangeRequestsService = {
   },
 };
 
-/* ── 顯示用 helper（RequestsPage / SpecificationsTab / RequestReviewPage 共用） ── */
+/* ── 顯示用 helper（RequestsPage / SpecificationsTab 共用；文案 key 在 personal 命名空間） ── */
 
 /** 申請是否還在流程中（送出後到套用完成或結案前） */
 export function isOpenSpecRequest(req) {
@@ -71,49 +71,58 @@ export function canCancelSpecRequest(req) {
   return canApplySpecRequest(req);
 }
 
-/** 狀態徽章：label + color（success / danger / info / warning / muted） */
+/**
+ * 狀態徽章：key + color（success / danger / info / warning / muted）+ labelKey。
+ * 呼叫端用 personal 命名空間的 t(labelKey) 取得文字。
+ */
 export function specRequestDisplayStatus(req) {
   switch (req?.status) {
     case "pending":
-      return { key: "pending", label: "審核中", color: "info" };
+      return { key: "pending", color: "info", labelKey: "SpecRequest.statusPending" };
     case "rejected":
-      return { key: "rejected", label: "已拒絕", color: "danger" };
+      return { key: "rejected", color: "danger", labelKey: "SpecRequest.statusRejected" };
     case "cancelled":
-      return { key: "cancelled", label: "已取消", color: "muted" };
+      return { key: "cancelled", color: "muted", labelKey: "SpecRequest.statusCancelled" };
     case "approved":
       switch (req.apply_status) {
         case "applied":
-          return { key: "applied", label: "已套用", color: "success" };
+          return { key: "applied", color: "success", labelKey: "SpecRequest.statusApplied" };
         case "applying":
-          return { key: "applying", label: "套用中", color: "info" };
+          return { key: "applying", color: "info", labelKey: "SpecRequest.statusApplying" };
         case "failed":
-          return { key: "apply_failed", label: "套用失敗", color: "danger" };
+          return { key: "apply_failed", color: "danger", labelKey: "SpecRequest.statusApplyFailed" };
         case "interrupted":
-          return { key: "apply_interrupted", label: "套用中斷", color: "danger" };
+          return { key: "apply_interrupted", color: "danger", labelKey: "SpecRequest.statusApplyInterrupted" };
         default:
-          return { key: "ready", label: "已核准 · 待套用", color: "warning" };
+          return { key: "ready", color: "warning", labelKey: "SpecRequest.statusReady" };
       }
     default:
-      return { key: req?.status ?? "unknown", label: req?.status ?? "—", color: "muted" };
+      return { key: req?.status ?? "unknown", color: "muted", labelKey: null };
   }
 }
 
-function memLabel(mb) {
+function memLabel(mb, t) {
   if (mb == null) return "—";
-  return mb % 1024 === 0 ? `${mb / 1024} GB` : `${(mb / 1024).toFixed(1)} GB`;
+  const value = mb % 1024 === 0 ? mb / 1024 : (mb / 1024).toFixed(1);
+  return t("SpecRequest.memUnit", { value });
 }
 
-/** 「CPU 2 → 4 核 / 記憶體 2 GB → 4 GB」 */
-export function specRequestChangeLabel(req) {
+/** 「CPU 2 → 4 核 / 記憶體 2 GB → 4 GB」；t 為 personal 命名空間的翻譯函式 */
+export function specRequestChangeLabel(req, t) {
   const parts = [];
   if (req?.requested_cpu != null) {
-    parts.push(`CPU ${req.current_cpu ?? "—"} → ${req.requested_cpu} 核`);
+    parts.push(t("SpecRequest.changeCpu", { from: req.current_cpu ?? "—", to: req.requested_cpu }));
   }
   if (req?.requested_memory != null) {
-    parts.push(`記憶體 ${memLabel(req.current_memory)} → ${memLabel(req.requested_memory)}`);
+    parts.push(
+      t("SpecRequest.changeMemory", {
+        from: memLabel(req.current_memory, t),
+        to: memLabel(req.requested_memory, t),
+      }),
+    );
   }
   if (req?.requested_disk != null) {
-    parts.push(`磁碟 ${req.current_disk ?? "—"} → ${req.requested_disk} GB`);
+    parts.push(t("SpecRequest.changeDisk", { from: req.current_disk ?? "—", to: req.requested_disk }));
   }
   return parts.join(" / ") || "—";
 }

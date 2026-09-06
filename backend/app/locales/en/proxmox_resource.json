@@ -1,0 +1,16 @@
+{
+  "provisioning.gpu_no_available_quota": "GPU {mapping_id} has no available quota (used={used}/{capacity})",
+  "provisioning.gpu_profile_not_found": "GPU {mapping_id} does not have vGPU profile '{profile}'",
+  "provisioning.gpu_profile_not_creatable": "vGPU profile '{profile}' cannot be created right now due to insufficient GPU memory",
+  "provisioning.gpu_memory_full": "GPU {mapping_id} memory is full; no vGPU can be created right now",
+  "provisioning.gpu_verification_failed": "Unable to verify GPU '{mapping_id}': {error}",
+  "provisioning.gpu_fallback_node_incompatible": "Cross-node clone to '{target_node}' failed and template node '{template_node}' does not provide GPU mapping '{mapping_id}', so falling back to the template node is not possible.",
+  "provisioning.template_node_unavailable": "Node '{node}' cannot access template '{template}' (the template only exists on: {nodes}).",
+  "provisioning.lxc_template_node_unavailable": "Node '{node}' cannot access LXC template '{template}' (the template only exists on: {nodes}).",
+  "provisioning.no_nodes_available": "no nodes",
+  "provisioning.lxc_network_incomplete": "Network configuration is incomplete; cannot create LXC VMID={vmid} (allocated_ip={allocated_ip}, net_cfg={net_cfg}). Please check the IP management subnet settings.",
+  "provisioning.vm_network_incomplete": "Network configuration is incomplete; cannot create VM VMID={vmid}. Please check the IP management subnet settings.",
+  "reset.init_snapshot_exists": "Init snapshot skylab-init already exists",
+  "reset.no_init_snapshot": "This resource has no skylab-init init snapshot and cannot be reset; please ask an instructor or admin to create one first",
+  "quota.exceeded": "Quota exceeded: {violations}"
+}

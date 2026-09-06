@@ -1,0 +1,67 @@
+{
+  "teachingClasses.notFound": "クラスが見つかりません。",
+  "teachingClasses.scheduleInvalid": "終了日時は開始時間より後でなければなりません。",
+  "teachingClasses.fixedScheduleLocked": "マシン作成を送信した後は、固定時間割を変更できません。",
+  "teachingClasses.archivedCannotExtend": "アーカイブ済みのクラスは延長できません。",
+  "teachingClasses.extendDateMustBeLater": "新しい終了日は現在の終了日より後である必要があります。",
+  "teachingClasses.mustBeArchivedBeforeReclaim": "リソースを回収する前に、クラスをアーカイブする必要があります。",
+  "teachingClasses.studentsLocked": "マシン作成を送信した後は、学生名簿を変更できません。",
+  "teachingClasses.studentNotFound": "クラスの学生が見つかりません。",
+  "teachingClasses.csvDecodeFailed": "CSV ファイルの文字コードを解析できません。",
+  "teachingClasses.machinesManagedByCourseEnvironment": "コース環境からバージョンを発行し、クラス管理でコース環境を選択してください。",
+  "teachingClasses.courseLockedCannotChange": "クラスはロックされているため、コースを変更できません。",
+  "teachingClasses.onlyPublishedCourseVersion": "発行済みのコースバージョンのみ選択できます。",
+  "teachingClasses.courseEnvironmentNotFound": "コース環境が見つかりません。",
+  "teachingClasses.environmentNotForFormalCourse": "この環境はクイック練習専用であり、正式なコースには適用できません。",
+  "teachingClasses.courseVersionNoMachines": "このコースバージョンには割り当て可能なマシンがありません。",
+  "teachingClasses.archivedCannotEditWeeklyContent": "終了したクラスの週次内容は変更できません。",
+  "teachingClasses.weekDatesMustMatchSchedule": "週の日付はクラスの固定時間割から生成される必要があり、手動での追加・削除はできません。",
+  "teachingClasses.weekNotFound": "指定された週が見つかりません。",
+  "teachingClasses.invalidFileName": "ファイル名が無効です。",
+  "teachingClasses.taskFileNameTooLong": "タスクファイル名は255文字以内にしてください。",
+  "teachingClasses.taskFileTooLarge": "タスクファイルは100MBを超えることはできません。",
+  "teachingClasses.taskFileNotFound": "指定されたタスクファイルが見つかりません。",
+  "teachingClasses.onlyPlanningCanRecheckCapacity": "準備中のクラスのみ、容量事前チェックを再実行できます。",
+  "teachingClasses.studentsAndMachinesRequired": "学生名簿とコースのマシン設定を完了させる必要があります。",
+  "teachingClasses.classLockedOrSubmitted": "クラスはロックされているか、すでにマシン作成が送信されています。",
+  "teachingClasses.selectPublishedCourseFirst": "先に発行済みのコースバージョンを選択してください。",
+  "teachingClasses.onlyFailedCanRetry": "作成に失敗したクラスのみ再試行できます。",
+  "teachingClasses.noFailedOrStaleTasksToRetry": "再試行可能な失敗または停滞したプロビジョニングタスクがありません。",
+  "teachingClasses.topologyRetryFailed": "ネットワークトポロジの再試行に失敗しました：{details}",
+  "teachingClasses.cannotVerifyResourceRetryLater": "既存のリソースを確認できません。しばらくしてから再試行してください。",
+  "teachingClasses.provisionedUserNoLongerInClass": "プロビジョニング済みリソースのユーザーは、すでにクラスに在籍していません。",
+  "teachingClasses.onlyFailedCanResetToEdit": "作成に失敗したクラスのみ編集モードに戻すことができます。",
+  "teachingClasses.partialMachinesUseRetry": "一部のマシンはすでに作成済みです。「失敗したマシンを再試行」をご利用ください。",
+
+  "teacherJudgeFiles.classNotFound": "クラスが見つかりません。",
+  "teacherJudgeFiles.unknownTemplate": "不明な採点環境テンプレートです。",
+
+  "teacherJudgeScripts.classNotFound": "クラスが見つかりません。",
+  "teacherJudgeScripts.unknownTemplate": "不明な採点環境テンプレートです。",
+
+  "teacherJudgeSessions.selectedFileInUse": "この評価表は他の審査ですでに使用されています。「再構成」を使用して独立したコピーを作成するか、新しい評価表をアップロードしてください。",
+  "teacherJudgeSessions.classNotFound": "クラスが見つかりません。",
+  "teacherJudgeSessions.weekNotInClass": "選択した週はこのクラスに属していません。",
+  "teacherJudgeSessions.archivedReadOnly": "アーカイブ済みの審査は読み取り専用です。",
+  "teacherJudgeSessions.archivedCannotPin": "アーカイブ済みの審査はピン留めできません。",
+  "teacherJudgeSessions.invalidMessageCursor": "メッセージカーソルが無効です。",
+  "teacherJudgeSessions.analysisRevisionConflict": "評価表は他の変更によって更新されています。再読み込みしてから、再度 AI の提案を依頼してください。",
+  "teacherJudgeSessions.runResultNotFound": "この審査の実行結果が見つかりません。",
+  "teacherJudgeSessions.scriptNotFound": "この審査のスクリプトが見つかりません。",
+
+  "aiTemplateRecommendation.modelBindingMissing": "config/system-ai.json に AI モデルのバインディング設定がありません。",
+  "aiTemplateRecommendation.upstreamError": "上流の AI サービスでエラーが発生しました。vLLM サーバーとモデル設定（VLLM_BASE_URL / VLLM_MODEL_NAME）をご確認ください。",
+
+  "auditLogs.invalidUserIdFormat": "user_id の形式が無効です。",
+
+  "batchProvision.jobNotFound": "バッチプロビジョニングジョブが見つかりません。",
+  "batchProvision.classNotFound": "クラスが見つかりません。",
+  "batchProvision.noPendingJobs": "このクラスには審査待ちのジョブがありません。",
+
+  "aiPveLog.chatFailed": "AI-PVE の会話に失敗しました。",
+
+  "aiMonitoring.runtimeNotConfigured": "LiteLLM ランタイム監視が設定されていません。",
+  "aiMonitoring.runtimeUnavailable": "LiteLLM ランタイムは現在利用できません。",
+
+  "aiProxy.rateLimitExceeded": "レート制限を超えました。制限：{window_seconds} 秒あたり {limit} 回のリクエスト。"
+}

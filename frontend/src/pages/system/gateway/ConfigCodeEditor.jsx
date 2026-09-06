@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import * as monaco from "monaco-editor";
 import Editor, { loader } from "@monaco-editor/react";
 import styles from "./ConfigCodeEditor.module.scss";
@@ -110,6 +111,7 @@ export default function ConfigCodeEditor({
   onSave,
   onReload,
 }) {
+  const { t } = useTranslation("system");
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
   const [indent, setIndent] = useState("Spaces: 2");
   const saveRef = useRef(() => {});
@@ -161,7 +163,7 @@ export default function ConfigCodeEditor({
             className={styles[TAB_ICON_CLASS[language]] ?? ""}
           />
           <span className={styles.tabName}>{fileName}</span>
-          {dirty && <span className={styles.dirtyDot} title="尚未寫入" />}
+          {dirty && <span className={styles.dirtyDot} title={t("ConfigCodeEditor.unwrittenTitle")} />}
         </div>
         <div className={styles.tabbarActions}>
           <button
@@ -169,7 +171,7 @@ export default function ConfigCodeEditor({
             className={styles.ghostBtn}
             onClick={onReload}
             disabled={saving || busy}
-            title="重新載入設定檔"
+            title={t("ConfigCodeEditor.reloadTitle")}
           >
             <MIcon name="refresh" size={16} />
           </button>
@@ -178,10 +180,10 @@ export default function ConfigCodeEditor({
             className={styles.saveBtn}
             onClick={onSave}
             disabled={saving || !dirty || loadFailed}
-            title="寫入設定檔（Ctrl+S）"
+            title={t("ConfigCodeEditor.saveTitle")}
           >
             <MIcon name="save" size={15} />
-            {saving ? "寫入中..." : "寫入設定檔"}
+            {saving ? t("ConfigCodeEditor.saving") : t("ConfigCodeEditor.saveConfig")}
           </button>
         </div>
       </div>
@@ -203,13 +205,13 @@ export default function ConfigCodeEditor({
         {loadFailed ? (
           <div className={styles.loadError}>
             <MIcon name="cloud_off" size={40} />
-            <p className={styles.loadErrorTitle}>無法讀取遠端設定檔</p>
+            <p className={styles.loadErrorTitle}>{t("ConfigCodeEditor.loadErrorTitle")}</p>
             <p className={styles.loadErrorHint}>
-              請確認 Gateway VM 的 SSH 連線正常後重新載入；為避免覆蓋遠端檔案，已停用編輯與寫入。
+              {t("ConfigCodeEditor.loadErrorHint")}
             </p>
             <button type="button" className={styles.saveBtn} onClick={onReload} disabled={busy}>
               <MIcon name="refresh" size={15} />
-              重新載入
+              {t("ConfigCodeEditor.reload")}
             </button>
           </div>
         ) : (
@@ -221,7 +223,7 @@ export default function ConfigCodeEditor({
             onChange={(v) => onChange(v ?? "")}
             onMount={handleMount}
             options={EDITOR_OPTIONS}
-            loading={<div className={styles.editorLoading}>載入編輯器...</div>}
+            loading={<div className={styles.editorLoading}>{t("ConfigCodeEditor.loadingEditor")}</div>}
           />
         )}
       </div>
@@ -234,14 +236,14 @@ export default function ConfigCodeEditor({
         {loadFailed ? (
           <span className={`${styles.statusItem} ${styles.statusAlert}`}>
             <MIcon name="error_outline" size={13} />
-            讀取失敗
+            {t("ConfigCodeEditor.loadFailed")}
           </span>
         ) : (
-          <span className={styles.statusItem}>{dirty ? "● 未寫入" : "已同步"}</span>
+          <span className={styles.statusItem}>{dirty ? t("ConfigCodeEditor.unwritten") : t("ConfigCodeEditor.synced")}</span>
         )}
         <div className={styles.statusRight}>
           <span className={styles.statusItem}>
-            行 {cursor.line}，欄 {cursor.col}
+            {t("ConfigCodeEditor.lineCol", { line: cursor.line, col: cursor.col })}
           </span>
           <span className={styles.statusItem}>{indent}</span>
           <span className={styles.statusItem}>UTF-8</span>

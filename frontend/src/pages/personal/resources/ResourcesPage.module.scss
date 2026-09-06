@@ -32,6 +32,7 @@
   cursor: pointer;
   transition: background $transition-base, box-shadow $transition-base;
   white-space: nowrap;
+  text-decoration: none;
 }
 
 .btnPrimary {
@@ -133,6 +134,16 @@
     color: var(--color-text-muted);
     font-size: $font-size-12;
   }
+}
+
+.nameIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: $radius-8;
+  color: var(--color-primary);
+  background: var(--color-hover);
+  @include flex-center;
+  flex: 0 0 auto;
 }
 
 .nameLink {

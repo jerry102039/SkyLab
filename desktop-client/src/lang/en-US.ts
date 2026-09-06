@@ -70,7 +70,8 @@
       description:
         "Create a secure connection, then view and access your virtual machines directly.",
       button: "Connect",
-      connecting: "Connecting"
+      connecting: "Creating secure connection",
+      secureHint: "WireGuard encrypted · One click"
     },
     machines: {
       summary:

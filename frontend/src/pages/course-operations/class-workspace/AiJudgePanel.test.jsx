@@ -1,48 +1,22 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import {
-  CreateCheckChooser,
   ChatPanel,
-  RubricStats,
+  CreateCheckChooser,
+  RubricTable,
+  SessionTitle,
   buildProposalDiff,
   getRubricDisplayName,
   getRubricCheckTitle,
+  getRubricItemsValue,
+  getPendingRubricItemIds,
   getSessionMenuPosition,
   getSelectedRubricSource,
-  getVisibleRubricSources,
   resolveActiveSessionId,
 } from "./AiJudgePanel";
 import { RUBRIC_POLISH_PROMPT } from "../../../services/aiJudge";
 
-describe("RubricStats", () => {
-  const items = [
-    { id: "auto", detectable: "auto" },
-    { id: "partial", detectable: "partial" },
-    { id: "manual-1", detectable: "manual" },
-    { id: "manual-2", detectable: "manual" },
-  ];
-
-  test("顯示目前可自動偵測比例與重新評估動作", () => {
-    const html = renderToStaticMarkup(
-      <RubricStats items={items} onReassess={() => {}} />,
-    );
-
-    expect(html).toContain("可自動偵測 1（25%）");
-    expect(html).toContain("部分可偵測 1（25%）");
-    expect(html).toContain("共 4 題");
-    expect(html).toContain("評估結果已更新");
-    expect(html).toContain("重新評估");
-  });
-
-  test("評分項目異動後明確標示舊結果需要重新評估", () => {
-    const html = renderToStaticMarkup(
-      <RubricStats items={items} needsReview onReassess={() => {}} />,
-    );
-
-    expect(html).toContain("需要重新評估");
-    expect(html).toContain("下方顯示上次結果");
-  });
-
+describe("ChatPanel", () => {
   test("refine 內部提示詞不會出現在聊天室，並提供清除內容按鈕", () => {
     const html = renderToStaticMarkup(
       <ChatPanel
@@ -60,6 +34,174 @@ describe("RubricStats", () => {
     expect(html).not.toContain(RUBRIC_POLISH_PROMPT);
     expect(html).toContain("已完成潤飾，請確認提案。");
     expect(html).toContain("清除內容");
+  });
+
+  test("在聊天室提供潤飾評分表與資料來源入口，不再提供自動檢測支援按鈕", () => {
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        messages={[]}
+        onSendMessage={() => {}}
+        onToggleSources={() => {}}
+        isLoading={false}
+        hasRubric
+      />,
+    );
+
+    expect(html).toContain(">潤飾評分表</button>");
+    expect(html).toContain("資料來源");
+    expect(html).toContain('aria-controls="ai-chat-data-sources"');
+    expect(html).not.toContain("評分表來源");
+    expect(html).not.toContain("自動檢測支援");
+  });
+
+  test("資料來源在聊天室內展開，不建立額外 dialog", () => {
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        messages={[]}
+        onSendMessage={() => {}}
+        onToggleSources={() => {}}
+        sourcesOpen
+        sourcesContent={<div>目前資料來源內容</div>}
+        isLoading={false}
+        hasRubric
+      />,
+    );
+
+    expect(html).toContain('id="ai-chat-data-sources"');
+    expect(html).toContain("目前資料來源內容");
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).not.toContain('role="dialog"');
+  });
+
+  test("以加號提供聊天室附件入口並顯示待送出附件橫欄", () => {
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        messages={[]}
+        onSendMessage={() => {}}
+        onUploadFile={() => {}}
+        pendingAttachments={[{
+          id: "attachment-1",
+          original_filename: "requirements.md",
+          status: "ready",
+        }]}
+        isLoading={false}
+      />,
+    );
+
+    expect(html).toContain('aria-label="新增附件"');
+    expect(html).toContain("requirements.md");
+    expect(html).toContain("已讀取");
+  });
+});
+
+describe("CreateCheckChooser", () => {
+  test("新增檢查提供從零建立與已有文件兩條入口", () => {
+    const html = renderToStaticMarkup(
+      <CreateCheckChooser onChoose={() => {}} onCancel={() => {}} />,
+    );
+
+    expect(html).toContain("從零開始建立");
+    expect(html).toContain("使用已有評分文件");
+    expect(html).toContain("選擇文件");
+  });
+});
+
+describe("RubricTable", () => {
+  const items = [
+    {
+      id: "python-version",
+      title: "Python 版本檢查",
+      description: "Python 需要至少 3.11",
+      detectable: "auto",
+      detection_method: "執行 python --version",
+      fallback: "無法執行時由老師確認",
+      check_steps: [{ template_key: "python", command_key: "python_version", command_label: "Python 版本" }],
+    },
+    {
+      id: "response-quality",
+      title: "回傳內容品質",
+      description: "回傳內容符合規格",
+      detectable: "partial",
+      detection_method: null,
+      fallback: null,
+      check_steps: [],
+    },
+    {
+      id: "manual-review",
+      title: "主觀設計品質",
+      description: "需要老師依作品判斷",
+      detectable: "manual",
+      detection_method: null,
+      fallback: null,
+      check_steps: [],
+    },
+  ];
+
+  test("以最左側圖示提供檢查設定入口", () => {
+    const html = renderToStaticMarkup(
+      <RubricTable items={items} onChange={() => {}} onDelete={() => {}} />,
+    );
+
+    expect(html).toContain("檢查點");
+    expect(html).toContain("評分標準");
+    expect(html).toContain("自動檢測支援");
+    expect(html).toContain('value="Python 版本檢查"');
+    expect(html).toContain("可自動");
+    expect(html).toContain("部分自動");
+    expect(html).toContain("不行");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-label="展開第 1 項檢查設定"');
+    expect(html.indexOf('aria-label="展開第 1 項檢查設定"')).toBeLessThan(html.indexOf('value="Python 版本檢查"'));
+    expect(html).not.toContain(">詳細</button>");
+    expect(html).not.toContain("執行 python --version");
+    expect(html).not.toContain("AI 偵測判斷（僅由 AI 更新）");
+  });
+
+  test("只在異動的評分項目列標示待更新", () => {
+    const html = renderToStaticMarkup(
+      <RubricTable
+        items={items}
+        needsReviewIds={new Set(["python-version"])}
+        onChange={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+
+    expect(html).toContain("待更新");
+    expect(html).toContain('title="可自動（待更新）"');
+    expect(html).not.toContain('title="部分自動（待更新）"');
+    expect(html).not.toContain('title="不行（待更新）"');
+  });
+});
+
+describe("rubric item change detection", () => {
+  test("相同項目內容不視為異動，實際欄位變更才產生不同快照", () => {
+    const saved = {
+      items: [{ id: "item-1", title: "檢查版本", description: "至少 3.11", detectable: "auto" }],
+      detectability_needs_review: false,
+    };
+    const same = { ...saved, detectability_needs_review: true };
+    const changed = {
+      ...saved,
+      items: [{ ...saved.items[0], title: "檢查 Python 版本" }],
+    };
+
+    expect(getRubricItemsValue(same)).toBe(getRubricItemsValue(saved));
+    expect(getRubricItemsValue(changed)).not.toBe(getRubricItemsValue(saved));
+  });
+
+  test("只回傳實際變動的項目 ID，不把整張表標成待更新", () => {
+    const savedItems = [
+      { id: "item-1", title: "檢查版本", description: "至少 3.11", detectable: "auto" },
+      { id: "item-2", title: "檢查輸出", description: "符合格式", detectable: "partial" },
+    ];
+    const currentItems = [
+      { ...savedItems[0], title: "檢查 Python 版本" },
+      savedItems[1],
+    ];
+
+    expect([...getPendingRubricItemIds(currentItems, savedItems)]).toEqual(["item-1"]);
+    expect([...getPendingRubricItemIds([savedItems[1]], savedItems)]).toEqual([]);
   });
 });
 
@@ -80,22 +222,6 @@ describe("buildProposalDiff", () => {
       ["new", "add"],
       ["remove", "delete"],
     ]);
-  });
-});
-
-describe("CreateCheckChooser", () => {
-  test("以頁內兩個選項呈現，不使用 dialog", () => {
-    const html = renderToStaticMarkup(
-      <CreateCheckChooser onChoose={() => {}} onCancel={() => {}} />,
-    );
-
-    expect(html).toContain("從零開始建立");
-    expect(html).toContain("使用已有評分文件");
-    expect(html).toContain("重構");
-    expect(html).not.toContain("複製檢查");
-    expect(html).toContain("返回目前檢查");
-    expect(html).toContain("立即開啟空白評分表");
-    expect(html).not.toContain('role="dialog"');
   });
 });
 
@@ -124,6 +250,16 @@ describe("session menu positioning", () => {
   });
 });
 
+describe("SessionTitle", () => {
+  test("保留完整名稱作為 tooltip，並將可視區與文字分開以支援截斷動畫", () => {
+    const title = "這是一個很長的 AI 檢查 session 名稱";
+    const html = renderToStaticMarkup(<SessionTitle title={title}>{title}</SessionTitle>);
+
+    expect(html).toContain('title="這是一個很長的 AI 檢查 session 名稱"');
+    expect(html).toContain(title);
+  });
+});
+
 describe("getSelectedRubricSource", () => {
   const files = [
     { id: "file-other", status: "active", display_name: "其他檢查" },
@@ -139,24 +275,6 @@ describe("getSelectedRubricSource", () => {
   test("沒有選用來源或來源已失效時不回傳其他班級來源", () => {
     expect(getSelectedRubricSource(files, null)).toBeNull();
     expect(getSelectedRubricSource(files, "file-replaced")).toBeNull();
-  });
-});
-
-describe("getVisibleRubricSources", () => {
-  const files = [
-    { id: "file-other", status: "active" },
-    { id: "file-selected", status: "active" },
-    { id: "file-replaced", status: "replaced" },
-  ];
-
-  test("預設只顯示目前檢查的來源，明確切換時才展開其他 active 來源", () => {
-    expect(getVisibleRubricSources(files, "file-selected")).toEqual([files[1]]);
-    expect(getVisibleRubricSources(files, "file-selected", true)).toEqual([files[0], files[1]]);
-  });
-
-  test("沒有選用來源時不列出其他來源", () => {
-    expect(getVisibleRubricSources(files, null, true)).toEqual([]);
-    expect(getVisibleRubricSources(files, "file-missing", true)).toEqual([]);
   });
 });
 

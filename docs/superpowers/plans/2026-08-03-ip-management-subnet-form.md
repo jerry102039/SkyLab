@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - 介面文字一律繁體中文。
-- 樣式遵循 `frontend/src/assets/styles/STYLE_GUIDE.md`：**不得新增任何 SCSS 變數或 CSS 自訂屬性**，顏色用既有 `--color-*`；按鈕 hover 一律加 `:not(:disabled)`，disabled 用 `opacity: 0.4; cursor: not-allowed`。
+- 樣式遵循 `docs/2026-09-05-frontend-style-guide.md`（原 `frontend/src/assets/styles/STYLE_GUIDE.md`）：**不得新增任何 SCSS 變數或 CSS 自訂屬性**，顏色用既有 `--color-*`；按鈕 hover 一律加 `:not(:disabled)`，disabled 用 `opacity: 0.4; cursor: not-allowed`。
 - Icon 一律用 `MIcon`（material-icons filled），禁止 SVG inline / emoji。
 - CSS Modules 類別名稱用 camelCase，變體用底線（`.badge_vm`）。
 - API 一律經 `services/*.js`，頁面不直接 `fetch`。

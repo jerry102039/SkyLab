@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from cryptography.fernet import InvalidToken
 from sqlmodel import Session, select
 
+from app.core.i18n import t
 from app.core.security import decrypt_value, encrypt_value
 from app.exceptions import AppError
 from app.models.proxmox_connection import ProxmoxConnection
@@ -157,8 +158,7 @@ def get_decrypted_password(conn: ProxmoxConnection) -> str:
         return decrypt_value(conn.encrypted_password)
     except InvalidToken as e:
         raise AppError(
-            f"無法解密連線「{conn.name}」的 Proxmox 密碼：加密金鑰已變更，"
-            "請重新儲存該連線設定",
+            t("proxmox.connection_decrypt_password_failed", name=conn.name),
             status_code=400,
         ) from e
 

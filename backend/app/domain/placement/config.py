@@ -14,10 +14,6 @@ class PlacementConfig(BaseModel):
     guest_pressure_threshold: float = 0.85
     guest_per_core_limit: float = 2.0
     placement_headroom_ratio: float = 0.1
-    placement_weight_cpu: float = 0.35
-    placement_weight_memory: float = 0.35
-    placement_weight_disk: float = 0.15
-    placement_weight_guest: float = 0.15
 
 
 def load_placement_config() -> PlacementConfig:
@@ -50,22 +46,6 @@ class PlacementSettings:
     @property
     def placement_headroom_ratio(self) -> float:
         return float(self.section.placement_headroom_ratio)
-
-    @property
-    def placement_weight_cpu(self) -> float:
-        return float(self.section.placement_weight_cpu)
-
-    @property
-    def placement_weight_memory(self) -> float:
-        return float(self.section.placement_weight_memory)
-
-    @property
-    def placement_weight_disk(self) -> float:
-        return float(self.section.placement_weight_disk)
-
-    @property
-    def placement_weight_guest(self) -> float:
-        return float(self.section.placement_weight_guest)
 
 
 settings = PlacementSettings()

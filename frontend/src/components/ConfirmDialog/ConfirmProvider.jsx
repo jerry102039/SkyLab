@@ -8,6 +8,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import MIcon from "../MIcon";
 import useDialogPresence from "../../hooks/useDialogPresence";
 import styles from "./ConfirmDialog.module.scss";
@@ -21,6 +22,7 @@ export function useConfirm() {
 }
 
 export function ConfirmProvider({ children }) {
+  const { t } = useTranslation("common");
   const [pending, setPending] = useState(null); // { options, resolve }
   const confirmBtnRef = useRef(null);
 
@@ -68,19 +70,19 @@ export function ConfirmProvider({ children }) {
               className={styles.dialog}
               role="alertdialog"
               aria-modal="true"
-              aria-label={opts.title ?? "確認操作"}
+              aria-label={opts.title ?? t("ConfirmProvider.defaultTitle")}
               onClick={(e) => e.stopPropagation()}
             >
               <div className={styles.title}>
                 <span className={opts.danger ? styles.iconDanger : styles.iconWarn}>
                   <MIcon name={opts.danger ? "warning" : "help"} size={20} />
                 </span>
-                {opts.title ?? "確認操作"}
+                {opts.title ?? t("ConfirmProvider.defaultTitle")}
               </div>
               <p className={styles.message}>{opts.message}</p>
               <div className={styles.actions}>
                 <button type="button" className={styles.btnSecondary} onClick={() => close(false)}>
-                  {opts.cancelText ?? "取消"}
+                  {opts.cancelText ?? t("ConfirmProvider.cancel")}
                 </button>
                 <button
                   type="button"
@@ -88,7 +90,7 @@ export function ConfirmProvider({ children }) {
                   className={opts.danger ? styles.btnDanger : styles.btnPrimary}
                   onClick={() => close(true)}
                 >
-                  {opts.confirmText ?? "確定"}
+                  {opts.confirmText ?? t("ConfirmProvider.confirm")}
                 </button>
               </div>
             </div>

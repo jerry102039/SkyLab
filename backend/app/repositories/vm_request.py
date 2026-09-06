@@ -19,6 +19,7 @@ def create_vm_request(
     encrypted_password: str,
     auto_decision_reason: str | None = None,
     request_kind: str | None = None,
+    placement_group_id: uuid.UUID | None = None,
     commit: bool = True,
 ) -> VMRequest:
     """Create VM request. Password should be pre-encrypted by the service layer.
@@ -58,6 +59,7 @@ def create_vm_request(
         gpu_mdev_profile=getattr(vm_request_in, "gpu_mdev_profile", None),
         requested_mode=getattr(vm_request_in, "requested_mode", "manual"),
         auto_decision_reason=auto_decision_reason,
+        placement_group_id=placement_group_id,
         status=VMRequestStatus.pending,
         provisioning_status=VMProvisioningStatus.idle,
         created_at=datetime.now(timezone.utc),

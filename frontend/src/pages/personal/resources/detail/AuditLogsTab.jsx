@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./ResourceDetailPage.module.scss";
 import LoadingState from "../../../../components/LoadingState/LoadingState";
 import EmptyState from "../../../../components/EmptyState/EmptyState";
@@ -12,6 +13,7 @@ function actionBadgeClass(action) {
 }
 
 export default function AuditLogsTab({ vmid }) {
+  const { t } = useTranslation("personal");
   const [logs, setLogs] = useState(null);
   const [error, setError] = useState(false);
 
@@ -25,7 +27,7 @@ export default function AuditLogsTab({ vmid }) {
     };
   }, [vmid]);
 
-  if (error) return <p className={styles.stateText}>無法載入操作紀錄</p>;
+  if (error) return <p className={styles.stateText}>{t("AuditLogsTab.loadFailed")}</p>;
   if (!logs) return <LoadingState />;
 
   return (
@@ -33,20 +35,20 @@ export default function AuditLogsTab({ vmid }) {
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <div>
-            <h2 className={styles.cardTitle}>操作紀錄</h2>
-            <p className={styles.cardDesc}>此資源的所有操作（共 {logs.count} 筆）</p>
+            <h2 className={styles.cardTitle}>{t("AuditLogsTab.title")}</h2>
+            <p className={styles.cardDesc}>{t("AuditLogsTab.desc", { count: logs.count })}</p>
           </div>
         </div>
         {logs.data.length === 0 ? (
-          <EmptyState icon="receipt_long" title="尚無紀錄" />
+          <EmptyState icon="receipt_long" title={t("AuditLogsTab.empty")} />
         ) : (
           <table className={styles.table}>
             <thead>
               <tr>
-                <th className={styles.th}>時間</th>
-                <th className={styles.th}>操作者</th>
-                <th className={styles.th}>動作</th>
-                <th className={styles.th}>詳細</th>
+                <th className={styles.th}>{t("AuditLogsTab.colTime")}</th>
+                <th className={styles.th}>{t("AuditLogsTab.colOperator")}</th>
+                <th className={styles.th}>{t("AuditLogsTab.colAction")}</th>
+                <th className={styles.th}>{t("AuditLogsTab.colDetails")}</th>
               </tr>
             </thead>
             <tbody>
@@ -58,7 +60,7 @@ export default function AuditLogsTab({ vmid }) {
                   <td className={styles.td}>
                     <div className={styles.userCell}>
                       <span className={styles.userName}>
-                        {log.user_full_name || log.user_email || "系統"}
+                        {log.user_full_name || log.user_email || t("AuditLogsTab.system")}
                       </span>
                       <span className={styles.userEmail}>{log.user_email}</span>
                     </div>

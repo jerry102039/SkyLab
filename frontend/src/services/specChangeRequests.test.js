@@ -28,6 +28,10 @@ const jsonRes = (status, body = {}) => ({
   json: async () => body,
 });
 
+/* 假的 t()：把 key 與參數攤成可比對的字串 */
+const fakeT = (key, params) =>
+  params ? `${key}(${Object.entries(params).map(([k, v]) => `${k}=${v}`).join(",")})` : key;
+
 let fetchMock;
 
 beforeEach(() => {
@@ -109,21 +113,28 @@ describe("spec request display helpers", () => {
     expect(canCancelSpecRequest(approved("applied"))).toBe(false);
   });
 
-  test("狀態徽章依 apply_status 細分", () => {
-    expect(specRequestDisplayStatus(approved("ready")).label).toBe("已核准 · 待套用");
-    expect(specRequestDisplayStatus(approved("applying")).label).toBe("套用中");
+  test("狀態徽章依 apply_status 細分，文案交給 labelKey", () => {
+    expect(specRequestDisplayStatus(approved("ready"))).toEqual({
+      key: "ready", color: "warning", labelKey: "SpecRequest.statusReady",
+    });
+    expect(specRequestDisplayStatus(approved("applying")).key).toBe("applying");
     expect(specRequestDisplayStatus(approved("applied")).color).toBe("success");
-    expect(specRequestDisplayStatus(approved("failed")).color).toBe("danger");
+    expect(specRequestDisplayStatus(approved("failed")).labelKey).toBe("SpecRequest.statusApplyFailed");
     expect(specRequestDisplayStatus({ status: "cancelled" }).color).toBe("muted");
   });
 
-  test("變更摘要只列有申請的項目", () => {
+  test("變更摘要只列有申請的項目，記憶體換算成 GB", () => {
     expect(
-      specRequestChangeLabel({
-        current_cpu: 2, requested_cpu: 4, current_memory: 2048, requested_memory: 3072,
-      }),
-    ).toBe("CPU 2 → 4 核 / 記憶體 2 GB → 3 GB");
-    expect(specRequestChangeLabel({ current_disk: 20, requested_disk: 40 })).toBe("磁碟 20 → 40 GB");
-    expect(specRequestChangeLabel({})).toBe("—");
+      specRequestChangeLabel(
+        { current_cpu: 2, requested_cpu: 4, current_memory: 2048, requested_memory: 3072 },
+        fakeT,
+      ),
+    ).toBe(
+      "SpecRequest.changeCpu(from=2,to=4) / SpecRequest.changeMemory(from=SpecRequest.memUnit(value=2),to=SpecRequest.memUnit(value=3))",
+    );
+    expect(specRequestChangeLabel({ current_disk: 20, requested_disk: 40 }, fakeT)).toBe(
+      "SpecRequest.changeDisk(from=20,to=40)",
+    );
+    expect(specRequestChangeLabel({}, fakeT)).toBe("—");
   });
 });

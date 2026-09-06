@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import MIcon from "../../../components/MIcon";
 import EmptyState from "../../../components/EmptyState/EmptyState";
@@ -7,33 +8,45 @@ import { TeachingClassesService } from "../../../services/teachingClasses";
 import styles from "../CourseOperations.module.scss";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-const STATUS = {
-  planning: "準備中",
-  pending_review: "等待審核",
-  provisioning: "正在建立",
-  partial_failed: "需要處理",
-  active: "可以上課",
-  archived: "已結束",
+const STATUS_KEYS = {
+  planning: "ClassManagementPage.statusPlanning",
+  pending_review: "ClassManagementPage.statusPendingReview",
+  provisioning: "ClassManagementPage.statusProvisioning",
+  partial_failed: "ClassManagementPage.statusPartialFailed",
+  active: "ClassManagementPage.statusActive",
+  archived: "ClassManagementPage.statusArchived",
 };
 
-const FILTERS = [
-  ["all", "全部"],
-  ["planning", "準備中"],
-  ["pending_review", "待審核"],
-  ["provisioning", "建立中"],
-  ["partial_failed", "需處理"],
-  ["active", "可上課"],
+// 分頁是導航（我要找哪一批），徽章才是細節（這一班現在怎樣），所以粒度不同：
+// 「等待審核」與「正在建立」對老師都是「等，什麼都不能做」，合併成一個桶。
+// 「需要處理」是告警不是分類，count 為 0 時不佔位置。
+const FILTER_GROUPS = [
+  { key: "all", labelKey: "ClassManagementPage.filterAll", statuses: null },
+  { key: "planning", labelKey: "ClassManagementPage.filterPlanning", statuses: ["planning"] },
+  { key: "building", labelKey: "ClassManagementPage.filterBuilding", statuses: ["pending_review", "provisioning"] },
+  { key: "partial_failed", labelKey: "ClassManagementPage.filterPartialFailed", statuses: ["partial_failed"], alertOnly: true },
+  { key: "active", labelKey: "ClassManagementPage.filterActive", statuses: ["active"] },
 ];
 
-const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
+const SETUP_STEP_COUNT = 3;
 
-const STATUS_HINT = {
-  planning: "建置尚未完成",
-  pending_review: "已送審，等待管理員核准",
-  provisioning: "機器正在建立中",
-  partial_failed: "部分機器建立失敗",
-  active: "環境已準備完成",
-  archived: "課程已結束",
+const WEEKDAY_KEYS = [
+  "ClassManagementPage.weekdayMon",
+  "ClassManagementPage.weekdayTue",
+  "ClassManagementPage.weekdayWed",
+  "ClassManagementPage.weekdayThu",
+  "ClassManagementPage.weekdayFri",
+  "ClassManagementPage.weekdaySat",
+  "ClassManagementPage.weekdaySun",
+];
+
+const STATUS_HINT_KEYS = {
+  planning: "ClassManagementPage.hintPlanning",
+  pending_review: "ClassManagementPage.hintPendingReview",
+  provisioning: "ClassManagementPage.hintProvisioning",
+  partial_failed: "ClassManagementPage.hintPartialFailed",
+  active: "ClassManagementPage.hintActive",
+  archived: "ClassManagementPage.hintArchived",
 };
 
 function normalizeClass(item) {
@@ -53,25 +66,41 @@ function normalizeClass(item) {
   };
 }
 
+export function setupChecklist(item) {
+  return [
+    item.students > 0,
+    Boolean(item.course_environment) && (item.nodes?.length ?? 0) > 0,
+    (item.weeks ?? []).some((week) => String(week.title ?? "").trim()),
+  ];
+}
+
 export function classSetupResumeStep(item) {
-  if (!item.students) return 2;
-  if (!item.nodes?.length) return 3;
-  if (!(item.weeks ?? []).some((week) => String(week.title ?? "").trim())) return 4;
+  const [hasStudents, hasEnvironment, hasTasks] = setupChecklist(item);
+  if (!hasStudents) return 2;
+  if (!hasEnvironment) return 3;
+  if (!hasTasks) return 4;
   return 5;
 }
 
-function nextAction(item) {
+function nextAction(item, t) {
   if (item.status === "planning") {
     const step = classSetupResumeStep(item);
-    const labels = { 2: "繼續加入學生", 3: "繼續設定上課環境", 4: "繼續安排任務", 5: "確認並送出建機" };
+    const labels = {
+      2: t("ClassManagementPage.actionContinueStudents"),
+      3: t("ClassManagementPage.actionContinueEnv"),
+      4: t("ClassManagementPage.actionContinueTasks"),
+      5: t("ClassManagementPage.actionConfirmSubmit"),
+    };
     return [labels[step], `/class-setup?classId=${item.id}&step=${step}`];
   }
-  if (item.status === "partial_failed") return ["查看失敗項目", `/class-management/${item.id}`];
-  if (item.status === "active") return ["進入班級", `/class-management/${item.id}`];
-  return ["查看建機進度", `/class-management/${item.id}`];
+  if (item.status === "partial_failed") return [t("ClassManagementPage.actionViewFailed"), `/class-management/${item.id}`];
+  if (item.status === "active") return [t("ClassManagementPage.actionEnterClass"), `/class-management/${item.id}`];
+  if (item.status === "archived") return [t("ClassManagementPage.actionViewClass"), `/class-management/${item.id}`];
+  return [t("ClassManagementPage.actionViewProgress"), `/class-management/${item.id}`];
 }
 
 export default function ClassManagementPage() {
+  const { t } = useTranslation("teaching");
   const navigate = useNavigate();
   const location = useLocation();
   const [classes, setClasses] = useState([]);
@@ -79,32 +108,50 @@ export default function ClassManagementPage() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     let active = true;
     TeachingClassesService.list()
       .then((rows) => active && setClasses((rows?.data ?? rows ?? []).map(normalizeClass)))
-      .catch((reason) => active && setError(reason?.message ?? "無法讀取班級資料"))
+      .catch((reason) => active && setError(reason?.message ?? t("ClassManagementPage.loadFailed")))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, []);
+  }, [t]);
 
-  const rows = useMemo(
-    () => classes.filter((item) => (status === "all" || item.status === status)
-      && `${item.name} ${item.code}`.toLowerCase().includes(query.toLowerCase())),
-    [classes, query, status],
+  const archivedCount = useMemo(
+    () => classes.filter((item) => item.status === "archived").length,
+    [classes],
+  );
+
+  const visible = useMemo(
+    () => classes.filter((item) => showArchived || item.status !== "archived"),
+    [classes, showArchived],
   );
 
   const statusCounts = useMemo(() => {
-    const counts = { all: classes.length };
-    classes.forEach((item) => { counts[item.status] = (counts[item.status] ?? 0) + 1; });
+    const counts = { all: visible.length };
+    FILTER_GROUPS.forEach((group) => {
+      if (group.statuses) counts[group.key] = visible.filter((item) => group.statuses.includes(item.status)).length;
+    });
     return counts;
-  }, [classes]);
+  }, [visible]);
+
+  const tabs = useMemo(
+    () => FILTER_GROUPS.filter((group) => !group.alertOnly || statusCounts[group.key] > 0 || status === group.key),
+    [statusCounts, status],
+  );
+
+  const rows = useMemo(() => {
+    const group = FILTER_GROUPS.find((entry) => entry.key === status);
+    return visible.filter((item) => (!group?.statuses || group.statuses.includes(item.status))
+      && item.name.toLowerCase().includes(query.toLowerCase()));
+  }, [visible, query, status]);
 
   return <div className={`${styles.page} ${styles.listPage}`}>
-    <PageHeader title="班級管理" subtitle="從尚未完成的班級繼續準備，或進入已就緒的班級開始上課。">
+    <PageHeader title={t("ClassManagementPage.title")} subtitle={t("ClassManagementPage.subtitle")}>
       <button type="button" className={styles.btnPrimary} onClick={() => navigate("/class-setup")}>
-        <MIcon name="add" size={17} />建立班級
+        <MIcon name="add" size={17} />{t("ClassManagementPage.createClass")}
       </button>
     </PageHeader>
 
@@ -112,40 +159,41 @@ export default function ClassManagementPage() {
     {location.state?.message && <p className={styles.persistentFeedback}><MIcon name="cloud_done" size={17} />{location.state.message}</p>}
 
     <div className={styles.classToolbar}>
-      <label className={styles.searchInput}><MIcon name="search" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋班級" /></label>
-      <div className={styles.pillTabs}>{FILTERS.map(([key, label]) => <button type="button" key={key} className={status === key ? styles.pillActive : ""} onClick={() => setStatus(key)}>{label}<i>{statusCounts[key] ?? 0}</i></button>)}</div>
+      <label className={styles.searchInput}><MIcon name="search" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("ClassManagementPage.searchPlaceholder")} /></label>
+      <div className={styles.pillTabs}>{tabs.map((group) => <button type="button" key={group.key} className={`${status === group.key ? styles.pillActive : ""}${group.alertOnly ? ` ${styles.pillAlert}` : ""}`} onClick={() => setStatus(group.key)}>{t(group.labelKey)}<i>{statusCounts[group.key] ?? 0}</i></button>)}</div>
+      {archivedCount > 0 && <label className={styles.archivedToggle}><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); if (!event.target.checked) setStatus("all"); }} />{t("ClassManagementPage.showArchived", { count: archivedCount })}</label>}
     </div>
 
-    {loading ? <LoadingState fullPage text="正在讀取班級…" /> : rows.length ? <section className={styles.classCardGrid}>
+    {loading ? <LoadingState fullPage text={t("ClassManagementPage.loadingText")} /> : rows.length ? <section className={styles.classCardGrid}>
       {rows.map((item) => {
-        const setupReady = [item.students > 0, item.nodes.length > 0].filter(Boolean).length;
-        const progress = item.status === "planning" ? setupReady / 2 * 100 : item.totalMachines ? item.readyMachines / item.totalMachines * 100 : 0;
-        const [action, target] = nextAction(item);
+        const setupReady = setupChecklist(item).filter(Boolean).length;
+        const progress = item.status === "planning" ? setupReady / SETUP_STEP_COUNT * 100 : item.totalMachines ? item.readyMachines / item.totalMachines * 100 : 0;
+        const [action, target] = nextAction(item, t);
         return <article className={`${styles.classCard}${item.status === "partial_failed" ? ` ${styles.classCardAlert}` : ""}`} key={item.id}>
           <button type="button" className={styles.classCardMain} onClick={() => navigate(`/class-management/${item.id}`)}>
             <div className={styles.classCardTop}>
-              <div><span>{item.code} · {item.term}</span><h2>{item.name}</h2></div>
-              <span className={`${styles.statusBadge} ${styles[`status_${item.status}`]}`}>{STATUS[item.status] ?? item.status}</span>
+              <div><span>{item.term}</span><h2>{item.name}</h2></div>
+              <span className={`${styles.statusBadge} ${styles[`status_${item.status}`]}`}>{STATUS_KEYS[item.status] ? t(STATUS_KEYS[item.status]) : item.status}</span>
             </div>
             <div className={styles.classMeta}>
-              <strong><MIcon name="schedule" size={16} />每週{WEEKDAYS[item.weekday]} {item.startTime}–{item.endTime}</strong>
-              <span><MIcon name="calendar_today" size={15} />{item.startDate} 至 {item.endDate}</span>
-              <span><MIcon name="power_settings_new" size={15} />提前 {item.bootLeadMinutes} 分鐘開機</span>
+              <strong><MIcon name="schedule" size={16} />{t("ClassManagementPage.weeklyPrefix")}{t(WEEKDAY_KEYS[item.weekday])} {item.startTime}–{item.endTime}</strong>
+              <span><MIcon name="calendar_today" size={15} />{item.startDate} {t("ClassManagementPage.dateTo")} {item.endDate}</span>
+              <span><MIcon name="power_settings_new" size={15} />{t("ClassManagementPage.bootLeadLabel", { minutes: item.bootLeadMinutes })}</span>
             </div>
-            <div className={styles.classProgress}><div><span>{item.status === "planning" ? "建機準備" : "機器建立"}</span><strong>{item.status === "planning" ? `${setupReady}/2` : `${item.readyMachines}/${item.totalMachines}`}</strong></div><i><b style={{ width: `${progress}%` }} /></i></div>
+            <div className={styles.classProgress}><div><span>{item.status === "planning" ? t("ClassManagementPage.progressSetup") : t("ClassManagementPage.progressBuild")}</span><strong>{item.status === "planning" ? `${setupReady}/${SETUP_STEP_COUNT}` : `${item.readyMachines}/${item.totalMachines}`}</strong></div><i><b style={{ width: `${progress}%` }} /></i></div>
           </button>
           <div className={styles.classStats}>
-            <div><strong>{item.students}</strong><span>位學生</span></div>
-            <div><strong>{item.weeks.length}</strong><span>個課次</span></div>
-            <div><strong>{item.nodes.length}</strong><span>台機器／每人</span></div>
+            <div><strong>{item.students}</strong><span>{t("ClassManagementPage.unitStudents")}</span></div>
+            <div><strong>{item.weeks.length}</strong><span>{t("ClassManagementPage.unitSessions")}</span></div>
+            <div><strong>{item.nodes.length}</strong><span>{t("ClassManagementPage.unitMachinesPerPerson")}</span></div>
           </div>
-          <div className={styles.classCardAction}><span>{STATUS_HINT[item.status] ?? ""}</span><button type="button" onClick={() => navigate(target)}>{action}<MIcon name="arrow_forward" size={16} /></button></div>
+          <div className={styles.classCardAction}><span>{STATUS_HINT_KEYS[item.status] ? t(STATUS_HINT_KEYS[item.status]) : ""}</span><button type="button" onClick={() => navigate(target)}>{action}<MIcon name="arrow_forward" size={16} /></button></div>
         </article>;
       })}
     </section> : <EmptyState
       icon="school"
-      title={classes.length ? "沒有符合搜尋或篩選條件的班級。" : "還沒有任何班級。"}
-      description={classes.length ? undefined : "建立班級後，SkyLab 會替每位學生準備好上課機器。"}
+      title={classes.length ? t("ClassManagementPage.emptyFilteredTitle") : t("ClassManagementPage.emptyTitle")}
+      description={classes.length ? undefined : t("ClassManagementPage.emptyDescription")}
     />}
   </div>;
 }

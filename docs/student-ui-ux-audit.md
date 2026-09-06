@@ -37,7 +37,7 @@ AI API、外觀與其他低頻能力放入「更多」或個人選單；所有�
 - [App.jsx](../frontend/src/App.jsx)：登入後路由與角色限制。
 - [Sidebar.jsx](../frontend/src/components/Sidebar/Sidebar.jsx)：學生實際可見的導覽項目。
 - `frontend/src/pages/personal`：申請、資源、帳號與首頁。
-- `frontend/src/pages/courses`、`classroom`、`ai/ai-api`：學生可能使用的課程與 AI 功能。
+- `frontend/src/pages/personal/dashboard`、`classroom`、`ai/ai-api`：學生可能使用的課程與 AI 功能。
 
 目前環境沒有可連線的互動瀏覽器，因此本輪未完成「真實學生帳號登入後」的逐像素與鍵盤走查；建議實作前再用學生、教師、管理員三種測試帳號各跑一次權限與任務測試。這不影響本報告指出的路由、角色、文案與流程問題。
 

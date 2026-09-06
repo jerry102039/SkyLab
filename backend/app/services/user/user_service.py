@@ -4,6 +4,7 @@ from sqlmodel import Session, func, select
 
 from app.core.authorizers import can_manage_users, require_user_manage
 from app.core.config import settings
+from app.core.i18n import t
 from app.core.security import get_password_hash, verify_password
 from app.exceptions import (
     BadRequestError,
@@ -41,17 +42,12 @@ def _commit_and_refresh(session: Session, user: User) -> User:
 
 def _prepare_user_delete(*, session: Session, user: User) -> None:
     if resource_repo.get_resources_by_user(session=session, user_id=user.id):
-        raise BadRequestError(
-            "Cannot delete a user who still owns provisioned resources"
-        )
+        raise BadRequestError(t("user.deleteHasResources"))
     teaching_class = session.exec(
         select(TeachingClass).where(TeachingClass.owner_id == user.id).limit(1)
     ).first()
     if teaching_class is not None:
-        raise ConflictError(
-            "Cannot delete a teacher who owns teaching-class history; "
-            "disable the account or reassign the class first"
-        )
+        raise ConflictError(t("user.deleteTeacherHasClasses"))
 
     vm_requests = session.exec(
         select(VMRequest).where(VMRequest.user_id == user.id)
@@ -92,7 +88,7 @@ def create_user(
 ) -> User:
     existing = user_repo.get_user_by_email(session=session, email=user_in.email)
     if existing:
-        raise ConflictError("The user with this email already exists in the system.")
+        raise ConflictError(t("user.emailExists"))
 
     user = user_repo.create_user(session=session, user_create=user_in)
 
@@ -123,11 +119,11 @@ def create_user(
 
 def register_user(*, session: Session, user_in: UserRegister) -> User:
     if not settings.ENABLE_SIGNUP:
-        raise BadRequestError("User registration is currently disabled")
+        raise BadRequestError(t("user.registrationDisabled"))
 
     existing = user_repo.get_user_by_email(session=session, email=user_in.email)
     if existing:
-        raise ConflictError("The user with this email already exists in the system")
+        raise ConflictError(t("user.emailExists"))
     user_create = UserCreate.model_validate(user_in.model_dump())
     user = user_repo.create_user(session=session, user_create=user_create)
     return _commit_and_refresh(session, user)
@@ -141,7 +137,7 @@ def get_user_by_id(
         return user
     require_user_manage(current_user)
     if not user:
-        raise NotFoundError("User not found")
+        raise NotFoundError(t("user.notFound"))
     return user
 
 
@@ -154,11 +150,11 @@ def update_user(
 ) -> User:
     db_user = session.get(User, user_id)
     if not db_user:
-        raise NotFoundError("The user with this id does not exist in the system")
+        raise NotFoundError(t("user.idNotFound"))
     if user_in.email:
         existing = user_repo.get_user_by_email(session=session, email=user_in.email)
         if existing and existing.id != user_id:
-            raise ConflictError("User with this email already exists")
+            raise ConflictError(t("user.emailExistsShort"))
 
     db_user = user_repo.update_user(session=session, db_user=db_user, user_in=user_in)
 
@@ -183,11 +179,9 @@ def update_user(
 def delete_user(*, session: Session, user_id: uuid.UUID, current_user: User) -> None:
     user = session.get(User, user_id)
     if not user:
-        raise NotFoundError("User not found")
+        raise NotFoundError(t("user.notFound"))
     if user == current_user:
-        raise PermissionDeniedError(
-            "Super users are not allowed to delete themselves"
-        )
+        raise PermissionDeniedError(t("user.selfDeleteForbidden"))
 
     try:
         _prepare_user_delete(session=session, user=user)
@@ -209,7 +203,7 @@ def update_me(*, session: Session, user_in: UserUpdateMe, current_user: User) ->
     if user_in.email:
         existing = user_repo.get_user_by_email(session=session, email=user_in.email)
         if existing and existing.id != current_user.id:
-            raise ConflictError("User with this email already exists")
+            raise ConflictError(t("user.emailExistsShort"))
 
     user_data = user_in.model_dump(exclude_unset=True)
     current_user.sqlmodel_update(user_data)
@@ -236,11 +230,9 @@ def update_password(
 ) -> None:
     verified, _ = verify_password(current_password, current_user.hashed_password)
     if not verified:
-        raise BadRequestError("Incorrect password")
+        raise BadRequestError(t("user.incorrectPassword"))
     if current_password == new_password:
-        raise BadRequestError(
-            "New password cannot be the same as the current one"
-        )
+        raise BadRequestError(t("user.samePassword"))
     current_user.hashed_password = get_password_hash(new_password)
     current_user.token_version += 1  # Invalidate all existing tokens
     session.add(current_user)
@@ -256,9 +248,7 @@ def update_password(
 
 def delete_me(*, session: Session, current_user: User) -> None:
     if can_manage_users(current_user):
-        raise PermissionDeniedError(
-            "Super users are not allowed to delete themselves"
-        )
+        raise PermissionDeniedError(t("user.selfDeleteForbidden"))
 
     try:
         _prepare_user_delete(session=session, user=current_user)

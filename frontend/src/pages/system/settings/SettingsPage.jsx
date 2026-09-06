@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import styles from "./SettingsPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -11,15 +12,6 @@ import GovernanceTab from "./GovernanceTab";
 import LdapTab from "./LdapTab";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-const TABS = [
-  { key: "pve",       label: "PVE 連線",  icon: "device_hub"    },
-  { key: "scheduler", label: "資源排程",  icon: "settings_input_component" },
-  { key: "governance", label: "治理",     icon: "policy"        },
-  { key: "ldap",      label: "LDAP",      icon: "badge"         },
-  { key: "nodes",     label: "節點管理",  icon: "lock"          },
-  { key: "storage",   label: "Storage",   icon: "storage"       },
-];
-
 /**
  * PUT /proxmox-config 需要的完整欄位（password / ca_cert 另外處理）。
  *
@@ -30,7 +22,7 @@ const TABS = [
 const UPDATE_KEYS = [
   "host", "user", "verify_ssl", "iso_storage", "data_storage",
   "api_timeout", "task_check_interval", "pool_name", "gateway_ip",
-  "local_subnet", "default_node", "placement_strategy",
+  "local_subnet", "default_node",
   "cpu_overcommit_ratio", "disk_overcommit_ratio",
   "placement_peak_cpu_margin",
   "placement_peak_memory_margin", "placement_loadavg_warn_per_core",
@@ -108,6 +100,7 @@ function connectionToForm(conn) {
 }
 
 function ConnectionForm({ initial, isEdit, saving, onSubmit, onCancel }) {
+  const { t } = useTranslation("system");
   const [form, setForm] = useState(initial);
   const set = (name, value) => setForm((prev) => ({ ...prev, [name]: value }));
 
@@ -142,47 +135,47 @@ function ConnectionForm({ initial, isEdit, saving, onSubmit, onCancel }) {
 
   return (
     <form className={styles.card} onSubmit={handleSubmit}>
-      <h2 className={styles.cardTitle}>{isEdit ? "編輯連線" : "新增連線"}</h2>
-      <h3 className={styles.sectionTitle}>連線設定</h3>
+      <h2 className={styles.cardTitle}>{isEdit ? t("SettingsPage.editConnection") : t("SettingsPage.addConnection")}</h2>
+      <h3 className={styles.sectionTitle}>{t("SettingsPage.connectionSettingsTitle")}</h3>
       <div className={styles.formGrid}>
         <label className={styles.field}>
-          <span>名稱 *</span>
-          <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="例：機房A" required />
+          <span>{t("SettingsPage.connectionName")}</span>
+          <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={t("SettingsPage.connectionNamePlaceholder")} required />
         </label>
         <label className={styles.field}>
           <span>Host *</span>
-          <input value={form.host} onChange={(e) => set("host", e.target.value)} placeholder="例：192.168.100.2" required />
+          <input value={form.host} onChange={(e) => set("host", e.target.value)} placeholder={t("SettingsPage.hostPlaceholder")} required />
         </label>
         <label className={styles.field}>
           <span>Port</span>
           <input type="number" min={1} max={65535} value={form.port} onChange={(e) => set("port", e.target.value)} />
         </label>
         <label className={styles.field}>
-          <span>API 使用者 *</span>
+          <span>{t("SettingsPage.apiUser")}</span>
           <input value={form.user} onChange={(e) => set("user", e.target.value)} placeholder="root@pam" required />
         </label>
         <label className={styles.field}>
-          <span>密碼{isEdit ? "（留空表示不變更）" : " *"}</span>
+          <span>{t("SettingsPage.password")}{isEdit ? t("SettingsPage.leaveBlankUnchanged") : " *"}</span>
           <input
             type="password"
             value={form.password}
             onChange={(e) => set("password", e.target.value)}
-            placeholder={isEdit ? "已設定" : "PVE 密碼"}
+            placeholder={isEdit ? t("SettingsPage.passwordSetPlaceholder") : t("SettingsPage.pvePasswordPlaceholder")}
             required={!isEdit}
           />
         </label>
         <label className={styles.field}>
-          <span>API Timeout（秒）</span>
+          <span>{t("SettingsPage.apiTimeoutSeconds")}</span>
           <input type="number" min={1} max={300} value={form.api_timeout} onChange={(e) => set("api_timeout", e.target.value)} />
         </label>
       </div>
       <label className={styles.checkRow}>
         <input type="checkbox" checked={Boolean(form.verify_ssl)} onChange={(e) => set("verify_ssl", e.target.checked)} />
-        <span>驗證 SSL 憑證</span>
+        <span>{t("SettingsPage.verifySslCert")}</span>
       </label>
       {form.verify_ssl && (
         <label className={styles.field}>
-          <span>CA 憑證 PEM{isEdit ? "（留空表示不變更）" : ""}</span>
+          <span>{t("SettingsPage.caCertPem")}{isEdit ? t("SettingsPage.leaveBlankUnchanged") : ""}</span>
           <textarea
             rows={5}
             value={form.ca_cert}
@@ -193,13 +186,13 @@ function ConnectionForm({ initial, isEdit, saving, onSubmit, onCancel }) {
         </label>
       )}
 
-      <h3 className={styles.sectionTitle}>此叢集的資源設定</h3>
+      <h3 className={styles.sectionTitle}>{t("SettingsPage.clusterResourceSettingsTitle")}</h3>
       <p className={styles.cardDesc}>
-        pool、storage 與網段是各叢集獨立的設定，建立於此連線的 VM / LXC 會套用這裡的值。
+        {t("SettingsPage.clusterResourceSettingsDesc")}
       </p>
       <div className={styles.formGrid}>
         <label className={styles.field}>
-          <span>Pool 名稱</span>
+          <span>{t("SettingsPage.poolName")}</span>
           <input value={form.pool_name} onChange={(e) => set("pool_name", e.target.value)} placeholder="SkyLab" />
         </label>
         <label className={styles.field}>
@@ -211,7 +204,7 @@ function ConnectionForm({ initial, isEdit, saving, onSubmit, onCancel }) {
           <input value={form.data_storage} onChange={(e) => set("data_storage", e.target.value)} placeholder="local-lvm" />
         </label>
         <label className={styles.field}>
-          <span>任務檢查間隔（秒）</span>
+          <span>{t("SettingsPage.taskCheckInterval")}</span>
           <input
             type="number"
             min={1}
@@ -222,32 +215,32 @@ function ConnectionForm({ initial, isEdit, saving, onSubmit, onCancel }) {
         </label>
         <label className={styles.field}>
           <span>Gateway IP</span>
-          <input value={form.gateway_ip} onChange={(e) => set("gateway_ip", e.target.value)} placeholder="選填" />
+          <input value={form.gateway_ip} onChange={(e) => set("gateway_ip", e.target.value)} placeholder={t("SettingsPage.optional")} />
         </label>
         <label className={styles.field}>
-          <span>內網網段</span>
-          <input value={form.local_subnet} onChange={(e) => set("local_subnet", e.target.value)} placeholder="例：192.168.100.0/24" />
+          <span>{t("SettingsPage.localSubnet")}</span>
+          <input value={form.local_subnet} onChange={(e) => set("local_subnet", e.target.value)} placeholder={t("SettingsPage.localSubnetPlaceholder")} />
         </label>
         <label className={styles.field}>
-          <span>預設節點</span>
-          <input value={form.default_node} onChange={(e) => set("default_node", e.target.value)} placeholder="選填，未指定時優先使用" />
+          <span>{t("SettingsPage.defaultNode")}</span>
+          <input value={form.default_node} onChange={(e) => set("default_node", e.target.value)} placeholder={t("SettingsPage.defaultNodePlaceholder")} />
         </label>
       </div>
 
       <div className={styles.toggleGrid}>
         <label className={styles.checkRow}>
           <input type="checkbox" checked={Boolean(form.enabled)} onChange={(e) => set("enabled", e.target.checked)} />
-          <span>啟用此連線</span>
+          <span>{t("SettingsPage.enableThisConnection")}</span>
         </label>
         <label className={styles.checkRow}>
           <input type="checkbox" checked={Boolean(form.is_default)} onChange={(e) => set("is_default", e.target.checked)} />
-          <span>設為預設連線</span>
+          <span>{t("SettingsPage.setAsDefaultConnection")}</span>
         </label>
       </div>
       <div className={styles.cardActions}>
-        <button type="button" className={styles.btnSecondary} onClick={onCancel}>取消</button>
+        <button type="button" className={styles.btnSecondary} onClick={onCancel}>{t("SettingsPage.cancel")}</button>
         <button type="submit" className={styles.btnPrimary} disabled={saving}>
-          {saving ? "儲存中..." : "儲存連線"}
+          {saving ? t("SettingsPage.saving") : t("SettingsPage.saveConnection")}
         </button>
       </div>
     </form>
@@ -255,6 +248,7 @@ function ConnectionForm({ initial, isEdit, saving, onSubmit, onCancel }) {
 }
 
 function ConnectionsSection({ connections, loading, onRefresh }) {
+  const { t } = useTranslation("system");
   const toast = useToast();
   const confirm = useConfirm();
   const [editing, setEditing] = useState(null); // null | "new" | connection 物件
@@ -266,15 +260,15 @@ function ConnectionsSection({ connections, loading, onRefresh }) {
     try {
       if (editing === "new") {
         await ProxmoxConfigService.createConnection(payload);
-        toast.success("連線已新增");
+        toast.success(t("SettingsPage.toastConnectionAdded"));
       } else {
         await ProxmoxConfigService.updateConnection(editing.id, payload);
-        toast.success("連線已更新");
+        toast.success(t("SettingsPage.toastConnectionUpdated"));
       }
       setEditing(null);
       onRefresh();
     } catch (err) {
-      toast.error(err?.message ?? "儲存連線失敗");
+      toast.error(err?.message ?? t("SettingsPage.toastSaveConnectionFailed"));
     } finally {
       setSaving(false);
     }
@@ -282,19 +276,19 @@ function ConnectionsSection({ connections, loading, onRefresh }) {
 
   async function handleDelete(conn) {
     const ok = await confirm({
-      title: "刪除 PVE 連線",
-      message: `確定刪除連線「${conn.name}」？其節點與 Storage 記錄將一併移除。`,
-      confirmText: "刪除",
+      title: t("SettingsPage.deleteConnectionTitle"),
+      message: t("SettingsPage.deleteConnectionMessage", { name: conn.name }),
+      confirmText: t("SettingsPage.delete"),
       danger: true,
     });
     if (!ok) return;
     setBusyId(conn.id);
     try {
       await ProxmoxConfigService.deleteConnection(conn.id);
-      toast.success("連線已刪除");
+      toast.success(t("SettingsPage.toastConnectionDeleted"));
       onRefresh();
     } catch (err) {
-      toast.error(err?.message ?? "刪除連線失敗");
+      toast.error(err?.message ?? t("SettingsPage.toastDeleteConnectionFailed"));
     } finally {
       setBusyId(null);
     }
@@ -304,10 +298,10 @@ function ConnectionsSection({ connections, loading, onRefresh }) {
     setBusyId(conn.id);
     try {
       const res = await ProxmoxConfigService.testConnectionById(conn.id);
-      if (res.success) toast.success(res.message || "連線成功");
-      else toast.error(res.message || "連線失敗");
+      if (res.success) toast.success(res.message || t("SettingsPage.toastConnectSuccess"));
+      else toast.error(res.message || t("SettingsPage.toastConnectFailed"));
     } catch (err) {
-      toast.error(err?.message ?? "連線測試失敗");
+      toast.error(err?.message ?? t("SettingsPage.toastConnectTestFailed"));
     } finally {
       setBusyId(null);
     }
@@ -318,13 +312,13 @@ function ConnectionsSection({ connections, loading, onRefresh }) {
     try {
       const res = await ProxmoxConfigService.syncConnection(conn.id);
       if (res.success) {
-        toast.success(`同步完成：${res.nodes?.length ?? 0} 節點、${res.storage_count ?? 0} storage`);
+        toast.success(t("SettingsPage.toastSyncComplete", { nodes: res.nodes?.length ?? 0, storage: res.storage_count ?? 0 }));
         onRefresh();
       } else {
-        toast.error(res.error || "同步失敗");
+        toast.error(res.error || t("SettingsPage.toastSyncFailed"));
       }
     } catch (err) {
-      toast.error(err?.message ?? "同步失敗");
+      toast.error(err?.message ?? t("SettingsPage.toastSyncFailed"));
     } finally {
       setBusyId(null);
     }
@@ -334,17 +328,17 @@ function ConnectionsSection({ connections, loading, onRefresh }) {
     <div className={styles.panelStack}>
       <div className={styles.card}>
         <div className={styles.cardHead}>
-          <h2 className={styles.cardTitle}>PVE 連線清單</h2>
+          <h2 className={styles.cardTitle}>{t("SettingsPage.connectionsListTitle")}</h2>
           <button type="button" className={styles.btnSecondary} onClick={() => setEditing("new")}>
             <MIcon name="add" size={16} />
-            新增連線
+            {t("SettingsPage.addConnection")}
           </button>
         </div>
         {loading ? (
-          <LoadingState text="載入連線清單..." />
+          <LoadingState text={t("SettingsPage.loadingConnections")} />
         ) : connections.length === 0 ? (
           <p className={styles.cardDesc}>
-            尚未建立連線。點「新增連線」完成第一組設定（將自動成為預設連線）。
+            {t("SettingsPage.noConnectionsYet")}
           </p>
         ) : (
           <div className={styles.list}>
@@ -353,37 +347,37 @@ function ConnectionsSection({ connections, loading, onRefresh }) {
                 <div className={styles.rowMain}>
                   <span className={styles.rowName}>
                     {conn.name}
-                    {conn.is_default && <span className={`${styles.badge} ${styles.badge_info}`}>預設</span>}
-                    {!conn.enabled && <span className={`${styles.badge} ${styles.badge_danger}`}>停用</span>}
+                    {conn.is_default && <span className={`${styles.badge} ${styles.badge_info}`}>{t("SettingsPage.default")}</span>}
+                    {!conn.enabled && <span className={`${styles.badge} ${styles.badge_danger}`}>{t("SettingsPage.disabled")}</span>}
                   </span>
                   <span className={styles.rowMeta}>
-                    {conn.host}:{conn.port} · {conn.user} · {conn.node_count} 節點
+                    {conn.host}:{conn.port} · {conn.user} · {t("SettingsPage.nodeCount", { count: conn.node_count })}
                   </span>
                 </div>
                 <button type="button" className={styles.btnSecondary} disabled={busyId === conn.id} onClick={() => handleTest(conn)}>
                   <MIcon name="wifi_tethering" size={16} />
-                  測試
+                  {t("SettingsPage.test")}
                 </button>
                 <button type="button" className={styles.btnSecondary} disabled={busyId === conn.id} onClick={() => handleSync(conn)}>
                   <MIcon name="sync" size={16} />
-                  同步
+                  {t("SettingsPage.sync")}
                 </button>
                 <button type="button" className={styles.btnSecondary} disabled={busyId === conn.id} onClick={() => setEditing(conn)}>
                   <MIcon name="edit" size={16} />
-                  編輯
+                  {t("SettingsPage.edit")}
                 </button>
                 <button type="button" className={styles.btnSecondary} disabled={busyId === conn.id} onClick={() => handleDelete(conn)}>
                   <MIcon name="delete" size={16} />
-                  刪除
+                  {t("SettingsPage.delete")}
                 </button>
               </div>
             ))}
           </div>
         )}
         <p className={styles.cardHint}>
-          節點即時用量、趨勢圖與警告請至{" "}
-          <Link to="/monitoring" className={styles.inlineLink}>監控與日誌 → 資源監控</Link>
-          {" "}查看。
+          {t("SettingsPage.nodeMetricsHintPrefix")}{" "}
+          <Link to="/monitoring" className={styles.inlineLink}>{t("SettingsPage.nodeMetricsHintLink")}</Link>
+          {" "}{t("SettingsPage.nodeMetricsHintSuffix")}
         </p>
       </div>
 
@@ -404,76 +398,52 @@ function ConnectionsSection({ connections, loading, onRefresh }) {
 }
 
 /* ── 資源排程 ──────────────────────────────────────── */
-const SCHEDULER_GROUPS = [
-  {
-    title: "放置與超配",
-    fields: [
-      { key: "cpu_overcommit_ratio", label: "CPU 超配比", step: 0.1 },
-      { key: "disk_overcommit_ratio", label: "Disk 超配比", step: 0.1 },
-    ],
-  },
-  {
-    title: "資源評估閾值",
-    fields: [
-      { key: "placement_peak_cpu_margin", label: "CPU 峰值餘裕", step: 0.01 },
-      { key: "placement_peak_memory_margin", label: "RAM 峰值餘裕", step: 0.01 },
-      { key: "placement_loadavg_warn_per_core", label: "LoadAvg 警戒 / 核", step: 0.1 },
-      { key: "placement_loadavg_max_per_core", label: "LoadAvg 上限 / 核", step: 0.1 },
-      { key: "placement_loadavg_penalty_weight", label: "LoadAvg 懲罰權重", step: 0.01 },
-      { key: "placement_cpu_peak_warn_share", label: "CPU 峰值警戒占比", step: 0.01 },
-      { key: "placement_cpu_peak_high_share", label: "CPU 峰值高位占比", step: 0.01 },
-      { key: "placement_memory_peak_warn_share", label: "RAM 峰值警戒占比", step: 0.01 },
-      { key: "placement_memory_peak_high_share", label: "RAM 峰值高位占比", step: 0.01 },
-      { key: "placement_resource_weight_cpu", label: "資源權重 CPU", step: 0.01 },
-      { key: "placement_resource_weight_memory", label: "資源權重 RAM", step: 0.01 },
-      { key: "placement_resource_weight_disk", label: "資源權重 Disk", step: 0.01 },
-    ],
-  },
-  {
-    title: "排程開機與時段",
-    fields: [
-      { key: "scheduled_boot_batch_size", label: "開機批次大小" },
-      { key: "scheduled_boot_batch_interval_seconds", label: "批次間隔（秒）" },
-      { key: "scheduled_boot_lead_time_minutes", label: "提前開機（分）" },
-      { key: "window_grace_period_minutes", label: "時段寬限（分）" },
-      { key: "practice_session_hours", label: "練習時段（小時）" },
-      { key: "practice_warning_minutes", label: "練習提醒（分）" },
-      { key: "expiry_warning_hours", label: "到期提醒（小時）" },
-    ],
-  },
-];
+function useSchedulerGroups(t) {
+  return useMemo(() => [
+    {
+      title: t("SettingsPage.placementOvercommitTitle"),
+      fields: [
+        { key: "cpu_overcommit_ratio", label: t("SettingsPage.cpuOvercommitRatio"), step: 0.1 },
+        { key: "disk_overcommit_ratio", label: t("SettingsPage.diskOvercommitRatio"), step: 0.1 },
+      ],
+    },
+    {
+      title: t("SettingsPage.resourceThresholdsTitle"),
+      fields: [
+        { key: "placement_peak_cpu_margin", label: t("SettingsPage.placementPeakCpuMargin"), step: 0.01 },
+        { key: "placement_peak_memory_margin", label: t("SettingsPage.placementPeakMemoryMargin"), step: 0.01 },
+        { key: "placement_loadavg_warn_per_core", label: t("SettingsPage.placementLoadavgWarnPerCore"), step: 0.1 },
+        { key: "placement_loadavg_max_per_core", label: t("SettingsPage.placementLoadavgMaxPerCore"), step: 0.1 },
+        { key: "placement_loadavg_penalty_weight", label: t("SettingsPage.placementLoadavgPenaltyWeight"), step: 0.01 },
+        { key: "placement_cpu_peak_warn_share", label: t("SettingsPage.placementCpuPeakWarnShare"), step: 0.01 },
+        { key: "placement_cpu_peak_high_share", label: t("SettingsPage.placementCpuPeakHighShare"), step: 0.01 },
+        { key: "placement_memory_peak_warn_share", label: t("SettingsPage.placementMemoryPeakWarnShare"), step: 0.01 },
+        { key: "placement_memory_peak_high_share", label: t("SettingsPage.placementMemoryPeakHighShare"), step: 0.01 },
+        { key: "placement_resource_weight_cpu", label: t("SettingsPage.placementResourceWeightCpu"), step: 0.01 },
+        { key: "placement_resource_weight_memory", label: t("SettingsPage.placementResourceWeightMemory"), step: 0.01 },
+        { key: "placement_resource_weight_disk", label: t("SettingsPage.placementResourceWeightDisk"), step: 0.01 },
+      ],
+    },
+    {
+      title: t("SettingsPage.scheduledBootTitle"),
+      fields: [
+        { key: "scheduled_boot_batch_size", label: t("SettingsPage.scheduledBootBatchSize") },
+        { key: "scheduled_boot_batch_interval_seconds", label: t("SettingsPage.scheduledBootBatchIntervalSeconds") },
+        { key: "scheduled_boot_lead_time_minutes", label: t("SettingsPage.scheduledBootLeadTimeMinutes") },
+        { key: "window_grace_period_minutes", label: t("SettingsPage.windowGracePeriodMinutes") },
+        { key: "practice_session_hours", label: t("SettingsPage.practiceSessionHours") },
+        { key: "practice_warning_minutes", label: t("SettingsPage.practiceWarningMinutes") },
+        { key: "expiry_warning_hours", label: t("SettingsPage.expiryWarningHours") },
+      ],
+    },
+  ], [t]);
+}
 
 function SchedulerTab({ form, setField, onSave, saving }) {
+  const { t } = useTranslation("system");
+  const SCHEDULER_GROUPS = useSchedulerGroups(t);
   return (
     <form className={styles.panelStack} onSubmit={onSave}>
-      <div className={styles.card}>
-        <h2 className={styles.cardTitle}>放置策略</h2>
-        <div className={styles.strategyGrid}>
-          {[
-            {
-              value: "dominant_share_min",
-              title: "Dominant Share Min",
-              desc: "每次選擇主要資源份額最低的節點，讓負載平均分散於整個叢集。",
-            },
-            {
-              value: "priority_dominant_share",
-              title: "Priority Dominant Share",
-              desc: "先按節點優先級篩選候選節點，相同優先級內再以 Dominant Share 排序。",
-            },
-          ].map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className={form.placement_strategy === opt.value ? styles.strategyCardActive : styles.strategyCard}
-              onClick={() => setField("placement_strategy", opt.value)}
-            >
-              <span className={styles.strategyTitle}>{opt.title}</span>
-              <span className={styles.strategyDesc}>{opt.desc}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {SCHEDULER_GROUPS.map((group) => (
         <div key={group.title} className={styles.card}>
           <h2 className={styles.cardTitle}>{group.title}</h2>
@@ -495,7 +465,7 @@ function SchedulerTab({ form, setField, onSave, saving }) {
 
       <div className={styles.cardActions}>
         <button type="submit" className={styles.btnPrimary} disabled={saving}>
-          {saving ? "儲存中..." : "儲存排程設定"}
+          {saving ? t("SettingsPage.saving") : t("SettingsPage.saveSchedulerSettings")}
         </button>
       </div>
     </form>
@@ -504,6 +474,7 @@ function SchedulerTab({ form, setField, onSave, saving }) {
 
 /* ── 節點管理 ──────────────────────────────────────── */
 function NodesTab() {
+  const { t } = useTranslation("system");
   const toast = useToast();
   const [nodes, setNodes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -515,9 +486,9 @@ function NodesTab() {
     setLoading(true);
     ProxmoxConfigService.getNodes()
       .then(setNodes)
-      .catch((err) => toast.error(err?.message ?? "載入節點失敗"))
+      .catch((err) => toast.error(err?.message ?? t("SettingsPage.toastLoadNodesFailed")))
       .finally(() => setLoading(false));
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     fetchNodes();
@@ -538,10 +509,10 @@ function NodesTab() {
         enabled: node.enabled ?? true,
       });
       setNodes((prev) => prev.map((n) => (n.id === node.id ? updated : n)));
-      toast.success("節點已更新");
+      toast.success(t("SettingsPage.toastNodeUpdated"));
       setEditing(null);
     } catch (err) {
-      toast.error(err?.message ?? "更新節點失敗");
+      toast.error(err?.message ?? t("SettingsPage.toastUpdateNodeFailed"));
     } finally {
       setSaving(false);
     }
@@ -558,19 +529,19 @@ function NodesTab() {
       });
       setNodes((prev) => prev.map((n) => (n.id === node.id ? updated : n)));
       toast.success(
-        enabled ? `${node.name} 已啟用` : `${node.name} 已停用（不再接收新 VM）`
+        enabled ? t("SettingsPage.toastNodeEnabled", { name: node.name }) : t("SettingsPage.toastNodeDisabled", { name: node.name })
       );
     } catch (err) {
-      toast.error(err?.message ?? "更新節點失敗");
+      toast.error(err?.message ?? t("SettingsPage.toastUpdateNodeFailed"));
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <LoadingState text="載入節點..." />;
+  if (loading) return <LoadingState text={t("SettingsPage.loadingNodes")} />;
   if (nodes.length === 0) {
     return (
-      <EmptyState icon="lock" title="尚無節點資料" />
+      <EmptyState icon="lock" title={t("SettingsPage.emptyNoNodeData")} />
     );
   }
 
@@ -581,27 +552,27 @@ function NodesTab() {
           <div className={styles.rowMain}>
             <span className={styles.rowName}>
               {node.name}
-              {node.is_primary && <span className={`${styles.badge} ${styles.badge_info}`}>主節點</span>}
+              {node.is_primary && <span className={`${styles.badge} ${styles.badge_info}`}>{t("SettingsPage.primaryNode")}</span>}
               {node.enabled === false && (
-                <span className={`${styles.badge} ${styles.badge_danger}`}>停用</span>
+                <span className={`${styles.badge} ${styles.badge_danger}`}>{t("SettingsPage.disabled")}</span>
               )}
             </span>
             <span className={styles.rowMeta}>
               {node.host}:{node.port} · Priority {node.priority}
-              {node.enabled === false && " · 不接收新 VM（既有 VM 不受影響）"}
+              {node.enabled === false && ` · ${t("SettingsPage.notAcceptingNewVms")}`}
             </span>
           </div>
           <span className={`${styles.badge} ${node.is_online ? styles.badge_success : styles.badge_danger}`}>
-            {node.is_online ? "在線" : "離線"}
+            {node.is_online ? t("SettingsPage.online") : t("SettingsPage.offline")}
           </span>
-          <label className={styles.checkRow} title="停用後不再接收新 VM，既有 VM 不受影響">
+          <label className={styles.checkRow} title={t("SettingsPage.disableNodeHint")}>
             <input
               type="checkbox"
               checked={node.enabled !== false}
               disabled={saving || node.id == null}
               onChange={(e) => toggleEnabled(node, e.target.checked)}
             />
-            <span>啟用</span>
+            <span>{t("SettingsPage.enable")}</span>
           </label>
           {editing === node.id ? (
             <div className={styles.nodeEdit}>
@@ -623,16 +594,16 @@ function NodesTab() {
                 placeholder="Priority"
               />
               <button type="button" className={styles.btnPrimary} disabled={saving} onClick={() => saveEdit(node)}>
-                {saving ? "..." : "儲存"}
+                {saving ? "..." : t("SettingsPage.save")}
               </button>
               <button type="button" className={styles.btnSecondary} onClick={() => setEditing(null)}>
-                取消
+                {t("SettingsPage.cancel")}
               </button>
             </div>
           ) : (
             <button type="button" className={styles.btnSecondary} onClick={() => startEdit(node)} disabled={node.id == null}>
               <MIcon name="edit" size={16} />
-              編輯
+              {t("SettingsPage.edit")}
             </button>
           )}
         </div>
@@ -643,6 +614,7 @@ function NodesTab() {
 
 /* ── Storage ───────────────────────────────────────── */
 function StorageTab() {
+  const { t } = useTranslation("system");
   const toast = useToast();
   const [storages, setStorages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -651,9 +623,9 @@ function StorageTab() {
   useEffect(() => {
     ProxmoxConfigService.getStorages()
       .then(setStorages)
-      .catch((err) => toast.error(err?.message ?? "載入 Storage 失敗"))
+      .catch((err) => toast.error(err?.message ?? t("SettingsPage.toastLoadStorageFailed")))
       .finally(() => setLoading(false));
-  }, [toast]);
+  }, [toast, t]);
 
   // 只有一組 PVE 連線時不必再標註連線名稱
   const multiConnection = useMemo(
@@ -673,20 +645,20 @@ function StorageTab() {
       const nodeCount = updated.node_names?.length ?? 1;
       toast.success(
         updated.is_shared && nodeCount > 1
-          ? `${storage.storage} 已更新（套用至 ${nodeCount} 個節點）`
-          : `${storage.storage} 已更新`,
+          ? t("SettingsPage.toastStorageUpdatedMultiNode", { storage: storage.storage, count: nodeCount })
+          : t("SettingsPage.toastStorageUpdated", { storage: storage.storage }),
       );
     } catch (err) {
-      toast.error(err?.message ?? "更新 Storage 失敗");
+      toast.error(err?.message ?? t("SettingsPage.toastUpdateStorageFailed"));
     } finally {
       setSavingId(null);
     }
   }
 
-  if (loading) return <LoadingState text="載入 Storage..." />;
+  if (loading) return <LoadingState text={t("SettingsPage.loadingStorage")} />;
   if (storages.length === 0) {
     return (
-      <EmptyState icon="storage" title="尚無 Storage 設定" />
+      <EmptyState icon="storage" title={t("SettingsPage.emptyNoStorageConfig")} />
     );
   }
 
@@ -705,7 +677,7 @@ function StorageTab() {
                   className={`${styles.badge} ${styles.badge_info}`}
                   title={(storage.node_names ?? []).join("、")}
                 >
-                  共享 · {storage.node_names?.length ?? 1} 節點
+                  {t("SettingsPage.sharedNodeCount", { count: storage.node_names?.length ?? 1 })}
                 </span>
               ) : (
                 <span className={`${styles.badge} ${styles.badge_muted}`}>{storage.node_name}</span>
@@ -713,7 +685,7 @@ function StorageTab() {
             </span>
             <span className={styles.rowMeta}>
               {storage.storage_type ?? "?"} · {Math.round(storage.used_gb)} / {Math.round(storage.total_gb)} GB ·
-              {" "}{[storage.can_vm && "VM", storage.can_lxc && "LXC", storage.can_iso && "ISO", storage.can_backup && "Backup"].filter(Boolean).join(" / ") || "無用途"}
+              {" "}{[storage.can_vm && "VM", storage.can_lxc && "LXC", storage.can_iso && "ISO", storage.can_backup && "Backup"].filter(Boolean).join(" / ") || t("SettingsPage.noPurpose")}
             </span>
           </div>
           <select
@@ -725,12 +697,12 @@ function StorageTab() {
             <option value="nvme">NVMe</option>
             <option value="ssd">SSD</option>
             <option value="hdd">HDD</option>
-            <option value="unknown">未知</option>
+            <option value="unknown">{t("SettingsPage.unknown")}</option>
           </select>
           <input
             type="number"
             className={styles.inlineInput}
-            title="使用者優先度"
+            title={t("SettingsPage.userPriorityTitle")}
             value={storage.user_priority}
             disabled={savingId === storage.id}
             onChange={(e) => save(storage, { user_priority: Number(e.target.value) || 0 })}
@@ -742,7 +714,7 @@ function StorageTab() {
               disabled={savingId === storage.id}
               onChange={(e) => save(storage, { enabled: e.target.checked })}
             />
-            <span>啟用</span>
+            <span>{t("SettingsPage.enable")}</span>
           </label>
         </div>
       ))}
@@ -752,7 +724,16 @@ function StorageTab() {
 
 /* ── Page ──────────────────────────────────────────── */
 export default function SettingsPage() {
+  const { t } = useTranslation("system");
   const toast = useToast();
+  const TABS = [
+    { key: "pve",       label: t("SettingsPage.tabPve"),       icon: "device_hub"    },
+    { key: "scheduler", label: t("SettingsPage.tabScheduler"), icon: "settings_input_component" },
+    { key: "governance", label: t("SettingsPage.tabGovernance"), icon: "policy"        },
+    { key: "ldap",      label: "LDAP",      icon: "badge"         },
+    { key: "nodes",     label: t("SettingsPage.tabNodes"),     icon: "lock"          },
+    { key: "storage",   label: "Storage",   icon: "storage"       },
+  ];
   const [activeTab, setActiveTab] = useState("pve");
   const [form, setForm] = useState(buildFormFromConfig(null));
   const [loading, setLoading] = useState(true);
@@ -763,17 +744,17 @@ export default function SettingsPage() {
   useEffect(() => {
     ProxmoxConfigService.getConfig()
       .then((cfg) => setForm(buildFormFromConfig(cfg)))
-      .catch((err) => toast.error(err?.message ?? "載入排程設定失敗"))
+      .catch((err) => toast.error(err?.message ?? t("SettingsPage.toastLoadSchedulerFailed")))
       .finally(() => setLoading(false));
-  }, [toast]);
+  }, [toast, t]);
 
   const fetchConnections = useCallback(() => {
     setConnectionsLoading(true);
     ProxmoxConfigService.listConnections()
       .then(setConnections)
-      .catch((err) => toast.error(err?.message ?? "載入 PVE 連線清單失敗"))
+      .catch((err) => toast.error(err?.message ?? t("SettingsPage.toastLoadConnectionsFailed")))
       .finally(() => setConnectionsLoading(false));
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     fetchConnections();
@@ -789,9 +770,9 @@ export default function SettingsPage() {
     try {
       const updated = await ProxmoxConfigService.updateConfig(buildPayload(form));
       setForm(buildFormFromConfig(updated));
-      toast.success("設定已儲存");
+      toast.success(t("SettingsPage.toastSettingsSaved"));
     } catch (err) {
-      toast.error(err?.message ?? "儲存設定失敗");
+      toast.error(err?.message ?? t("SettingsPage.toastSaveSettingsFailed"));
     } finally {
       setSaving(false);
     }
@@ -800,7 +781,7 @@ export default function SettingsPage() {
   return (
     <div className={styles.page}>
       {/* ── 頁首 ── */}
-      <PageHeader title="系統設定" subtitle="管理 Proxmox VE 連線、節點、Storage 與資源排程設定。">
+      <PageHeader title={t("SettingsPage.pageTitle")} subtitle={t("SettingsPage.pageSubtitle")}>
 
         {/* ── Tabs ── */}
         <div className={styles.tabs}>
@@ -821,7 +802,7 @@ export default function SettingsPage() {
       {/* ── 內容 ── */}
       <div className={styles.content}>
         {loading ? (
-          <LoadingState fullPage text="載入設定..." />
+          <LoadingState fullPage text={t("SettingsPage.loadingSettings")} />
         ) : (
           <>
             {activeTab === "pve" && (

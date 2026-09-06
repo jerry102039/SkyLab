@@ -18,6 +18,7 @@ from app.core.authorizers import (
     can_bypass_resource_ownership,
     require_resource_access,
 )
+from app.core.i18n import t
 from app.exceptions import (
     AppError,
     BadRequestError,
@@ -27,6 +28,7 @@ from app.exceptions import (
 )
 from app.infrastructure.worker import background_tasks
 from app.models import SpecChangeRequestStatus, SpecChangeType
+from app.repositories import resource as resource_repo
 from app.repositories import spec_change_request as spec_request_repo
 from app.schemas import (
     SpecChangeApplyAccepted,
@@ -37,7 +39,7 @@ from app.schemas import (
 )
 from app.schemas.spec_change_request import SpecChangeApplyStatus
 from app.services.proxmox import proxmox_service
-from app.services.resource import quota_service
+from app.services.resource import quota_service, resource_service
 from app.services.resource.access import require_resource_management
 from app.services.user import audit_service
 
@@ -48,13 +50,12 @@ SHUTDOWN_TIMEOUT_SECONDS = 90.0
 STOP_TIMEOUT_SECONDS = 30.0
 _POLL_INTERVAL_SECONDS = 2.0
 
+ResourceType = Literal["qemu", "lxc"]
+
 
 # ---------------------------------------------------------------------------
 # 狀態描述 / 序列化
 # ---------------------------------------------------------------------------
-
-
-ResourceType = Literal["qemu", "lxc"]
 
 
 def _apply_task_id(request_id: uuid.UUID) -> str:
@@ -86,20 +87,21 @@ def _apply_status(request: Any) -> SpecChangeApplyStatus | None:
 
 def _describe_status(request: Any) -> str:
     if request.status == SpecChangeRequestStatus.pending:
-        return "待審核"
+        return t("spec_change.status_pending")
     if request.status == SpecChangeRequestStatus.rejected:
-        return "已駁回"
+        return t("spec_change.status_rejected")
     if request.status == SpecChangeRequestStatus.cancelled:
-        return "已取消"
+        return t("spec_change.status_cancelled")
     apply_status = _apply_status(request)
     if apply_status == "applied":
-        return "已套用"
+        return t("spec_change.status_applied")
     if apply_status == "applying":
-        return "套用中"
-    return "已核准、尚未套用"
+        return t("spec_change.status_applying")
+    return t("spec_change.status_awaiting_apply")
 
 
 def _describe_changes(request: Any) -> list[str]:
+    """稽核紀錄用的英文摘要（audit log 不做在地化）。"""
     changes: list[str] = []
     if request.requested_cpu is not None:
         changes.append(f"CPU: {request.current_cpu} -> {request.requested_cpu} cores")
@@ -179,6 +181,21 @@ def _check_ownership_and_get_info(
     return proxmox_service.find_resource(vmid)
 
 
+def _reject_fixed_spec_resource(*, session: Session, vmid: int) -> None:
+    """課堂與快速練習的機器照課程環境版本建立，規格不接受個別調整。
+
+    ``ResourcePublic.can_request_spec_change`` 一直有算這件事，但沒有任何地方
+    讀它——所以旗標說不行、API 還是收單。守衛放在這裡才算數。
+    """
+    resource = resource_repo.get_resource_by_vmid(session=session, vmid=vmid)
+    if resource is None:
+        return
+    if resource.allocation_scope == "teaching_class":
+        raise BadRequestError(t("spec_change.class_machine_spec_fixed"))
+    if resource_service._is_practice_resource(session, resource, None):
+        raise BadRequestError(t("spec_change.practice_machine_spec_fixed"))
+
+
 def _get_current_specs(
     node: str, vmid: int, resource_type: ResourceType
 ) -> dict[str, Any]:
@@ -192,6 +209,7 @@ def create(
     resource_info = _check_ownership_and_get_info(
         session=session, user=user, vmid=vmid
     )
+    _reject_fixed_spec_resource(session=session, vmid=vmid)
 
     # 同一台機器同時只能有一張處理中的申請：磁碟增量以建立時的快照計算，
     # 兩張都核准會疊加（A 100→200 套用後，B 100→150 再 +50 變 250）。
@@ -200,8 +218,7 @@ def create(
     )
     if existing is not None:
         raise ConflictError(
-            f"這台機器已有一張「{_describe_status(existing)}」的規格調整申請，"
-            "請先等它處理完，或撤銷後再重新送出"
+            t("spec_change.duplicate_open_request", status=_describe_status(existing))
         )
 
     node = resource_info["node"]
@@ -212,15 +229,15 @@ def create(
         request_in.change_type == SpecChangeType.cpu
         and request_in.requested_cpu is None
     ):
-        raise BadRequestError("變更 CPU 時必須提供 requested_cpu")
+        raise BadRequestError(t("spec_change.cpu_value_required"))
     if (
         request_in.change_type == SpecChangeType.memory
         and request_in.requested_memory is None
     ):
-        raise BadRequestError("變更記憶體時必須提供 requested_memory")
+        raise BadRequestError(t("spec_change.memory_value_required"))
     if request_in.change_type == SpecChangeType.disk:
         if request_in.requested_disk is None:
-            raise BadRequestError("變更磁碟時必須提供 requested_disk")
+            raise BadRequestError(t("spec_change.disk_value_required"))
     if request_in.change_type == SpecChangeType.combined:
         if not any(
             [
@@ -229,14 +246,16 @@ def create(
                 request_in.requested_disk,
             ]
         ):
-            raise BadRequestError("綜合變更至少須申請一項規格")
+            raise BadRequestError(t("spec_change.combined_requires_one"))
     # 磁碟只能增加，combined 帶磁碟時也要擋（以前只有 disk 類型檢查）
     if (
         request_in.requested_disk is not None
         and specs["disk"]
         and request_in.requested_disk <= specs["disk"]
     ):
-        raise BadRequestError(f"磁碟容量只能增加。目前：{specs['disk']}GB")
+        raise BadRequestError(
+            t("spec_change.disk_increase_only", current=specs["disk"])
+        )
 
     db_request = spec_request_repo.create_spec_change_request(
         session=session,
@@ -328,7 +347,7 @@ def _refresh_current_specs(
         )
     except NotFoundError:
         raise BadRequestError(
-            f"在 Proxmox 找不到 VMID {db_request.vmid}，無法處理此申請"
+            t("spec_change.resource_not_in_proxmox", vmid=db_request.vmid)
         )
     except Exception:
         if strict:
@@ -382,25 +401,25 @@ def review(
         session=session, request_id=request_id, for_update=True
     )
     if not db_request:
-        raise NotFoundError("找不到該申請")
+        raise NotFoundError(t("spec_change.not_found"))
     if db_request.status != SpecChangeRequestStatus.pending:
-        raise BadRequestError(f"此申請已是 {db_request.status.value} 狀態")
+        raise BadRequestError(
+            t("spec_change.already_reviewed", status=db_request.status.value)
+        )
     # schema 已擋非 approved/rejected，這裡是最後防線：以前送 pending 會走進
     # 駁回分支，狀態寫回待審卻蓋上審核人與「Rejected」稽核。
     if review_data.status not in (
         SpecChangeRequestStatus.approved,
         SpecChangeRequestStatus.rejected,
     ):
-        raise BadRequestError("審核結果只能是 approved 或 rejected")
+        raise BadRequestError(t("spec_change.decision_only"))
 
     try:
         if review_data.status == SpecChangeRequestStatus.approved:
             # resource_vmid 隨資源刪除 SET NULL；VMID 會被新機器回收，
             # 不能拿 vmid 直接去 Proxmox 找（會改到別人的機器）。
             if db_request.resource_vmid is None:
-                raise BadRequestError(
-                    "這台機器已經不存在，無法核准；請駁回此申請"
-                )
+                raise BadRequestError(t("spec_change.resource_gone_review"))
             db_request = _refresh_current_specs(session, db_request, strict=False)
             _check_quota_delta(session, db_request)
             db_request = spec_request_repo.update_spec_change_request_status(
@@ -476,9 +495,9 @@ def cancel(
         session=session, request_id=request_id, for_update=True
     )
     if not db_request:
-        raise NotFoundError("找不到該申請")
+        raise NotFoundError(t("spec_change.not_found"))
     require_resource_access(
-        user, db_request.user_id, detail="只有申請人或管理員可以撤銷此申請"
+        user, db_request.user_id, detail=t("spec_change.cancel_forbidden")
     )
 
     if (
@@ -486,10 +505,10 @@ def cancel(
         and db_request.applied_at is None
     ):
         if background_tasks.is_active(_apply_task_id(db_request.id)):
-            raise ConflictError("套用作業正在進行中，無法撤銷")
+            raise ConflictError(t("spec_change.cancel_in_progress"))
     elif db_request.status != SpecChangeRequestStatus.pending:
         raise BadRequestError(
-            f"此申請目前是「{_describe_status(db_request)}」，無法撤銷"
+            t("spec_change.cannot_cancel_status", status=_describe_status(db_request))
         )
 
     by_requester = db_request.user_id == user.id
@@ -540,21 +559,24 @@ def apply(
         session=session, request_id=request_id, for_update=True
     )
     if not db_request:
-        raise NotFoundError("找不到該申請")
+        raise NotFoundError(t("spec_change.not_found"))
     require_resource_access(
-        user, db_request.user_id, detail="只有申請人或管理員可以套用此申請"
+        user, db_request.user_id, detail=t("spec_change.apply_forbidden")
     )
     if db_request.status != SpecChangeRequestStatus.approved:
         raise BadRequestError(
-            f"此申請目前是「{_describe_status(db_request)}」，只有已核准的申請可以套用"
+            t(
+                "spec_change.apply_requires_approved",
+                status=_describe_status(db_request),
+            )
         )
     if db_request.applied_at is not None:
-        raise BadRequestError("此申請的規格已經套用過了")
+        raise BadRequestError(t("spec_change.already_applied"))
     if db_request.resource_vmid is None:
-        raise BadRequestError("這台機器已經不存在，無法套用")
+        raise BadRequestError(t("spec_change.resource_gone_apply"))
     task_id = _apply_task_id(db_request.id)
     if background_tasks.is_active(task_id):
-        raise ConflictError("套用作業正在進行中，請稍候")
+        raise ConflictError(t("spec_change.apply_in_progress"))
 
     resource_info = proxmox_service.find_resource(db_request.vmid)
     db_request = _refresh_current_specs(
@@ -592,17 +614,15 @@ def apply(
         spec_request_repo.mark_spec_change_apply_failed(
             session=session,
             request_id=db_request.id,
-            error="背景執行器未啟動，無法套用規格",
+            error=t("spec_change.runner_unavailable"),
         )
-        raise AppError(
-            status_code=503, message="背景執行器未啟動，無法套用規格；請稍後再試"
-        )
+        raise AppError(status_code=503, message=t("spec_change.runner_unavailable"))
 
     refreshed = spec_request_repo.get_spec_change_request_by_id(
         session=session, request_id=db_request.id
     )
     return SpecChangeApplyAccepted(
-        message="已開始套用新規格：若機器正在執行且需要重開機，系統會先關機、套用後自動開機",
+        message=t("spec_change.apply_accepted"),
         task_id=submitted,
         request=_to_public(refreshed, resource_name=resource_info.get("name")),
     )
@@ -649,7 +669,7 @@ def _ensure_stopped(node: str, vmid: int, resource_type: ResourceType) -> None:
     proxmox_service.control(node, vmid, resource_type, "stop")
     if _wait_until_stopped(node, vmid, resource_type, STOP_TIMEOUT_SECONDS):
         return
-    raise ProxmoxError(f"VMID {vmid} 無法在時限內停止，已放棄套用規格")
+    raise ProxmoxError(t("spec_change.stop_timeout", vmid=vmid))
 
 
 def _run_apply(
@@ -658,7 +678,11 @@ def _run_apply(
     resource_info: dict[str, Any],
     user_id: uuid.UUID,
 ) -> None:
-    """背景任務本體：查電源 →（需要時）關機 → 改規格 →（需要時）開機 → 寫回結果。"""
+    """背景任務本體：查電源 →（需要時）關機 → 改規格 →（需要時）開機 → 寫回結果。
+
+    透過 ``asyncio.to_thread`` 執行時會帶著申請人請求的 contextvars，
+    所以 ``t()`` 產生的錯誤／警告文字會是申請人當時的語言。
+    """
     node = str(resource_info["node"])
     vmid = int(request.vmid)
     resource_type = _rtype(resource_info)
@@ -679,9 +703,11 @@ def _run_apply(
             # 是我們把機器關掉的，套用失敗也要把機器還給使用者
             try:
                 proxmox_service.control(node, vmid, resource_type, "start")
-                error += "（機器已重新開機）"
+                error += t("spec_change.restarted_after_failure")
             except Exception as start_exc:
-                error += f"；且重新開機失敗：{start_exc}，請手動開機"
+                error += t(
+                    "spec_change.restart_failed_after_failure", error=start_exc
+                )
         _finish_apply(request_id, user_id, vmid, error=error)
         raise
 
@@ -690,7 +716,7 @@ def _run_apply(
         try:
             proxmox_service.control(node, vmid, resource_type, "start")
         except Exception as exc:
-            warning = f"規格已套用，但自動開機失敗：{exc}。請到「我的資源」手動開機。"
+            warning = t("spec_change.applied_but_start_failed", error=exc)
     _finish_apply(
         request_id,
         user_id,
@@ -799,13 +825,16 @@ def _apply_spec_changes(
             # 也必須擋下。
             if db_request.current_disk is None:
                 raise ProxmoxError(
-                    f"無法套用 VMID {db_request.vmid} 的磁碟變更：目前磁碟容量未知"
+                    t("spec_change.disk_current_unknown", vmid=db_request.vmid)
                 )
             disk_increase = db_request.requested_disk - db_request.current_disk
             if disk_increase <= 0:
                 raise ProxmoxError(
-                    "磁碟容量只能增加"
-                    f"（目前={db_request.current_disk}GB，申請={db_request.requested_disk}GB）"
+                    t(
+                        "spec_change.disk_increase_only_detail",
+                        current=db_request.current_disk,
+                        requested=db_request.requested_disk,
+                    )
                 )
             size_param = f"+{disk_increase}G"
             disk_name = "scsi0" if resource_type == "qemu" else "rootfs"
@@ -821,4 +850,4 @@ def _apply_spec_changes(
         raise
     except Exception as e:
         logger.error(f"Failed to apply spec changes: {e}")
-        raise ProxmoxError(f"套用變更失敗：{e}")
+        raise ProxmoxError(t("spec_change.apply_failed", error=e))

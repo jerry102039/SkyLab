@@ -9,6 +9,7 @@ from app.core.authorizers import (
     can_bypass_teaching_ownership,
     require_teaching_access,
 )
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError
 from app.models import TeachingClass
 from app.schemas.course import (
@@ -65,7 +66,7 @@ def _require_linkable_class(
 ) -> TeachingClass:
     teaching_class = session.get(TeachingClass, teaching_class_id)
     if teaching_class is None:
-        raise NotFoundError("Teaching class not found")
+        raise NotFoundError(t("course_admin.class_not_found"))
     require_teaching_access(current_user, teaching_class.owner_id)
     return teaching_class
 
@@ -111,9 +112,7 @@ def update_path(
             data.teaching_class_id,
         )
         if teaching_class.owner_id != path.created_by:
-            raise BadRequestError(
-                "Course path and teaching class must have the same owner"
-            )
+            raise BadRequestError(t("course_admin.owner_mismatch"))
     return course_service.update_path(session, path_id=path_id, data=data)
 
 

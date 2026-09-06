@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import styles from "./LoadingState.module.scss";
 
 /* 3D 方塊堆疊動畫本體；LoadingState 與 LoadingSpinner 共用 */
@@ -28,10 +29,12 @@ export function LoadingSpinner({ size = 60 }) {
 /**
  * 共用載入狀態：資料尚未回來前的佔位畫面（3D 方塊堆疊動畫）。
  *
- * @param {string}  [text="載入中…"] 顯示文字
+ * @param {string}  [text] 顯示文字（未提供時使用預設「載入中…」）
  * @param {boolean} [fullPage=false] 佔滿整頁高度（頁面層級載入用）
  */
-export default function LoadingState({ text = "載入中…", fullPage = false }) {
+export default function LoadingState({ text, fullPage = false }) {
+  const { t } = useTranslation("common");
+  const displayText = text ?? t("LoadingState.default");
   return (
     <div
       className={fullPage ? `${styles.wrap} ${styles.wrapFull}` : styles.wrap}
@@ -39,7 +42,7 @@ export default function LoadingState({ text = "載入中…", fullPage = false }
       aria-live="polite"
     >
       <BoxLoader />
-      {text && <span className={styles.text}>{text}</span>}
+      {displayText && <span className={styles.text}>{displayText}</span>}
     </div>
   );
 }

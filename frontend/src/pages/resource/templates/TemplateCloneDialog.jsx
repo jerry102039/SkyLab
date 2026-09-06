@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./TemplatesPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import { TemplatesService } from "../../../services/templates";
@@ -11,17 +12,18 @@ const MEMORY_MIN = 512;
 const formatVram = (mb) =>
   mb >= 1024 ? `${Math.round(mb / 1024)}G` : `${mb}M`;
 
-const gpuLabel = (gpu) => {
+const gpuLabel = (gpu, t) => {
   const capacity = gpu.capacity_count || gpu.device_count;
   const parts = [];
-  if (gpu.per_instance_vram_mb > 0) parts.push(`${formatVram(gpu.per_instance_vram_mb)}/顆`);
+  if (gpu.per_instance_vram_mb > 0) parts.push(t("TemplateCloneDialog.perUnit", { vram: formatVram(gpu.per_instance_vram_mb) }));
   else if (gpu.vram) parts.push(gpu.vram);
   const vram = parts.length ? `（${parts.join("，")}）` : "";
-  return `${gpu.description || gpu.mapping_id}${vram} [${gpu.available_count}/${capacity} 可用]${gpu.available_count <= 0 ? " — 已滿" : ""}`;
+  return `${gpu.description || gpu.mapping_id}${vram} ${t("TemplateCloneDialog.availableCount", { available: gpu.available_count, capacity })}${gpu.available_count <= 0 ? t("TemplateCloneDialog.fullSuffix") : ""}`;
 };
 
 /** 從範本克隆開通（teacher/admin 可批量，student 固定單台） */
 export default function TemplateCloneDialog({ template, canBatch, closing = false, onClose, onCloned }) {
+  const { t } = useTranslation("resource");
   const toast = useToast();
   const [hostname, setHostname] = useState("");
   const [count, setCount] = useState("1");
@@ -51,7 +53,7 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
     /* GPU 不可跨 PVE 連線：只列出與範本同叢集的 GPU */
     GpuService.listOptions(template?.node ? { node: template.node } : undefined)
       .then((res) => !cancelled && setGpuOptions(res ?? []))
-      .catch(() => !cancelled && toast.error("GPU 清單載入失敗"))
+      .catch(() => !cancelled && toast.error(t("TemplateCloneDialog.gpuListLoadFailed")))
       .finally(() => !cancelled && setGpuLoading(false));
     return () => {
       cancelled = true;
@@ -66,11 +68,11 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
 
   const handleSubmit = async () => {
     if (allowPassword && password && password.length < 8) {
-      toast.error("自訂密碼至少需要 8 個字元");
+      toast.error(t("TemplateCloneDialog.passwordTooShort"));
       return;
     }
     if (needsGpu && !gpuMappingId) {
-      toast.error("此範本需要 GPU，請先選擇要配置的 GPU");
+      toast.error(t("TemplateCloneDialog.gpuRequired"));
       return;
     }
     setBusy(true);
@@ -87,13 +89,13 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
       });
       toast.success(
         (res?.tasks?.length ?? 0) > 1
-          ? `已送出 ${res.tasks.length} 台克隆任務，進度請見側欄「背景任務」`
-          : "克隆任務已送出，完成後會出現在你的資源列表",
+          ? t("TemplateCloneDialog.cloneQueuedMultiple", { count: res.tasks.length })
+          : t("TemplateCloneDialog.cloneQueuedSingle"),
       );
       onCloned?.();
       onClose();
     } catch (e) {
-      toast.error(e?.message ?? "克隆失敗");
+      toast.error(e?.message ?? t("TemplateCloneDialog.cloneFailed"));
     } finally {
       setBusy(false);
     }
@@ -107,27 +109,27 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <span className={styles.modalTitle}>
           <MIcon name="content_copy" size={20} />
-          克隆「{template.name}」
+          {t("TemplateCloneDialog.title", { name: template.name })}
         </span>
         <p className={styles.modalDesc}>
-          系統會自動複製範本並完成必要設定（IP、防火牆），完成後可在資源頁操作使用。
+          {t("TemplateCloneDialog.description")}
         </p>
 
         <div className={styles.cloneGrid}>
           <div className={styles.field}>
-            <label htmlFor="clone-hostname">主機名稱（選填）</label>
+            <label htmlFor="clone-hostname">{t("TemplateCloneDialog.hostnameLabel")}</label>
             <input
               id="clone-hostname"
               type="text"
               maxLength={63}
-              placeholder="預設使用範本名稱"
+              placeholder={t("TemplateCloneDialog.hostnamePlaceholder")}
               value={hostname}
               onChange={(e) => setHostname(e.target.value)}
             />
           </div>
           {canBatch && (
             <div className={styles.field}>
-              <label htmlFor="clone-count">數量</label>
+              <label htmlFor="clone-count">{t("TemplateCloneDialog.countLabel")}</label>
               <input
                 id="clone-count"
                 type="number"
@@ -142,8 +144,8 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
 
         <div className={styles.field}>
           <div className={styles.sliderLabelRow}>
-            <label htmlFor="clone-cores">CPU 核心數</label>
-            <span className={styles.sliderValue}>{cores} 核心</span>
+            <label htmlFor="clone-cores">{t("TemplateCloneDialog.coresLabel")}</label>
+            <span className={styles.sliderValue}>{t("TemplateCloneDialog.coresValue", { cores })}</span>
           </div>
           <input
             id="clone-cores"
@@ -166,7 +168,7 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
 
         <div className={styles.field}>
           <div className={styles.sliderLabelRow}>
-            <label htmlFor="clone-memory">記憶體 (RAM)</label>
+            <label htmlFor="clone-memory">{t("TemplateCloneDialog.memoryLabel")}</label>
             <span className={styles.sliderValue}>{(memory / 1024).toFixed(1)} GB</span>
           </div>
           <input
@@ -192,23 +194,23 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
         </div>
 
         <div className={styles.field}>
-          <label>硬碟空間</label>
+          <label>{t("TemplateCloneDialog.diskLabel")}</label>
           <div className={styles.diskFixed}>
             <MIcon name="lock" size={15} />
             {template.default_disk
-              ? `固定 ${template.default_disk} GB（跟隨範本，不可調整）`
-              : "跟隨範本磁碟大小，不可調整"}
+              ? t("TemplateCloneDialog.diskFixedWithSize", { size: template.default_disk })
+              : t("TemplateCloneDialog.diskFixedDefault")}
           </div>
         </div>
 
         {allowPassword ? (
           <div className={styles.field}>
-            <label htmlFor="clone-password">登入密碼（選填）</label>
+            <label htmlFor="clone-password">{t("TemplateCloneDialog.passwordLabel")}</label>
             <input
               id="clone-password"
               type="password"
               maxLength={64}
-              placeholder="留空由系統產生隨機密碼"
+              placeholder={t("TemplateCloneDialog.passwordPlaceholder")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -216,14 +218,14 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
         ) : (
           <div className={styles.policyNote}>
             <MIcon name="lock" size={15} />
-            此範本已鎖定帳號密碼：克隆機沿用範本內建帳密，無法自訂或重設。
+            {t("TemplateCloneDialog.passwordLockedNote")}
           </div>
         )}
 
         {needsGpu && (
           <>
             <div className={styles.field}>
-              <label htmlFor="clone-gpu">GPU（此範本必須配置）</label>
+              <label htmlFor="clone-gpu">{t("TemplateCloneDialog.gpuLabel")}</label>
               <select
                 id="clone-gpu"
                 value={gpuMappingId}
@@ -234,7 +236,7 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
                 }}
               >
                 <option value="">
-                  {gpuLoading ? "載入 GPU 清單中…" : "選擇 GPU…"}
+                  {gpuLoading ? t("TemplateCloneDialog.gpuLoadingOption") : t("TemplateCloneDialog.gpuSelectOption")}
                 </option>
                 {gpuOptions.map((gpu) => (
                   <option
@@ -242,31 +244,31 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
                     value={gpu.mapping_id}
                     disabled={gpu.available_count <= 0}
                   >
-                    {gpuLabel(gpu)}
+                    {gpuLabel(gpu, t)}
                   </option>
                 ))}
               </select>
               {!gpuLoading && gpuOptions.length === 0 && (
                 <span className={styles.fieldWarn}>
-                  目前沒有可用 GPU，請聯絡管理員或稍後再試。
+                  {t("TemplateCloneDialog.gpuNoneWarning")}
                 </span>
               )}
             </div>
             {gpuProfiles.length > 0 && (
               <div className={styles.field}>
-                <label htmlFor="clone-gpu-profile">vGPU 規格</label>
+                <label htmlFor="clone-gpu-profile">{t("TemplateCloneDialog.gpuProfileLabel")}</label>
                 <select
                   id="clone-gpu-profile"
                   value={gpuProfile || smallestCreatableProfile?.mdev_type || ""}
                   onChange={(e) => setGpuProfile(e.target.value)}
                 >
                   {!smallestCreatableProfile && (
-                    <option value="" disabled>無可建立的規格（記憶體不足）</option>
+                    <option value="" disabled>{t("TemplateCloneDialog.gpuProfileNoneOption")}</option>
                   )}
                   {gpuProfiles.map((p) => (
                     <option key={p.mdev_type} value={p.mdev_type} disabled={!p.creatable}>
                       {`${p.name || p.mdev_type} — ${formatVram(p.vram_mb)}`}
-                      {p.creatable ? "" : "（記憶體不足）"}
+                      {p.creatable ? "" : t("TemplateCloneDialog.gpuProfileInsufficientSuffix")}
                     </option>
                   ))}
                 </select>
@@ -281,12 +283,12 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
             checked={start}
             onChange={(e) => setStart(e.target.checked)}
           />
-          克隆完成後自動開機
+          {t("TemplateCloneDialog.autoStartLabel")}
         </label>
 
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnSecondary} onClick={onClose}>
-            取消
+            {t("TemplateCloneDialog.cancel")}
           </button>
           <button
             type="button"
@@ -295,7 +297,7 @@ export default function TemplateCloneDialog({ template, canBatch, closing = fals
             onClick={handleSubmit}
           >
             <MIcon name="content_copy" size={14} />
-            {busy ? "送出中…" : "開始克隆"}
+            {busy ? t("TemplateCloneDialog.submitting") : t("TemplateCloneDialog.submit")}
           </button>
         </div>
       </div>

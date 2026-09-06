@@ -69,10 +69,49 @@ DENY_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"\breset\b|\bcleanup\b|\bclean\s+up\b|\bfix\b|\brepair\b", "禁止產生修復、清理或重設類反向操作"),
 )
 
-SENSITIVE_PATH_PATTERN = re.compile(
-    r"(?:\.ssh(?:[/\\]|\b)|\.env(?:[/\\]|\b)|id_rsa\b|private[-_ ]key)",
-    flags=re.IGNORECASE,
-)
+SHELL_LAUNCHERS = {
+    "bash",
+    "cmd",
+    "cmd.exe",
+    "dash",
+    "fish",
+    "powershell",
+    "powershell.exe",
+    "pwsh",
+    "sh",
+    "zsh",
+}
+GIT_WRITE_SUBCOMMANDS = {
+    "add",
+    "am",
+    "apply",
+    "bisect",
+    "branch",
+    "checkout",
+    "cherry-pick",
+    "clean",
+    "clone",
+    "commit",
+    "config",
+    "fetch",
+    "gc",
+    "init",
+    "merge",
+    "mv",
+    "pull",
+    "push",
+    "rebase",
+    "remote",
+    "reset",
+    "restore",
+    "revert",
+    "rm",
+    "stash",
+    "submodule",
+    "switch",
+    "tag",
+    "worktree",
+}
 
 DENY_AST_CALLS: dict[str, str] = {
     "os.system": "禁止使用 os.system 執行 shell 指令",
@@ -197,20 +236,6 @@ def _literal_command_text(node: ast.AST) -> str | None:
     return None
 
 
-def _literal_path_text(node: ast.AST | None) -> str | None:
-    if literal := _literal_str(node):
-        return literal
-    if isinstance(node, ast.Call) and node.args:
-        return _literal_path_text(node.args[0])
-    return None
-
-
-def _pathlib_call_path_text(node: ast.Call) -> str | None:
-    if not isinstance(node.func, ast.Attribute):
-        return None
-    return _literal_path_text(node.func.value)
-
-
 def _open_mode(node: ast.Call, mode_arg_index: int = 1) -> str:
     if len(node.args) > mode_arg_index:
         mode = _literal_str(node.args[mode_arg_index])
@@ -280,13 +305,14 @@ def _dangerous_command_issue(command_text: str) -> str | None:
     for pattern, message in DENY_PATTERNS:
         if re.search(pattern, normalized, flags=re.IGNORECASE | re.DOTALL):
             return message
-    if SENSITIVE_PATH_PATTERN.search(normalized):
-        return "禁止讀取敏感檔案或金鑰"
-
     tokens = re.split(r"\s+", normalized.strip())
     if not tokens:
         return None
     command = tokens[0]
+    if command in SHELL_LAUNCHERS:
+        return "禁止透過 shell launcher 間接執行指令"
+    if command == "git" and len(tokens) > 1 and tokens[1] in GIT_WRITE_SUBCOMMANDS:
+        return "通用受控指令只允許唯讀 Git 子命令"
     if command == "rm" and any(token in {"-r", "-rf", "-fr"} for token in tokens[1:]):
         return "禁止使用 rm 遞迴刪除檔案"
     if command == "find" and "-delete" in tokens:
@@ -371,23 +397,9 @@ def check_script_policy(script_content: str) -> CheckResult:
                 fix_hints.append({"type": "replace_dangerous_call", "function": call_name, "description": DENY_AST_CALLS[call_name]})
             if call_name in {"open", "io.open", "pathlib.Path.open"}:
                 mode_arg_index = 0 if call_name == "pathlib.Path.open" else 1
-                path_arg_index = 0 if call_name != "pathlib.Path.open" else None
-                path_text = (
-                    _literal_path_text(node.args[path_arg_index])
-                    if path_arg_index is not None and node.args
-                    else _pathlib_call_path_text(node)
-                )
-                if path_text and SENSITIVE_PATH_PATTERN.search(path_text):
-                    issues.append("禁止讀取敏感檔案或金鑰")
-                    fix_hints.append({"type": "remove_sensitive_path", "description": "禁止讀取敏感檔案或金鑰", "path": path_text})
                 if _is_write_mode(_open_mode(node, mode_arg_index=mode_arg_index)):
                     issues.append("禁止以寫入模式開啟檔案")
                     fix_hints.append({"type": "remove_write_mode", "function": call_name, "mode": _open_mode(node, mode_arg_index=mode_arg_index)})
-            if call_name in {"pathlib.Path.read_text", "pathlib.Path.read_bytes"}:
-                path_text = _pathlib_call_path_text(node)
-                if path_text and SENSITIVE_PATH_PATTERN.search(path_text):
-                    issues.append("禁止讀取敏感檔案或金鑰")
-                    fix_hints.append({"type": "remove_sensitive_path", "description": "禁止讀取敏感檔案或金鑰", "path": path_text})
             if call_name == "subprocess.run" and _keyword_is_true(node, "shell"):
                 issues.append("禁止使用 shell=True 執行指令")
                 fix_hints.append({"type": "remove_keyword_param", "function": "subprocess.run", "param": "shell", "description": "禁止使用 shell=True 執行指令"})

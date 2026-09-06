@@ -13,6 +13,7 @@ from app.ai.pve_log.schemas import (
     SSHExecResult,
 )
 from app.api.deps import AdminUser, SessionDep
+from app.core.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ async def chat(
         )
     except Exception:
         logger.exception("AI-PVE 對話失敗")
-        raise HTTPException(status_code=500, detail="AI-PVE 對話失敗")
+        raise HTTPException(status_code=500, detail=t("aiPveLog.chatFailed"))
 
 
 @router.post("/ssh/exec", response_model=SSHExecResult, tags=["ai-pve-log-ssh"])

@@ -9,6 +9,7 @@ from pathlib import Path
 from textwrap import dedent
 
 from app.core.config import settings
+from app.core.i18n import t
 from app.exceptions import BadRequestError, ProxmoxError
 from app.infrastructure.ssh import (
     SSHAuthenticationError,
@@ -58,7 +59,7 @@ def reset_host_key(session: object) -> str:
 
     config = gw_repo.get_gateway_config(session)  # type: ignore[arg-type]
     if config is None or not config.host:
-        raise BadRequestError("Gateway VM 尚未設定 IP")
+        raise BadRequestError(t("gateway.gatewayIpNotConfigured"))
     forget_host_key(config.host)
     return config.host
 
@@ -80,8 +81,8 @@ def _exec(client, command: str) -> tuple[int, str, str]:
 def _exec_checked(client, command: str, error_message: str) -> str:
     code, out, err = _exec(client, command)
     if code != 0:
-        detail = (err or out).strip() or "無輸出"
-        raise ProxmoxError(f"{error_message}：{detail}")
+        detail = (err or out).strip() or t("gateway.noOutput")
+        raise ProxmoxError(t("gateway.commandFailedWithDetail", message=error_message, detail=detail))
     return out
 
 
@@ -90,7 +91,7 @@ def _get_config(session: object) -> object:
 
     config = gw_repo.get_gateway_config(session)  # type: ignore[arg-type]
     if config is None or not config.host or not config.encrypted_private_key:
-        raise BadRequestError("Gateway VM 尚未設定，請先設定 IP 並生成 SSH 金鑰")
+        raise BadRequestError(t("gateway.gatewayNotConfigured"))
     return config
 
 
@@ -101,7 +102,7 @@ def _get_traefik_acme_email() -> str:
 def build_traefik_static_config(*, acme_email: str) -> str:
         clean_email = acme_email.strip()
         if not clean_email:
-                raise BadRequestError("Traefik ACME Email 不可為空")
+                raise BadRequestError(t("gateway.traefikAcmeEmailRequired"))
 
         return dedent(
                 f"""\
@@ -152,7 +153,7 @@ def build_traefik_static_config(*, acme_email: str) -> str:
 def build_traefik_env_file(cloudflare_api_token: str) -> str:
         clean_token = cloudflare_api_token.strip()
         if not clean_token or "\n" in clean_token or "\r" in clean_token:
-                raise BadRequestError("Cloudflare API Token 格式不正確")
+                raise BadRequestError(t("gateway.cloudflareApiTokenInvalidFormat"))
 
         escaped_token = (
                 clean_token.replace("\\", "\\\\")
@@ -200,7 +201,7 @@ def _write_remote_file(client, path: str, content: str) -> None:
         finally:
                 sftp.close()
 
-        _exec_checked(client, f"mv {tmp_path} {path}", f"寫入 {path} 失敗")
+        _exec_checked(client, f"mv {tmp_path} {path}", t("gateway.writeRemoteFileFailed", path=path))
 
 
 def test_connection(
@@ -235,7 +236,7 @@ def read_service_config(session: object, service: str) -> str:
 
     path = SERVICE_CONFIG_PATHS.get(service)
     if path is None:
-        raise BadRequestError(f"未知服務：{service}")
+        raise BadRequestError(t("gateway.unknownService", service=service))
 
     client = _make_client(config.host, config.ssh_port, config.ssh_user, private_key_pem)
     try:
@@ -249,7 +250,7 @@ def read_service_config(session: object, service: str) -> str:
         finally:
             sftp.close()
     except Exception as exc:
-        raise ProxmoxError(f"讀取 {service} 設定失敗：{exc}")
+        raise ProxmoxError(t("gateway.readServiceConfigFailed", service=service, error=exc))
     finally:
         client.close()
 
@@ -264,7 +265,7 @@ def write_service_config(session: object, service: str, content: str) -> None:
 
     path = SERVICE_CONFIG_PATHS.get(service)
     if path is None:
-        raise BadRequestError(f"未知服務：{service}")
+        raise BadRequestError(t("gateway.unknownService", service=service))
 
     client = _make_client(config.host, config.ssh_port, config.ssh_user, private_key_pem)
     try:
@@ -272,7 +273,7 @@ def write_service_config(session: object, service: str, content: str) -> None:
     except ProxmoxError:
         raise
     except Exception as exc:
-        raise ProxmoxError(f"寫入 {service} 設定失敗：{exc}")
+        raise ProxmoxError(t("gateway.writeServiceConfigFailed", service=service, error=exc))
     finally:
         client.close()
 
@@ -286,7 +287,7 @@ def sync_traefik_dns_challenge(session: object) -> None:
     gateway_config = _get_config(session)
     cloudflare_config = cf_repo.get_cloudflare_config(session)  # type: ignore[arg-type]
     if cloudflare_config is None or not cloudflare_config.encrypted_api_token:
-        raise BadRequestError("請先在 admin/domains 完成 Cloudflare API Token 設定")
+        raise BadRequestError(t("gateway.cloudflareApiTokenNotConfigured"))
 
     private_key_pem = get_decrypted_private_key(gateway_config)  # type: ignore[arg-type]
     client = _make_client(
@@ -301,7 +302,7 @@ def sync_traefik_dns_challenge(session: object) -> None:
             client,
             "mkdir -p /etc/traefik/dynamic /etc/traefik/env && "
             "touch /etc/traefik/acme.json && chmod 600 /etc/traefik/acme.json",
-            "初始化 Traefik 目錄失敗",
+            t("gateway.initTraefikDirFailed"),
         )
 
         _write_remote_file(
@@ -321,17 +322,17 @@ def sync_traefik_dns_challenge(session: object) -> None:
         _exec_checked(
             client,
             f"chmod 600 {TRAEFIK_ENV_PATH}",
-            "設定 Traefik 環境檔權限失敗",
+            t("gateway.setTraefikEnvPermissionFailed"),
         )
         _exec_checked(
             client,
             "systemctl daemon-reload && systemctl restart traefik",
-            "重啟 Traefik 失敗",
+            t("gateway.restartTraefikFailed"),
         )
     except ProxmoxError:
         raise
     except Exception as exc:
-        raise ProxmoxError(f"套用 Traefik dnsChallenge 設定失敗：{exc}")
+        raise ProxmoxError(t("gateway.applyTraefikDnsChallengeFailed", error=exc))
     finally:
         client.close()
 
@@ -346,10 +347,10 @@ def control_service(session: object, service: str, action: str) -> tuple[bool, s
 
     valid_actions = {"start", "stop", "restart", "reload"}
     if action not in valid_actions:
-        raise BadRequestError(f"無效操作：{action}")
+        raise BadRequestError(t("gateway.invalidAction", action=action))
 
     if service not in SERVICE_CONFIG_PATHS:
-        raise BadRequestError(f"未知服務：{service}")
+        raise BadRequestError(t("gateway.unknownService", service=service))
 
     client = None
     try:
@@ -384,7 +385,7 @@ def get_service_logs(session: object, service: str, lines: int = 50) -> tuple[bo
     private_key_pem = get_decrypted_private_key(config)  # type: ignore[arg-type]
 
     if service not in SERVICE_CONFIG_PATHS:
-        raise BadRequestError(f"未知服務：{service}")
+        raise BadRequestError(t("gateway.unknownService", service=service))
 
     client = None
     try:
@@ -405,7 +406,7 @@ def get_service_status(session: object, service: str) -> tuple[bool, str]:
     private_key_pem = get_decrypted_private_key(config)  # type: ignore[arg-type]
 
     if service not in SERVICE_CONFIG_PATHS:
-        raise BadRequestError(f"未知服務：{service}")
+        raise BadRequestError(t("gateway.unknownService", service=service))
 
     client = None
     try:

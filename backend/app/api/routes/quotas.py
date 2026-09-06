@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from sqlmodel import select
 
 from app.api.deps import AdminUser, CurrentUser, SessionDep
+from app.core.i18n import t
 from app.exceptions import ConflictError, NotFoundError
 from app.models import AuditAction, ResourceQuota, User
 from app.schemas import (
@@ -100,7 +101,7 @@ def create_quota(
         select(ResourceQuota).where(ResourceQuota.user_id == body.user_id)
     ).first()
     if existing is not None:
-        raise ConflictError("此對象已有配額設定，請改用更新")
+        raise ConflictError(t("quotas.alreadyExists"))
 
     quota = ResourceQuota(
         user_id=body.user_id,

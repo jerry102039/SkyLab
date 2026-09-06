@@ -11,6 +11,7 @@ from datetime import date
 from sqlmodel import Session, col, select
 
 from app.core.db import engine
+from app.core.i18n import t
 from app.exceptions import BadRequestError
 from app.models import (
     ClassCapacityReservation,
@@ -57,7 +58,7 @@ def submit_batch_job_for_users(
 ) -> uuid.UUID:
     """Create a reviewed batch for an explicit class-student roster."""
     if not member_user_ids:
-        raise BadRequestError("班級沒有學生，無法執行批量建立")
+        raise BadRequestError(t("batch_provision.no_students"))
 
     # 範本系統 2.0：指定 vm_template_id 時走克隆路徑，範本必須存在且 ready
     if params.get("vm_template_id"):
@@ -66,7 +67,7 @@ def submit_batch_job_for_users(
             template_id=uuid.UUID(str(params["vm_template_id"])),
         )
         if template is None or template.status != VMTemplateStatus.ready:
-            raise BadRequestError("指定的範本不存在或尚未就緒")
+            raise BadRequestError(t("batch_provision.template_not_ready"))
 
     # 防護：子網必須已設定
     ip_management_service.ensure_subnet_configured(session)
@@ -75,13 +76,16 @@ def submit_batch_job_for_users(
     stats = ip_management_service.get_ip_stats(session)
     if not capacity_reserved and stats["available"] < len(member_user_ids):
         raise BadRequestError(
-            f"可用 IP 不足：需要 {len(member_user_ids)} 個，"
-            f"但僅剩 {stats['available']} 個可用"
+            t(
+                "batch_provision.insufficient_ip",
+                needed=len(member_user_ids),
+                available=stats["available"],
+            )
         )
 
     if recurrence_rule and not recurrence_duration_minutes:
         raise BadRequestError(
-            "排程必須同時指定 recurrence_rule 與 recurrence_duration_minutes"
+            t("batch_provision.recurrence_requires_duration")
         )
 
     job = bp_repo.create_job(
@@ -124,7 +128,7 @@ def approve_batch_job(
     # First fail fast if the job doesn't exist at all (gives a clearer error
     # than the race-loser path).
     if bp_repo.get_job(session=session, job_id=job_id) is None:
-        raise BadRequestError("Batch job not found")
+        raise BadRequestError(t("batch_provision.job_not_found"))
 
     job = bp_repo.transition_pending_review(
         session=session,
@@ -137,17 +141,16 @@ def approve_batch_job(
         # Either status changed under us (concurrent reviewer) or it wasn't
         # in pending_review to begin with.
         raise BadRequestError(
-            "Batch job is no longer pending review (it may have been "
-            "processed by another reviewer)."
+            t("batch_provision.job_no_longer_pending")
         )
 
-    t = threading.Thread(
+    worker_thread = threading.Thread(
         target=_run_queue,
         args=(job_id,),
         daemon=True,
         name=f"batch-provision-{job_id}",
     )
-    t.start()
+    worker_thread.start()
 
     logger.info("Batch provision job %s approved by %s", job_id, reviewer_id)
 
@@ -162,7 +165,7 @@ def reject_batch_job(
     """Reject a pending batch job; no provisioning takes place. Same atomic
     semantics as :func:`approve_batch_job`."""
     if bp_repo.get_job(session=session, job_id=job_id) is None:
-        raise BadRequestError("Batch job not found")
+        raise BadRequestError(t("batch_provision.job_not_found"))
 
     job = bp_repo.transition_pending_review(
         session=session,
@@ -173,8 +176,7 @@ def reject_batch_job(
     )
     if job is None:
         raise BadRequestError(
-            "Batch job is no longer pending review (it may have been "
-            "processed by another reviewer)."
+            t("batch_provision.job_no_longer_pending")
         )
     logger.info("Batch provision job %s rejected by %s", job_id, reviewer_id)
 
@@ -189,7 +191,7 @@ def review_batch_jobs(
 ) -> list[BatchProvisionJob]:
     """Review all current jobs of a class as one atomic decision."""
     if not job_ids:
-        raise BadRequestError("Teaching class has no pending batch jobs")
+        raise BadRequestError(t("batch_provision.class_no_pending_jobs"))
     jobs = bp_repo.transition_pending_reviews(
         session=session,
         job_ids=job_ids,
@@ -199,7 +201,7 @@ def review_batch_jobs(
     )
     if len(jobs) != len(set(job_ids)):
         raise BadRequestError(
-            "Teaching class jobs are no longer all pending review."
+            t("batch_provision.class_jobs_not_all_pending")
         )
     if decision == BatchProvisionJobStatus.approved:
         for job in jobs:
@@ -249,11 +251,36 @@ def _run_queue(job_id: uuid.UUID) -> None:
             else BatchProvisionJobStatus.completed
         )
         bp_repo.update_job_status(session=session, job_id=job_id, status=final)
+        teaching_class_id = job.teaching_class_id
         logger.info(
             "Batch provision job %s finished: done=%d failed=%d",
             job_id,
             job.done,
             job.failed_count,
+        )
+
+    if teaching_class_id is not None:
+        _refresh_teaching_class_status(teaching_class_id)
+
+
+def _refresh_teaching_class_status(teaching_class_id: uuid.UUID) -> None:
+    """Advance the owning class once a node job reaches a terminal state.
+
+    Without this the class list keeps showing "建立中" until a teacher happens
+    to open the class workspace, which is the only other caller that recomputes
+    the status.
+    """
+    from app.services.teaching import class_status_service  # noqa: PLC0415
+
+    try:
+        with Session(engine) as session:
+            class_status_service.recompute(
+                session=session, class_id=teaching_class_id
+            )
+            session.commit()
+    except Exception:
+        logger.exception(
+            "Failed to refresh teaching class status class_id=%s", teaching_class_id
         )
 
 
@@ -306,6 +333,9 @@ def _process_task(*, job_id: uuid.UUID, task_id: uuid.UUID) -> None:
                 start=start_on_create,
                 batch_job_id=job_id,
                 teaching_class_id=teaching_class_id,
+                target_node=_class_target_node(
+                    session=session, job_id=job_id, user_id=user_id
+                ),
             )
 
         # E1：批量建立完成點也建初始快照（best-effort）
@@ -381,6 +411,42 @@ def _process_task(*, job_id: uuid.UUID, task_id: uuid.UUID) -> None:
             bp_repo.increment_job_failed(session=session, job_id=job_id)
 
 
+def _class_target_node(
+    *, session: Session, job_id: uuid.UUID, user_id: uuid.UUID
+) -> str | None:
+    """這位學生的這台課程機器該建在哪個節點。
+
+    與容量預留共用 class_capacity_service 的同一份分配：先查該學生在預留階段
+    被分到哪個叢集，再在該叢集內決定節點。這確保同一位學生的每一台機器都落
+    在同一個叢集（跨叢集 L2 不通、拓樸形同虛設），同時允許不同學生分屬不同
+    叢集 —— 例如 25 位在 A、10 位在 B。
+
+    自訂 LXC 原本走 pick_target_node，會在所有連線之間自由挑選。
+
+    解析不出來時回 None，沿用既有的預設節點行為（不讓建機因此中斷）。
+    """
+    from app.services.teaching import class_capacity_service  # noqa: PLC0415
+
+    machine_node = session.exec(
+        select(TeachingClassMachineNode).where(
+            TeachingClassMachineNode.batch_job_id == job_id
+        )
+    ).first()
+    if machine_node is None:
+        return None
+    try:
+        return class_capacity_service.target_node_for_machine(
+            session, machine_node=machine_node, user_id=user_id
+        )
+    except Exception:
+        logger.warning(
+            "Failed to resolve class target node for job=%s; falling back to default",
+            job_id,
+            exc_info=True,
+        )
+        return None
+
+
 def _sync_class_machine_mapping(
     *,
     session: Session,
@@ -437,6 +503,7 @@ def _provision_one(
     start: bool = True,
     batch_job_id: uuid.UUID | None = None,
     teaching_class_id: uuid.UUID | None = None,
+    target_node: str | None = None,
 ) -> int:
     """建立單一資源，回傳 vmid。
 
@@ -454,7 +521,7 @@ def _provision_one(
         ).first()
         if reservation is None:
             raise BadRequestError(
-                "Teaching class has no approved capacity reservation"
+                t("batch_provision.class_no_capacity_reservation")
             )
     else:
         quota_service.check_quota(
@@ -517,6 +584,7 @@ def _provision_one(
             user_id=user_id,
             batch_job_id=batch_job_id,
             ip_reservation_key=reservation_key,
+            target_node=target_node,
         )
     else:
         reservation_key = (

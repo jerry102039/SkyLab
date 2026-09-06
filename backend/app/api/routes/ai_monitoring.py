@@ -13,6 +13,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import AIAPIViewAllUser, SessionDep
+from app.core.i18n import t
 from app.features.ai.config import settings as ai_api_settings
 from app.schemas.ai_monitoring import (
     AIMonitoringStats,
@@ -140,7 +141,9 @@ async def get_litellm_runtime_snapshot(_current_user: AIAPIViewAllUser):
     """
     api_key = ai_api_settings.litellm_runtime_api_key
     if not api_key:
-        raise HTTPException(status_code=503, detail="LiteLLM runtime monitoring is not configured")
+        raise HTTPException(
+            status_code=503, detail=t("aiMonitoring.runtimeNotConfigured")
+        )
 
     base_url = ai_api_settings.litellm_runtime_base_url.rstrip("/")
     headers = {"Authorization": f"Bearer {api_key}"}
@@ -153,7 +156,9 @@ async def get_litellm_runtime_snapshot(_current_user: AIAPIViewAllUser):
             )
     except httpx.RequestError:
         logger.warning("LiteLLM runtime snapshot request failed")
-        raise HTTPException(status_code=503, detail="LiteLLM runtime is unavailable") from None
+        raise HTTPException(
+            status_code=503, detail=t("aiMonitoring.runtimeUnavailable")
+        ) from None
 
     try:
         deployment_health = deployments.json() if deployments.is_success else {}

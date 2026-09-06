@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.api.deps import AIAPIUserDep, SessionDep
+from app.core.i18n import t
 from app.features.ai.config import settings as ai_api_settings
 from app.infrastructure.redis import check_rate_limit_sliding_window, get_redis
 from app.schemas.ai_proxy import RateLimitStatusResponse, UsageStatsResponse
@@ -153,10 +154,10 @@ async def _enforce_rate_limit(*, user: Any, credential: Any) -> None:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
                 "error": "rate_limit_exceeded",
-                "message": (
-                    "Rate limit exceeded. "
-                    f"Limit: {rate_info['limit']} requests per "
-                    f"{rate_info['window_seconds']} seconds."
+                "message": t(
+                    "aiProxy.rateLimitExceeded",
+                    limit=rate_info["limit"],
+                    window_seconds=rate_info["window_seconds"],
                 ),
                 "limit": rate_info["limit"],
                 "current": rate_info["current"],

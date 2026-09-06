@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 
 REQUIRED_HELPERS = {
     "truncate_output",
-    "redact_sensitive_text",
     "command_available",
     "run_command",
     "record_check",
@@ -24,10 +23,6 @@ UNKNOWN_ONLY_EXCEPTIONS = {
     "PermissionError",
 }
 
-_DIRECT_RAW_PATTERN = re.compile(
-    r"""["']raw["']\s*:\s*[^\n]*(stdout|stderr)""",
-    re.IGNORECASE,
-)
 _STDOUT_PASS_TERNARY_PATTERN = re.compile(
     r"""["']pass["']\s+if\s+[^\n]*(stdout|stderr)|if\s+[^\n]*(stdout|stderr)[^\n]*else\s+["']pass["']""",
     re.IGNORECASE,
@@ -198,37 +193,11 @@ def _function_mentions_returncode(
     return False
 
 
-def _redaction_uses_bare_key(
-    function_def: ast.FunctionDef | ast.AsyncFunctionDef,
-) -> bool:
-    for node in ast.walk(function_def):
-        literal = _literal_str(node)
-        if not literal:
-            continue
-        lowered = literal.lower()
-        for match in re.finditer(r"key", lowered):
-            prefix = lowered[max(0, match.start() - 20) : match.start()]
-            if "api" not in prefix and "private" not in prefix:
-                return True
-    return False
-
-
-def _record_check_has_sanitized_raw(
+def _record_check_has_bounded_raw(
     function_def: ast.FunctionDef | ast.AsyncFunctionDef,
     aliases: dict[str, str],
 ) -> bool:
-    return _function_uses_helper(
-        function_def, "truncate_output", aliases
-    ) and _function_uses_helper(function_def, "redact_sensitive_text", aliases)
-
-
-def _record_check_raw_arg(call: ast.Call) -> ast.AST | None:
-    if len(call.args) >= 5:
-        return call.args[4]
-    for keyword in call.keywords:
-        if keyword.arg == "raw":
-            return keyword.value
-    return None
+    return _function_uses_helper(function_def, "truncate_output", aliases)
 
 
 def _body_record_check_statuses(
@@ -414,11 +383,11 @@ def check_script_quality(script_content: str) -> CheckResult:
             fix_hints.append({"type": "add_helper_function", "name": helper_name, "description": f"腳本缺少必要 helper：{helper_name}"})
 
     record_check_def = helper_defs.get("record_check")
-    if record_check_def and not _record_check_has_sanitized_raw(record_check_def, aliases):
+    if record_check_def and not _record_check_has_bounded_raw(record_check_def, aliases):
         issues.append(
-            "record_check 必須統一透過 redact_sensitive_text 與 truncate_output 處理 raw"
+            "record_check 必須統一透過 truncate_output 控制 raw 大小"
         )
-        fix_hints.append({"type": "add_sanitize_in_record_check", "description": "record_check 必須統一透過 redact_sensitive_text 與 truncate_output 處理 raw"})
+        fix_hints.append({"type": "add_truncate_in_record_check", "description": "record_check 必須統一透過 truncate_output 控制 raw 大小"})
 
     command_available_def = helper_defs.get("command_available")
     if command_available_def and not _function_uses_helper(
@@ -431,11 +400,6 @@ def check_script_quality(script_content: str) -> CheckResult:
     if run_command_def and not _function_mentions_returncode(run_command_def):
         issues.append("run_command 必須回傳 returncode")
         fix_hints.append({"type": "add_returncode_to_run_command", "description": "run_command 必須回傳 returncode"})
-
-    redaction_def = helper_defs.get("redact_sensitive_text")
-    if redaction_def and _redaction_uses_bare_key(redaction_def):
-        issues.append("redact_sensitive_text 不可使用過度寬泛的裸 key 規則")
-        fix_hints.append({"type": "fix_redaction_pattern", "function": "redact_sensitive_text", "description": "redact_sensitive_text 不可使用過度寬泛的裸 key 規則"})
 
     if not _calls_named_helper(tree, "record_check", aliases, skip_functions={"record_check"}):
         issues.append("腳本必須透過 record_check 建立檢查結果")
@@ -468,10 +432,6 @@ def check_script_quality(script_content: str) -> CheckResult:
         issues.append("輸出 JSON metadata 必須包含 timestamp 與 platform")
         fix_hints.append({"type": "add_output_field", "field": "metadata", "description": "輸出 JSON metadata 必須包含 timestamp 與 platform"})
 
-    if _DIRECT_RAW_PATTERN.search(script_content):
-        issues.append("raw 不可直接保存 stdout/stderr，必須先脫敏並截斷")
-        fix_hints.append({"type": "sanitize_raw_field", "description": "raw 不可直接保存 stdout/stderr，必須先脫敏並截斷"})
-
     if _STDOUT_PASS_TERNARY_PATTERN.search(script_content):
         issues.append("不能用 stdout/stderr truthiness 直接判定 pass")
         fix_hints.append({"type": "remove_stdout_truthiness_check", "description": "不能用 stdout/stderr truthiness 直接判定 pass"})
@@ -501,13 +461,6 @@ def check_script_quality(script_content: str) -> CheckResult:
             if title and "檢查" in title:
                 issues.append("record_check title 請使用收集語意，不要使用檢查")
                 fix_hints.append({"type": "rename_title", "current": title, "description": "record_check title 請使用收集語意，不要使用檢查"})
-            raw_arg = _record_check_raw_arg(node)
-            if raw_arg is not None and _node_mentions_stream(raw_arg):
-                issues.append(
-                    "record_check raw 不可直接餵 stdout/stderr，必須先整理為 snippet 再交給 helper"
-                )
-                fix_hints.append({"type": "sanitize_record_check_raw", "description": "record_check raw 不可直接餵 stdout/stderr，必須先整理為 snippet 再交給 helper"})
-
         if isinstance(node, ast.If):
             if _node_mentions_stream(node.test) and _body_marks_pass(node.body, aliases):
                 issues.append("不能用 stdout/stderr 是否有內容直接判定 pass")

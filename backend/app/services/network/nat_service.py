@@ -9,6 +9,7 @@
 
 import logging
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError, ProxmoxError
 
 logger = logging.getLogger(__name__)
@@ -43,13 +44,13 @@ def check_port_available(external_port: int, protocol: str, session: object) -> 
     """檢查外網 port 是否可用（保留 port 檢查 + DB 衝突檢查）"""
     if external_port in RESERVED_PORTS:
         raise BadRequestError(
-            f"Port {external_port} 為系統保留 port，不可用作外網入口"
+            t("nat.reservedPort", port=external_port)
         )
     from app.repositories import nat_rule as nat_repo  # noqa: PLC0415
 
     if nat_repo.is_external_port_taken(session, external_port, protocol):  # type: ignore[arg-type]
         raise BadRequestError(
-            f"外網 Port {external_port}/{protocol} 已被其他 VM 佔用"
+            t("nat.externalPortTaken", port=external_port, protocol=protocol)
         )
 
 
@@ -96,7 +97,7 @@ def _sync_haproxy(session: object) -> None:
 
     config = gw_repo.get_gateway_config(session)  # type: ignore[arg-type]
     if config is None or not config.host or not config.encrypted_private_key:
-        raise ProxmoxError("Gateway VM 尚未設定，無法同步 haproxy 規則")
+        raise ProxmoxError(t("nat.gatewayNotConfiguredSyncFailed"))
 
     rules = nat_repo.list_rules(session)  # type: ignore[arg-type]
     private_key_pem = get_decrypted_private_key(config)  # type: ignore[arg-type]
@@ -157,14 +158,14 @@ def _sync_haproxy(session: object) -> None:
         )
         if code != 0:
             exec_command(client, f"rm -f {tmp_path}")
-            raise ProxmoxError(f"haproxy 設定同步失敗：{out}{err}")
+            raise ProxmoxError(t("nat.haproxySyncCommandFailed", out=out, err=err))
 
         logger.info(f"[NAT] haproxy 已同步 {len(rules)} 條轉發規則並 reload")
 
     except ProxmoxError:
         raise
     except Exception as e:
-        raise ProxmoxError(f"haproxy 同步失敗：{e}")
+        raise ProxmoxError(t("nat.haproxySyncFailed", error=e))
     finally:
         client.close()
 
@@ -225,7 +226,7 @@ def remove_nat_rule_by_id(session: object, rule_id: str) -> None:
 
     rule = nat_repo.get_rule(session, _uuid.UUID(rule_id))  # type: ignore[arg-type]
     if rule is None:
-        raise BadRequestError(f"NAT 規則 {rule_id} 不存在")
+        raise BadRequestError(t("nat.ruleNotFound", ruleId=rule_id))
 
     nat_repo.delete_rule(session, rule)  # type: ignore[arg-type]
     _sync_haproxy(session)
