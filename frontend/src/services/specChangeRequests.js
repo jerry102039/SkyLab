@@ -1,9 +1,25 @@
 import { apiGet, apiPost } from "./api";
 
+/**
+ * 規格調整申請流程：
+ *   學生送出 → 管理員審核（核准不套用） → 學生按「套用」（202 背景任務：
+ *   執行中的 VM 會關機 → 改規格 → 開機；容器線上生效） → applied_at 寫入。
+ *
+ * 回應中的 apply_status（僅 status=approved 時有值）：
+ *   ready | applying | applied | failed | interrupted
+ */
 export const SpecChangeRequestsService = {
   /** 送出規格變更申請（body: { vmid, change_type, reason, requested_cpu?, requested_memory? }） */
   create(body) {
     return apiPost("/api/v1/spec-change-requests/", body);
+  },
+
+  /** 自己的申請（含已核准待套用、已套用、已取消） */
+  listMy(params = {}) {
+    const query = new URLSearchParams();
+    query.set("limit", String(params.limit ?? 100));
+    if (params.skip) query.set("skip", String(params.skip));
+    return apiGet(`/api/v1/spec-change-requests/my?${query.toString()}`);
   },
 
   listAll(params = {}) {
@@ -19,4 +35,85 @@ export const SpecChangeRequestsService = {
   review(requestId, body) {
     return apiPost(`/api/v1/spec-change-requests/${requestId}/review`, body);
   },
+
+  /** 套用已核准的規格（202；回 { message, task_id, request }） */
+  apply(requestId) {
+    return apiPost(`/api/v1/spec-change-requests/${requestId}/apply`, {});
+  },
+
+  /** 撤銷待審核、或已核准但尚未套用的申請 */
+  cancel(requestId) {
+    return apiPost(`/api/v1/spec-change-requests/${requestId}/cancel`, {});
+  },
 };
+
+/* ── 顯示用 helper（RequestsPage / SpecificationsTab / RequestReviewPage 共用） ── */
+
+/** 申請是否還在流程中（送出後到套用完成或結案前） */
+export function isOpenSpecRequest(req) {
+  if (!req) return false;
+  if (req.status === "pending") return true;
+  return req.status === "approved" && req.apply_status !== "applied";
+}
+
+/** 可以按「套用」：已核准且沒在跑（失敗／中斷可重試） */
+export function canApplySpecRequest(req) {
+  return (
+    req?.status === "approved" &&
+    ["ready", "failed", "interrupted"].includes(req.apply_status)
+  );
+}
+
+/** 可以撤銷：待審核，或已核准但還沒開始套用／套用失敗 */
+export function canCancelSpecRequest(req) {
+  if (!req) return false;
+  if (req.status === "pending") return true;
+  return canApplySpecRequest(req);
+}
+
+/** 狀態徽章：label + color（success / danger / info / warning / muted） */
+export function specRequestDisplayStatus(req) {
+  switch (req?.status) {
+    case "pending":
+      return { key: "pending", label: "審核中", color: "info" };
+    case "rejected":
+      return { key: "rejected", label: "已拒絕", color: "danger" };
+    case "cancelled":
+      return { key: "cancelled", label: "已取消", color: "muted" };
+    case "approved":
+      switch (req.apply_status) {
+        case "applied":
+          return { key: "applied", label: "已套用", color: "success" };
+        case "applying":
+          return { key: "applying", label: "套用中", color: "info" };
+        case "failed":
+          return { key: "apply_failed", label: "套用失敗", color: "danger" };
+        case "interrupted":
+          return { key: "apply_interrupted", label: "套用中斷", color: "danger" };
+        default:
+          return { key: "ready", label: "已核准 · 待套用", color: "warning" };
+      }
+    default:
+      return { key: req?.status ?? "unknown", label: req?.status ?? "—", color: "muted" };
+  }
+}
+
+function memLabel(mb) {
+  if (mb == null) return "—";
+  return mb % 1024 === 0 ? `${mb / 1024} GB` : `${(mb / 1024).toFixed(1)} GB`;
+}
+
+/** 「CPU 2 → 4 核 / 記憶體 2 GB → 4 GB」 */
+export function specRequestChangeLabel(req) {
+  const parts = [];
+  if (req?.requested_cpu != null) {
+    parts.push(`CPU ${req.current_cpu ?? "—"} → ${req.requested_cpu} 核`);
+  }
+  if (req?.requested_memory != null) {
+    parts.push(`記憶體 ${memLabel(req.current_memory)} → ${memLabel(req.requested_memory)}`);
+  }
+  if (req?.requested_disk != null) {
+    parts.push(`磁碟 ${req.current_disk ?? "—"} → ${req.requested_disk} GB`);
+  }
+  return parts.join(" / ") || "—";
+}

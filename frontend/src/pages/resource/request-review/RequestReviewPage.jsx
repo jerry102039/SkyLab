@@ -33,7 +33,27 @@ const STATUS_META = {
   completed: { label: "已完成", tone: "muted" },
   failed: { label: "失敗", tone: "danger" },
   deleted_approved: { label: "已通過 / 資源已刪除", tone: "success" },
+  /* 規格調整：核准後由申請人自己按「套用」，所以 approved 再依套用進度細分 */
+  approved_awaiting_apply: { label: "已通過 / 待申請人套用", tone: "success" },
+  applying: { label: "套用中", tone: "info" },
+  applied: { label: "已套用", tone: "success" },
+  apply_failed: { label: "已通過 / 套用失敗", tone: "danger" },
 };
+
+function specReviewStatus(request) {
+  if (request.status !== "approved") return request.status;
+  switch (request.apply_status) {
+    case "applied":
+      return "applied";
+    case "applying":
+      return "applying";
+    case "failed":
+    case "interrupted":
+      return "apply_failed";
+    default:
+      return "approved_awaiting_apply";
+  }
+}
 
 
 function formatDateTime(value) {
@@ -142,8 +162,10 @@ function normalizeSpecRequest(request) {
     source: "spec",
     raw: request,
     reviewStatus: request.status,
-    status: request.status,
-    title: `VMID ${request.vmid} 規格調整`,
+    status: specReviewStatus(request),
+    title: request.resource_name
+      ? `${request.resource_name}（VMID ${request.vmid}）規格調整`
+      : `VMID ${request.vmid} 規格調整`,
     user: request.user_full_name || request.user_email || "未知使用者",
     userSubtext: request.user_email || request.user_id || "-",
     timeText: formatDateTime(request.created_at),
@@ -363,6 +385,9 @@ export default function RequestReviewPage() {
   }
 
   const isPending = selected?.reviewStatus === "pending";
+  /* 規格調整：機器已刪除（resource_vmid 已清空）就不能核准，後端也會擋 */
+  const specResourceGone =
+    selected?.source === "spec" && selected?.raw?.resource_exists === false;
   /* 系統寫入的刪除標記（CONSUMED_REQUEST_MARKERS）不是審核人留的備註，不顯示 */
   const rawReviewComment = selected?.raw?.review_comment;
   const reviewNote =
@@ -558,6 +583,15 @@ export default function RequestReviewPage() {
 
                 {isPending && selected.source !== "deletion" ? (
                   <>
+                    {selected.source === "spec" && (
+                      <div className={styles.rowActions}>
+                        <span className={styles.doneText}>
+                          {specResourceGone
+                            ? "這台機器已經刪除，無法核准；請拒絕此申請。"
+                            : "核准後不會立即變更：由申請人自己按「套用」，執行中的虛擬機會先關機、套用後再自動開機。"}
+                        </span>
+                      </div>
+                    )}
                     <label className={styles.commentField}>
                       <span>審核備註</span>
                       <textarea
@@ -571,7 +605,7 @@ export default function RequestReviewPage() {
                       <button
                         type="button"
                         className={styles.btnApprove}
-                        disabled={reviewing || (selected.source === "vm" && context && !context.feasible)}
+                        disabled={reviewing || (selected.source === "vm" && context && !context.feasible) || specResourceGone}
                         onClick={() => submitReview("approved")}
                       >
                         核准
@@ -591,15 +625,33 @@ export default function RequestReviewPage() {
                     <span className={styles.doneText}>刪除請求只作為申請紀錄，不計入審核通過數量。</span>
                   </div>
                 ) : (
-                  (reviewNote || selected.reviewedAt) && (
-                    <div className={styles.reasonBox}>
-                      <span>
-                        審核備註
-                        {selected.reviewedAt ? `（${formatDateTime(selected.reviewedAt)} 審核）` : ""}
-                      </span>
-                      <p>{reviewNote || "未填寫備註"}</p>
-                    </div>
-                  )
+                  <>
+                    {(reviewNote || selected.reviewedAt) && (
+                      <div className={styles.reasonBox}>
+                        <span>
+                          審核備註
+                          {selected.reviewedAt ? `（${formatDateTime(selected.reviewedAt)} 審核）` : ""}
+                        </span>
+                        <p>{reviewNote || "未填寫備註"}</p>
+                      </div>
+                    )}
+                    {selected.source === "spec" && selected.raw?.status === "approved" && (
+                      <div className={styles.reasonBox}>
+                        <span>
+                          套用結果
+                          {selected.raw.applied_at ? `（${formatDateTime(selected.raw.applied_at)} 套用）` : ""}
+                        </span>
+                        <p>
+                          {selected.raw.apply_error
+                            || (selected.raw.apply_status === "applied"
+                              ? "規格已套用"
+                              : selected.raw.apply_status === "applying"
+                                ? "套用中（關機 → 改規格 → 開機）"
+                                : "等待申請人按「套用」")}
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}

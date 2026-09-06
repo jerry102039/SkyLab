@@ -3,7 +3,14 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../contexts/AuthContext";
 import styles from "./RequestsPage.module.scss";
 import { VmRequestsService } from "../../../services/vmRequests";
-import { isConsumedRequest } from "../../../services/pendingResources";
+import { CONSUMED_REQUEST_MARKERS, isConsumedRequest } from "../../../services/pendingResources";
+import {
+  SpecChangeRequestsService,
+  canApplySpecRequest,
+  canCancelSpecRequest,
+  specRequestChangeLabel,
+  specRequestDisplayStatus,
+} from "../../../services/specChangeRequests";
 import { useToast } from "../../../hooks/useToast";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import RequestFormPage from "./RequestFormPage";
@@ -81,6 +88,9 @@ const VIEW_LIST   = "list";
 const VIEW_CREATE = "create";
 
 const LIST_COLUMNS = ["資源", "系統", "規格", "申請時間", "狀態", "操作"];
+const SPEC_COLUMNS = ["機器", "變更內容", "申請時間", "狀態", "操作"];
+/* 套用中（關機 → 改規格 → 開機）約 1～3 分鐘，比 30 秒自動刷新更勤地跟進度 */
+const SPEC_APPLY_POLL_MS = 5000;
 
 /* ── Helpers ── */
 function formatDatetime(isoStr) {
@@ -362,6 +372,173 @@ function RequestRow({ req, onUpdated }) {
   );
 }
 
+/* ── 規格調整申請列 ── */
+function SpecRequestRow({ req, onUpdated }) {
+  const toast = useToast();
+  const { user } = useAuth();
+  const showVmid = user?.is_superuser || user?.role === "admin" || user?.role === "teacher";
+  const [expanded, setExpanded]         = useState(false);
+  const [applyConfirm, setApplyConfirm] = useState(false);
+  const [cancelConfirm, setCancelConfirm] = useState(false);
+  const [busy, setBusy]                 = useState(false);
+
+  const display    = specRequestDisplayStatus(req);
+  const showApply  = canApplySpecRequest(req);
+  const showCancel = canCancelSpecRequest(req);
+  const hasAction  = showApply || showCancel;
+  /* 機器刪除時系統會把處理中的申請自動取消，備註是系統標記不是審核人留言 */
+  const deletedByMachine = CONSUMED_REQUEST_MARKERS.includes(req.review_comment);
+  const reviewNote =
+    !deletedByMachine &&
+    req.review_comment &&
+    !["Cancelled by requester", "Cancelled by admin"].includes(req.review_comment)
+      ? req.review_comment
+      : null;
+  const applyNote = req.apply_error || null;
+  const hasDetail = Boolean(req.reason || reviewNote || applyNote || deletedByMachine || req.applied_at);
+
+  async function handleApply() {
+    setBusy(true);
+    try {
+      const res = await SpecChangeRequestsService.apply(req.id);
+      onUpdated(res.request);
+      toast.success("已開始套用新規格，完成後狀態會自動更新");
+    } catch (err) {
+      toast.error(err?.message ?? "套用失敗，請稍後再試。");
+    } finally {
+      setBusy(false);
+      setApplyConfirm(false);
+    }
+  }
+
+  async function handleCancel() {
+    setBusy(true);
+    try {
+      const updated = await SpecChangeRequestsService.cancel(req.id);
+      onUpdated(updated);
+      toast.success("已撤銷規格調整申請");
+    } catch (err) {
+      toast.error(err?.message ?? "撤銷失敗，請稍後再試。");
+    } finally {
+      setBusy(false);
+      setCancelConfirm(false);
+    }
+  }
+
+  return (
+    <>
+      <tr
+        className={`${styles.tr} ${hasDetail ? styles.trClickable : ""} ${expanded ? styles.trExpanded : ""}`}
+        onClick={hasDetail ? (event) => {
+          if (event.target.closest("button")) return;
+          setExpanded((v) => !v);
+        } : undefined}
+      >
+        <td className={styles.td}>
+          <div className={styles.nameCell}>
+            {hasDetail ? (
+              <button
+                type="button"
+                className={styles.expandBtn}
+                aria-expanded={expanded}
+                aria-label={expanded ? "收合詳細資訊" : "展開詳細資訊"}
+                onClick={() => setExpanded((v) => !v)}
+              >
+                <MIcon name={expanded ? "expand_more" : "chevron_right"} size={16} />
+              </button>
+            ) : (
+              <span className={styles.expandPlaceholder} aria-hidden="true" />
+            )}
+            <div className={styles.nameMeta}>
+              <span className={styles.namePrimary}>{req.resource_name || `機器 ${req.vmid}`}</span>
+              <span className={styles.nameSub}>
+                規格調整
+                {showVmid && ` · 編號 ${req.vmid}`}
+              </span>
+            </div>
+          </div>
+        </td>
+        <td className={styles.td}>
+          <span className={styles.specCell}>{specRequestChangeLabel(req)}</span>
+        </td>
+        <td className={styles.td}>{formatDate(req.created_at)}</td>
+        <td className={styles.td}>
+          <span className={`${styles.badge} ${styles[`badge_${display.color}`]}`}>{display.label}</span>
+        </td>
+        <td className={styles.td}>
+          <div className={styles.rowActions}>
+            {!hasAction && <span className={styles.emptyAction}>—</span>}
+            {showApply && (
+              <button type="button" className={styles.applyBtn} disabled={busy} onClick={() => setApplyConfirm(true)}>
+                <MIcon name="play_arrow" size={13} />
+                {display.key === "ready" ? "套用" : "重新套用"}
+              </button>
+            )}
+            {showCancel && (
+              <button type="button" className={styles.cancelBtn} disabled={busy} onClick={() => setCancelConfirm(true)}>
+                <MIcon name="close" size={13} />
+                撤銷
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+
+      {expanded && (
+        <tr className={styles.detailTr}>
+          <td className={styles.detailTd} colSpan={SPEC_COLUMNS.length}>
+            <div className={styles.detailBody}>
+              <InfoRow icon="chat_bubble_outline" label="申請原因" value={req.reason} />
+              <InfoRow icon="event_available" label="套用時間" value={formatDatetime(req.applied_at)} />
+              {reviewNote && (
+                <div className={styles.reviewComment}>
+                  <MIcon name="comment" size={13} />
+                  <span>{reviewNote}</span>
+                </div>
+              )}
+              {deletedByMachine && (
+                <div className={styles.reviewComment}>
+                  <MIcon name="info" size={13} />
+                  <span>機器已刪除，申請已自動取消。</span>
+                </div>
+              )}
+              {applyNote && (
+                <div className={styles.reviewComment}>
+                  <MIcon name={req.applied_at ? "warning" : "error_outline"} size={13} />
+                  <span>{applyNote}</span>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+
+      {applyConfirm && (
+        <ConfirmModal
+          title="套用新規格？"
+          desc="若機器正在執行，系統會先關機、套用規格後再自動開機（容器的 CPU／記憶體可線上生效，不會重開）。過程約 1～3 分鐘無法使用，請先儲存機器內的工作。"
+          confirmLabel="關機並套用"
+          loading={busy}
+          onConfirm={handleApply}
+          onClose={() => setApplyConfirm(false)}
+        />
+      )}
+
+      {cancelConfirm && (
+        <ConfirmModal
+          title="確定撤銷規格調整申請？"
+          desc="撤銷後若還需要調整，需重新送出申請並再次審核。"
+          confirmLabel="撤銷申請"
+          danger
+          loading={busy}
+          onConfirm={handleCancel}
+          onClose={() => setCancelConfirm(false)}
+        />
+      )}
+    </>
+  );
+}
+
 /* ── Skeleton ── */
 function SkeletonRow() {
   return (
@@ -430,6 +607,7 @@ export default function RequestsPage() {
   /* 其他頁（如快速建立的「完整設定」）可用 navigate("/my-requests", { state: { create: true } }) 直接開表單 */
   const location = useLocation();
   const [requests, setRequests] = useState([]);
+  const [specRequests, setSpecRequests] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(false);
   const [view, setView]         = useState(location.state?.create ? VIEW_CREATE : VIEW_LIST);
@@ -444,9 +622,14 @@ export default function RequestsPage() {
       setError(false);
     }
     try {
-      const res = await VmRequestsService.list();
+      const [res, specRes] = await Promise.all([
+        VmRequestsService.list(),
+        /* 規格調整申請載入失敗不拖垮主列表 */
+        SpecChangeRequestsService.listMy().catch(() => null),
+      ]);
       // 機器已被刪除／轉範本的申請單只留做稽核，不顯示
       setRequests((res.data ?? []).filter((r) => !isConsumedRequest(r)));
+      if (specRes) setSpecRequests(specRes.data ?? []);
     } catch {
       if (!silent) setError(true);
     } finally {
@@ -470,8 +653,19 @@ export default function RequestsPage() {
     if (view === "list") fetchRequests(true);
   });
 
+  const specApplying = specRequests.some((r) => r.apply_status === "applying");
+  useEffect(() => {
+    if (view !== VIEW_LIST || !specApplying) return undefined;
+    const timer = setInterval(() => fetchRequests(true), SPEC_APPLY_POLL_MS);
+    return () => clearInterval(timer);
+  }, [view, specApplying, fetchRequests]);
+
   function handleUpdated(updated) {
     setRequests((prev) => prev.map((r) => r.id === updated.id ? updated : r));
+  }
+
+  function handleSpecUpdated(updated) {
+    setSpecRequests((prev) => prev.map((r) => r.id === updated.id ? updated : r));
   }
 
   if (view === VIEW_CREATE) {
@@ -500,28 +694,55 @@ export default function RequestsPage() {
       <div className={styles.content} data-guide="request-list">
         {error ? (
           <ErrorState onRetry={fetchRequests} />
-        ) : !loading && requests.length === 0 ? (
+        ) : !loading && requests.length === 0 && specRequests.length === 0 ? (
           <EmptyState onCreateClick={() => setView(VIEW_CREATE)} />
         ) : (
           <>
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    {LIST_COLUMNS.map((column) => (
-                      <th key={column} className={styles.th}>{column}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading
-                    ? [0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)
-                    : requests.map((r) => (
-                        <RequestRow key={r.id} req={r} onUpdated={handleUpdated} />
+            {(loading || requests.length > 0) && (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      {LIST_COLUMNS.map((column) => (
+                        <th key={column} className={styles.th}>{column}</th>
                       ))}
-                </tbody>
-              </table>
-            </div>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading
+                      ? [0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)
+                      : requests.map((r) => (
+                          <RequestRow key={r.id} req={r} onUpdated={handleUpdated} />
+                        ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {!loading && specRequests.length > 0 && (
+              <section className={styles.subSection}>
+                <h2 className={styles.sectionTitle}>規格調整申請</h2>
+                <p className={styles.sectionDesc}>
+                  審核通過後由你自己按「套用」：執行中的虛擬機會先關機、套用新規格後再自動開機。
+                </p>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        {SPEC_COLUMNS.map((column) => (
+                          <th key={column} className={styles.th}>{column}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {specRequests.map((r) => (
+                        <SpecRequestRow key={r.id} req={r} onUpdated={handleSpecUpdated} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
           </>
         )}
       </div>

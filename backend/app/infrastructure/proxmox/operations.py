@@ -313,9 +313,17 @@ def _resource_api(node: str, vmid: int, resource_type: ResourceType):
 # Config
 # ---------------------------------------------------------------------------
 
-def get_config(node: str, vmid: int, resource_type: ResourceType) -> dict:
-    """GET /nodes/{node}/{type}/{vmid}/config"""
-    return _resource_api(node, vmid, resource_type).config.get()
+def get_config(
+    node: str, vmid: int, resource_type: ResourceType, *, current: bool = False
+) -> dict:
+    """GET /nodes/{node}/{type}/{vmid}/config
+
+    預設回傳的是「含 pending 的設定」：執行中的機器若有尚未生效的變更
+    （例如改了 cores 但還沒重開機），拿到的會是那個尚未生效的值。
+    ``current=True`` 改要實際生效中的值。
+    """
+    api = _resource_api(node, vmid, resource_type).config
+    return api.get(current=1) if current else api.get()
 
 
 def update_config(
@@ -491,8 +499,12 @@ def get_ip_address(node: str, vmid: int, resource_type: ResourceType) -> str | N
 # ---------------------------------------------------------------------------
 
 def get_current_specs(node: str, vmid: int, resource_type: ResourceType) -> dict:
-    """Returns {"cpu": int|None, "memory": int|None, "disk": int|None}."""
-    config = get_config(node, vmid, resource_type)
+    """Returns {"cpu": int|None, "memory": int|None, "disk": int|None}.
+
+    讀實際生效值（current=1），規格調整申請的「目前規格」才不會抄到
+    尚未生效的 pending 設定。
+    """
+    config = get_config(node, vmid, resource_type, current=True)
 
     current_cpu = config.get("cores") or config.get("cpus")
     current_memory = config.get("memory")
