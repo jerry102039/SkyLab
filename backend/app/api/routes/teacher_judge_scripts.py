@@ -12,6 +12,7 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeScriptRegenerateRequest,
     TeacherJudgeScriptRunCreateRequest,
     TeacherJudgeScriptRunPublic,
+    TeacherJudgeScriptUpdateRequest,
 )
 from app.ai.teacher_judge.script_artifact_service import (
     approve_artifact,
@@ -21,6 +22,7 @@ from app.ai.teacher_judge.script_artifact_service import (
     get_artifact_public,
     list_artifacts,
     regenerate_artifact,
+    rename_artifact,
 )
 from app.ai.teacher_judge.script_executor_service import execute_script_run
 from app.ai.teacher_judge.script_run_service import (
@@ -30,6 +32,7 @@ from app.ai.teacher_judge.script_run_service import (
 from app.ai.teacher_judge.template_command_service import SUPPORTED_TEMPLATE_KEYS
 from app.api.deps import InstructorUser, SessionDep
 from app.core.authorizers import require_teaching_access
+from app.core.i18n import t
 from app.infrastructure.worker import submit
 from app.models import TeachingClass
 from app.models.teacher_judge_script_run import TeacherJudgeScriptRunTargetScope
@@ -48,14 +51,18 @@ def _ensure_class_access(
 ) -> None:
     teaching_class = session.get(TeachingClass, teaching_class_id)
     if not teaching_class:
-        raise HTTPException(status_code=404, detail="Teaching class not found")
+        raise HTTPException(
+            status_code=404, detail=t("teacherJudgeScripts.classNotFound")
+        )
     require_teaching_access(current_user, teaching_class.owner_id)
 
 
 def _normalize_supported_template_key(template_key: str) -> str:
     normalized = template_key.strip().lower() or "linux"
     if normalized not in SUPPORTED_TEMPLATE_KEYS:
-        raise HTTPException(status_code=400, detail="未知的評分環境 template。")
+        raise HTTPException(
+            status_code=400, detail=t("teacherJudgeScripts.unknownTemplate")
+        )
     return normalized
 
 
@@ -148,6 +155,25 @@ def approve_class_teacher_judge_script(
         teaching_class_id=teaching_class_id,
         artifact_id=script_id,
         approved_by=current_user.id,
+    )
+
+
+@router.patch("/{script_id}", response_model=TeacherJudgeScriptArtifactPublic)
+def rename_class_teacher_judge_script(
+    teaching_class_id: uuid.UUID,
+    script_id: uuid.UUID,
+    payload: TeacherJudgeScriptUpdateRequest,
+    session: SessionDep,
+    current_user: InstructorUser,
+) -> TeacherJudgeScriptArtifactPublic:
+    _ensure_class_access(
+        session=session, teaching_class_id=teaching_class_id, current_user=current_user
+    )
+    return rename_artifact(
+        session=session,
+        teaching_class_id=teaching_class_id,
+        artifact_id=script_id,
+        name=payload.name,
     )
 
 

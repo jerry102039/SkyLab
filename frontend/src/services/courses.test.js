@@ -58,48 +58,19 @@ describe("CoursesService", () => {
     expect(init.method).toBe("GET");
   });
 
-  test("deployRoom 以 POST 打 /rooms/{id}/deploy", async () => {
-    fetchMock.mockResolvedValueOnce(jsonRes(202, { id: "d1" }));
-    await CoursesService.deployRoom("room-1");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toContain("/api/v1/courses/rooms/room-1/deploy");
-    expect(init.method).toBe("POST");
-  });
+  test("學生只切換自己的完成狀態", async () => {
+    fetchMock.mockResolvedValueOnce(jsonRes(200, { completed: true }));
 
-  test("submitAnswer 以 POST 送 answer body", async () => {
-    fetchMock.mockResolvedValueOnce(jsonRes(200, { correct: true }));
-    await CoursesService.submitAnswer("q-1", "FLAG{x}");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toContain("/api/v1/courses/questions/q-1/submit");
-    expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body)).toEqual({ answer: "FLAG{x}" });
-  });
-
-  test("學生 AI Check 使用課程與任務範圍的專用端點", async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonRes(200, { run_id: "run-1", status: "pending" }))
-      .mockResolvedValueOnce(jsonRes(200, { run_id: "run-1", status: "completed" }));
-
-    await CoursesService.startAiCheck("path-1", "assignment-1");
-    await CoursesService.getAiCheck("path-1", "assignment-1", "run-1");
+    await CoursesService.updateAssignmentCompletion("path-1", "assignment-1", "task-1", true);
 
     expect(fetchMock.mock.calls[0][0]).toContain(
-      "/api/v1/courses/paths/path-1/ai-assignments/assignment-1/checks",
+      "/api/v1/courses/paths/path-1/ai-assignments/assignment-1/completion",
     );
-    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({});
-    expect(fetchMock.mock.calls[1][0]).toContain(
-      "/api/v1/courses/paths/path-1/ai-assignments/assignment-1/checks/run-1",
-    );
-    expect(fetchMock.mock.calls[1][1].method).toBe("GET");
-  });
-
-  test("學生可只送出單一 Checkpoint 檢查", async () => {
-    fetchMock.mockResolvedValueOnce(jsonRes(200, { run_id: "run-2", status: "pending" }));
-
-    await CoursesService.startAiCheck("path-1", "assignment-1", "checkpoint-2");
-
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ item_id: "checkpoint-2" });
+    expect(fetchMock.mock.calls[0][1].method).toBe("PUT");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      item_id: "task-1",
+      completed: true,
+    });
   });
 
   test("學生透過受保護端點取得老師上傳的任務 PDF", async () => {
@@ -143,13 +114,6 @@ describe("CoursesService", () => {
     expect(init.method).toBe("GET");
   });
 
-  test("terminateDeployment 以 DELETE 打 /deployments/{id}", async () => {
-    fetchMock.mockResolvedValueOnce(jsonRes(200, { status: "expired" }));
-    await CoursesService.terminateDeployment("d-1");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toContain("/api/v1/courses/deployments/d-1");
-    expect(init.method).toBe("DELETE");
-  });
 });
 
 describe("CourseAdminService", () => {

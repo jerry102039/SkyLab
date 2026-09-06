@@ -8,6 +8,7 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlmodel import select
 
 from app.api.deps.database import SessionDep
+from app.core.i18n import t
 from app.core.security import decrypt_value
 from app.models import AIAPICredential, User, get_datetime_utc
 
@@ -29,7 +30,7 @@ def get_current_user_by_ai_api_key(
     if not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format. Expected: Bearer <api_key>",
+            detail=t("ai_api_key.invalid_auth_format"),
         )
 
     api_key = authorization.replace("Bearer ", "").strip()
@@ -37,7 +38,7 @@ def get_current_user_by_ai_api_key(
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key is required",
+            detail=t("ai_api_key.api_key_required"),
         )
 
     # 2. 用 prefix 縮小查詢範圍（前 8 字元）
@@ -63,14 +64,14 @@ def get_current_user_by_ai_api_key(
     if not credential:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or revoked API key",
+            detail=t("ai_api_key.invalid_or_revoked"),
         )
 
     # 4. 检查过期
     if credential.expires_at and credential.expires_at < get_datetime_utc():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key has expired",
+            detail=t("ai_api_key.api_key_expired"),
         )
 
     # 5. 获取用户并检查状态
@@ -78,13 +79,13 @@ def get_current_user_by_ai_api_key(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail=t("ai_api_key.user_not_found"),
         )
 
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account is inactive",
+            detail=t("ai_api_key.user_inactive"),
         )
 
     return user, credential

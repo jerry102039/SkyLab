@@ -17,6 +17,7 @@ import time
 import uuid
 from typing import Any
 
+from app.core.i18n import t
 from app.exceptions import AppError, BadRequestError
 from app.infrastructure.proxmox import (
     get_active_host,
@@ -34,9 +35,9 @@ MAX_CONFIG_FILE_BYTES = 1_048_576  # 1 MB
 
 def validate_target_path(path: str) -> None:
     if not path.startswith("/"):
-        raise BadRequestError("目標路徑必須為絕對路徑")
+        raise BadRequestError(t("guest.pathMustBeAbsolute"))
     if ".." in path.split("/"):
-        raise BadRequestError("目標路徑不可包含 ..")
+        raise BadRequestError(t("guest.pathNoDotDot"))
 
 
 def _ping_agent(node: str, vmid: int) -> None:
@@ -44,7 +45,7 @@ def _ping_agent(node: str, vmid: int) -> None:
         get_proxmox_api_for_node(node).nodes(node).qemu(vmid).agent("ping").post()
     except Exception as exc:
         raise AppError(
-            f"VM {vmid} 的 QEMU guest agent 未回應（可能未安裝 agent 或 VM 未開機）",
+            t("guest.agentNotResponding", vmid=vmid),
             400,
         ) from exc
 
@@ -117,7 +118,7 @@ def exec_qemu(
                 str(status.get("err-data") or ""),
             )
         time.sleep(poll_interval)
-    raise AppError(f"VM {vmid} 的 guest 指令執行逾時（{timeout:.0f}s）", 504)
+    raise AppError(t("guest.execTimeout", vmid=vmid, timeout=f"{timeout:.0f}"), 504)
 
 
 def exec_lxc(
@@ -169,7 +170,7 @@ def write_file_lxc(
         )
         if code != 0:
             raise AppError(
-                f"pct push 失敗（VMID {vmid}）：{(err or _out or '').strip()[:300]}",
+                t("guest.pctPushFailed", vmid=vmid, detail=(err or _out or "").strip()[:300]),
                 502,
             )
         logger.info("Pushed %d bytes to %s on CT %s", len(content), path, vmid)

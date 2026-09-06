@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./DomainPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -24,6 +25,7 @@ function formatDate(value) {
 /* ── 供應商設定 Modal ───────────────────────────────────── */
 
 function ConfigModal({ config, loading, closing = false, onClose, onSubmit }) {
+  const { t } = useTranslation("system");
   const [form, setForm] = useState({
     account_id: config?.account_id ?? "",
     api_token: "",
@@ -54,10 +56,10 @@ function ConfigModal({ config, loading, closing = false, onClose, onSubmit }) {
       <form className={styles.modal} onSubmit={submit} onMouseDown={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <div>
-            <h2>Cloudflare 連線設定</h2>
-            <p>API Token 需具備 Zone / DNS 編輯權限；Token 只寫入不回讀。</p>
+            <h2>{t("DomainPage.configModalTitle")}</h2>
+            <p>{t("DomainPage.configModalDesc")}</p>
           </div>
-          <button type="button" className={styles.iconBtn} onClick={onClose} aria-label="關閉">
+          <button type="button" className={styles.iconBtn} onClick={onClose} aria-label={t("DomainPage.close")}>
             <MIcon name="close" size={18} />
           </button>
         </div>
@@ -72,44 +74,44 @@ function ConfigModal({ config, loading, closing = false, onClose, onSubmit }) {
         </label>
 
         <label className={styles.field}>
-          <span>API Token{config?.has_api_token ? "（留空表示不變更）" : " *"}</span>
+          <span>API Token{config?.has_api_token ? t("DomainPage.leaveBlankUnchanged") : " *"}</span>
           <input
             type="password"
             value={form.api_token}
             onChange={(e) => set("api_token", e.target.value)}
-            placeholder={config?.has_api_token ? "已設定，留空不變更" : "貼上 API Token"}
+            placeholder={config?.has_api_token ? t("DomainPage.apiTokenSetPlaceholder") : t("DomainPage.apiTokenPastePlaceholder")}
             required={!config?.has_api_token}
           />
         </label>
 
         <div className={styles.fieldRow}>
           <label className={styles.field}>
-            <span>預設 DNS Target 類型</span>
+            <span>{t("DomainPage.defaultDnsTargetType")}</span>
             <select
               value={form.default_dns_target_type}
               onChange={(e) => set("default_dns_target_type", e.target.value)}
             >
-              <option value="">未設定</option>
-              <option value="A">A（IP 位址）</option>
-              <option value="CNAME">CNAME（主機名）</option>
+              <option value="">{t("DomainPage.notSet")}</option>
+              <option value="A">{t("DomainPage.dnsTypeA")}</option>
+              <option value="CNAME">{t("DomainPage.dnsTypeCname")}</option>
             </select>
           </label>
           <label className={styles.field}>
-            <span>預設 DNS Target 值</span>
+            <span>{t("DomainPage.defaultDnsTargetValue")}</span>
             <input
               value={form.default_dns_target_value}
               onChange={(e) => set("default_dns_target_value", e.target.value)}
-              placeholder="例：140.131.x.x 或 gw.example.com"
+              placeholder={t("DomainPage.dnsTargetValuePlaceholder")}
             />
           </label>
         </div>
 
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnSecondary} onClick={onClose} disabled={loading}>
-            取消
+            {t("DomainPage.cancel")}
           </button>
           <button type="submit" className={styles.btnPrimary} disabled={loading}>
-            {loading ? "儲存中..." : "儲存"}
+            {loading ? t("DomainPage.saving") : t("DomainPage.save")}
           </button>
         </div>
       </form>
@@ -120,6 +122,7 @@ function ConfigModal({ config, loading, closing = false, onClose, onSubmit }) {
 /* ── DNS record 編輯 Modal ─────────────────────────────── */
 
 function RecordModal({ record, loading, closing = false, onClose, onSubmit }) {
+  const { t } = useTranslation("system");
   const isEdit = Boolean(record);
   const [form, setForm] = useState({
     type: record?.type ?? "A",
@@ -155,20 +158,20 @@ function RecordModal({ record, loading, closing = false, onClose, onSubmit }) {
       <form className={styles.modal} onSubmit={submit} onMouseDown={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <div>
-            <h2>{isEdit ? "編輯 DNS Record" : "新增 DNS Record"}</h2>
-            <p>TTL 設 1 代表 Auto。</p>
+            <h2>{isEdit ? t("DomainPage.recordModalEditTitle") : t("DomainPage.recordModalCreateTitle")}</h2>
+            <p>{t("DomainPage.ttlHint")}</p>
           </div>
-          <button type="button" className={styles.iconBtn} onClick={onClose} aria-label="關閉">
+          <button type="button" className={styles.iconBtn} onClick={onClose} aria-label={t("DomainPage.close")}>
             <MIcon name="close" size={18} />
           </button>
         </div>
 
         <div className={styles.fieldRow}>
           <label className={styles.field}>
-            <span>類型 *</span>
+            <span>{t("DomainPage.recordType")}</span>
             <select value={form.type} onChange={(e) => set("type", e.target.value)}>
-              {DNS_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
+              {DNS_TYPES.map((type) => (
+                <option key={type} value={type}>{type}</option>
               ))}
             </select>
           </label>
@@ -184,31 +187,31 @@ function RecordModal({ record, loading, closing = false, onClose, onSubmit }) {
         </div>
 
         <label className={styles.field}>
-          <span>名稱 *</span>
+          <span>{t("DomainPage.recordName")}</span>
           <input
             value={form.name}
             onChange={(e) => set("name", e.target.value)}
-            placeholder="例：www 或 www.example.com"
+            placeholder={t("DomainPage.recordNamePlaceholder")}
             required
           />
         </label>
 
         <label className={styles.field}>
-          <span>內容 *</span>
+          <span>{t("DomainPage.recordContent")}</span>
           <input
             value={form.content}
             onChange={(e) => set("content", e.target.value)}
-            placeholder="例：140.131.x.x"
+            placeholder={t("DomainPage.recordContentPlaceholder")}
             required
           />
         </label>
 
         <label className={styles.field}>
-          <span>備註</span>
+          <span>{t("DomainPage.recordComment")}</span>
           <input
             value={form.comment}
             onChange={(e) => set("comment", e.target.value)}
-            placeholder="選填"
+            placeholder={t("DomainPage.optional")}
           />
         </label>
 
@@ -218,15 +221,15 @@ function RecordModal({ record, loading, closing = false, onClose, onSubmit }) {
             checked={form.proxied}
             onChange={(e) => set("proxied", e.target.checked)}
           />
-          <span>經由 Cloudflare Proxy（橘色雲）</span>
+          <span>{t("DomainPage.proxiedLabel")}</span>
         </label>
 
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnSecondary} onClick={onClose} disabled={loading}>
-            取消
+            {t("DomainPage.cancel")}
           </button>
           <button type="submit" className={styles.btnPrimary} disabled={loading}>
-            {loading ? "儲存中..." : "儲存"}
+            {loading ? t("DomainPage.saving") : t("DomainPage.save")}
           </button>
         </div>
       </form>
@@ -237,6 +240,7 @@ function RecordModal({ record, loading, closing = false, onClose, onSubmit }) {
 /* ── 主頁 ───────────────────────────────────────────────── */
 
 export default function DomainPage() {
+  const { t } = useTranslation("system");
   const toast = useToast();
   const [config, setConfig] = useState(null);
   const [zones, setZones] = useState([]);
@@ -254,9 +258,9 @@ export default function DomainPage() {
     try {
       setConfig(await CloudflareService.getConfig());
     } catch (err) {
-      toast.error(err?.message ?? "載入 Cloudflare 設定失敗");
+      toast.error(err?.message ?? t("DomainPage.toastLoadConfigFailed"));
     }
-  }, [toast]);
+  }, [toast, t]);
 
   const fetchZones = useCallback(async () => {
     setLoadingZones(true);
@@ -267,11 +271,11 @@ export default function DomainPage() {
       setSelectedZone((prev) => prev ?? items[0] ?? null);
     } catch (err) {
       // 未設定連線時後端會回錯誤，front 只顯示空狀態
-      if (err?.status !== 400) toast.error(err?.message ?? "載入 Zone 失敗");
+      if (err?.status !== 400) toast.error(err?.message ?? t("DomainPage.toastLoadZonesFailed"));
     } finally {
       setLoadingZones(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   const fetchRecords = useCallback(async (zoneId, keyword) => {
     setLoadingRecords(true);
@@ -282,11 +286,11 @@ export default function DomainPage() {
       });
       setRecords(res?.items ?? []);
     } catch (err) {
-      toast.error(err?.message ?? "載入 DNS 紀錄失敗");
+      toast.error(err?.message ?? t("DomainPage.toastLoadRecordsFailed"));
     } finally {
       setLoadingRecords(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     fetchConfig();
@@ -303,11 +307,11 @@ export default function DomainPage() {
     try {
       const updated = await CloudflareService.updateConfig(body);
       setConfig(updated);
-      toast.success("設定已儲存");
+      toast.success(t("DomainPage.toastConfigSaved"));
       setModal(null);
       fetchZones();
     } catch (err) {
-      toast.error(err?.message ?? "儲存設定失敗");
+      toast.error(err?.message ?? t("DomainPage.toastSaveConfigFailed"));
     } finally {
       setSaving(false);
     }
@@ -317,11 +321,11 @@ export default function DomainPage() {
     setTesting(true);
     try {
       const res = await CloudflareService.testConfig();
-      if (res.success) toast.success(res.message || "連線成功");
-      else toast.error(res.message || "連線失敗");
+      if (res.success) toast.success(res.message || t("DomainPage.toastConnectSuccess"));
+      else toast.error(res.message || t("DomainPage.toastConnectFailed"));
       fetchConfig();
     } catch (err) {
-      toast.error(err?.message ?? "連線測試失敗");
+      toast.error(err?.message ?? t("DomainPage.toastConnectTestFailed"));
     } finally {
       setTesting(false);
     }
@@ -333,15 +337,15 @@ export default function DomainPage() {
     try {
       if (modal?.record) {
         await CloudflareService.updateDnsRecord(selectedZone.id, modal.record.id, body);
-        toast.success("DNS 紀錄已更新");
+        toast.success(t("DomainPage.toastRecordUpdated"));
       } else {
         await CloudflareService.createDnsRecord(selectedZone.id, body);
-        toast.success("DNS 紀錄已建立");
+        toast.success(t("DomainPage.toastRecordCreated"));
       }
       setModal(null);
       fetchRecords(selectedZone.id, search);
     } catch (err) {
-      toast.error(err?.message ?? "儲存 DNS 紀錄失敗");
+      toast.error(err?.message ?? t("DomainPage.toastSaveRecordFailed"));
     } finally {
       setSaving(false);
     }
@@ -352,11 +356,11 @@ export default function DomainPage() {
     setSaving(true);
     try {
       await CloudflareService.deleteDnsRecord(selectedZone.id, modal.record.id);
-      toast.success("DNS 紀錄已刪除");
+      toast.success(t("DomainPage.toastRecordDeleted"));
       setModal(null);
       fetchRecords(selectedZone.id, search);
     } catch (err) {
-      toast.error(err?.message ?? "刪除失敗");
+      toast.error(err?.message ?? t("DomainPage.toastDeleteFailed"));
     } finally {
       setSaving(false);
     }
@@ -366,7 +370,7 @@ export default function DomainPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="網域管理" subtitle="用同一個工作台完成 Cloudflare 供應商連線、Zone 檢視，以及 DNS record 的新增、調整與刪除。">
+      <PageHeader title={t("DomainPage.pageTitle")} subtitle={t("DomainPage.pageSubtitle")}>
         <div className={styles.headerActions} data-guide="domain-connect">
           <button
             type="button"
@@ -378,11 +382,11 @@ export default function DomainPage() {
           </button>
           <button type="button" className={styles.btnSecondary} onClick={handleTest} disabled={testing || !isConfigured}>
             <MIcon name="wifi_tethering" size={16} />
-            {testing ? "測試中..." : "測試連線"}
+            {testing ? t("DomainPage.testing") : t("DomainPage.testConnection")}
           </button>
           <button type="button" className={styles.btnPrimary} onClick={() => setModal({ kind: "config" })}>
             <MIcon name="settings" size={16} />
-            連線設定
+            {t("DomainPage.connectionSettings")}
           </button>
         </div>
       </PageHeader>
@@ -391,11 +395,11 @@ export default function DomainPage() {
         <div className={styles.configBar} data-guide="domain-status">
           <span className={`${styles.badge} ${isConfigured ? styles.badge_success : styles.badge_danger}`}>
             <MIcon name={isConfigured ? "check_circle" : "error"} size={13} />
-            {isConfigured ? "已連線" : "未設定"}
+            {isConfigured ? t("DomainPage.connected") : t("DomainPage.notSet")}
           </span>
-          {config.account_id && <span className={styles.configMeta}>Account：{config.account_id}</span>}
+          {config.account_id && <span className={styles.configMeta}>{t("DomainPage.accountLabel")}{config.account_id}</span>}
           {config.last_verified_at && (
-            <span className={styles.configMeta}>上次驗證：{formatDate(config.last_verified_at)}</span>
+            <span className={styles.configMeta}>{t("DomainPage.lastVerifiedLabel")}{formatDate(config.last_verified_at)}</span>
           )}
         </div>
       )}
@@ -403,17 +407,17 @@ export default function DomainPage() {
       {!isConfigured && !loadingZones ? (
         <EmptyState
           icon="domain"
-          title="尚未連線 Cloudflare"
+          title={t("DomainPage.emptyNotConnected")}
         />
       ) : (
         <div className={styles.workbench}>
           {/* Zone 側欄 */}
           <div className={styles.zonePanel} data-guide="domain-zones">
-            <h2 className={styles.panelTitle}>Zones（{zones.length}）</h2>
+            <h2 className={styles.panelTitle}>{t("DomainPage.zonesTitle", { count: zones.length })}</h2>
             {loadingZones ? (
               <LoadingState />
             ) : zones.length === 0 ? (
-              <p className={styles.panelEmpty}>找不到任何 Zone</p>
+              <p className={styles.panelEmpty}>{t("DomainPage.noZonesFound")}</p>
             ) : (
               <div className={styles.zoneList}>
                 {zones.map((zone) => (
@@ -444,7 +448,7 @@ export default function DomainPage() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && selectedZone) fetchRecords(selectedZone.id, search);
                   }}
-                  placeholder="搜尋紀錄名稱，Enter 查詢"
+                  placeholder={t("DomainPage.recordSearchPlaceholder")}
                   disabled={!selectedZone}
                 />
               </div>
@@ -455,16 +459,16 @@ export default function DomainPage() {
                 disabled={!selectedZone}
               >
                 <MIcon name="add" size={16} />
-                新增紀錄
+                {t("DomainPage.addRecord")}
               </button>
             </div>
 
             {!selectedZone ? (
-              <p className={styles.panelEmpty}>請先選擇左側 Zone</p>
+              <p className={styles.panelEmpty}>{t("DomainPage.selectZoneFirst")}</p>
             ) : loadingRecords ? (
-              <LoadingState text="載入 DNS 紀錄..." />
+              <LoadingState text={t("DomainPage.loadingRecords")} />
             ) : records.length === 0 ? (
-              <p className={styles.panelEmpty}>此 Zone 尚無 DNS 紀錄</p>
+              <p className={styles.panelEmpty}>{t("DomainPage.noRecordsInZone")}</p>
             ) : (
               <div className={styles.list}>
                 {records.map((r) => (
@@ -488,7 +492,7 @@ export default function DomainPage() {
                       <button
                         type="button"
                         className={styles.actionBtn}
-                        title="編輯"
+                        title={t("DomainPage.edit")}
                         onClick={() => setModal({ kind: "record", record: r })}
                       >
                         <MIcon name="edit" size={16} />
@@ -496,7 +500,7 @@ export default function DomainPage() {
                       <button
                         type="button"
                         className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-                        title="刪除"
+                        title={t("DomainPage.delete")}
                         onClick={() => setModal({ kind: "deleteRecord", record: r })}
                       >
                         <MIcon name="delete" size={16} />
@@ -537,16 +541,16 @@ export default function DomainPage() {
             <div className={styles.confirmIcon}>
               <MIcon name="warning" size={24} />
             </div>
-            <h2>刪除 DNS 紀錄</h2>
+            <h2>{t("DomainPage.deleteRecordTitle")}</h2>
             <p>
-              確定要刪除 <strong>{modalPresence.item.record.name}</strong>（{modalPresence.item.record.type}）嗎？此操作無法復原。
+              {t("DomainPage.deleteRecordConfirm", { name: modalPresence.item.record.name, type: modalPresence.item.record.type })}
             </p>
             <div className={styles.modalActions}>
               <button type="button" className={styles.btnSecondary} onClick={() => setModal(null)}>
-                取消
+                {t("DomainPage.cancel")}
               </button>
               <button type="button" className={styles.btnDanger} disabled={saving} onClick={handleDeleteRecord}>
-                {saving ? "刪除中..." : "刪除"}
+                {saving ? t("DomainPage.deleting") : t("DomainPage.delete")}
               </button>
             </div>
           </div>

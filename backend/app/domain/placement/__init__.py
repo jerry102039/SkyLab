@@ -1,5 +1,4 @@
 from .models import (
-    AssignmentEvaluation,
     NodeScoreBreakdown,
     PlacementTuning,
     StorageSelection,
@@ -16,7 +15,6 @@ from .schemas import (
 )
 
 __all__ = [
-    "AssignmentEvaluation",
     "NodeCapacity",
     "NodeSnapshot",
     "PlacementDecision",

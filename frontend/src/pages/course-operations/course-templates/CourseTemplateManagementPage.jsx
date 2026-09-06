@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import MIcon from "../../../components/MIcon";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
@@ -8,19 +9,20 @@ import EmptyState from "../../../components/EmptyState/EmptyState";
 import styles from "../CourseOperations.module.scss";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-const STATUS_LABEL = { published: "已發布", draft: "草稿", retired: "已停用" };
-const USAGE_LABEL = { course: "正式課程", quick_practice: "快速練習", both: "課程＋快速練習" };
-const AUDIENCE_LABEL = { owner: "尚未開放", class: "指定班級", campus: "全校可見" };
+const STATUS_LABEL_KEYS = { published: "CourseTemplateManagementPage.statusPublished", draft: "CourseTemplateManagementPage.statusDraft", retired: "CourseTemplateManagementPage.statusRetired" };
+const USAGE_LABEL_KEYS = { course: "CourseTemplateManagementPage.usageCourse", quick_practice: "CourseTemplateManagementPage.usageQuickPractice", both: "CourseTemplateManagementPage.usageBoth" };
+const AUDIENCE_LABEL_KEYS = { owner: "CourseTemplateManagementPage.audienceOwner", class: "CourseTemplateManagementPage.audienceClass", campus: "CourseTemplateManagementPage.audienceCampus" };
 
-function audienceNote(template) {
-  if (template.usageScope === "course") return "不進學生清單";
-  const label = AUDIENCE_LABEL[template.audience] ?? "指定班級";
+function audienceNote(template, t) {
+  if (template.usageScope === "course") return t("CourseTemplateManagementPage.notInStudentList");
+  const label = t(AUDIENCE_LABEL_KEYS[template.audience] ?? AUDIENCE_LABEL_KEYS.class);
   return template.audience === "class"
-    ? `${label}（${(template.audienceClassIds ?? []).length}）`
+    ? t("CourseTemplateManagementPage.audienceClassCount", { label, count: (template.audienceClassIds ?? []).length })
     : label;
 }
 
 export default function CourseTemplateManagementPage() {
+  const { t } = useTranslation("teaching");
   const navigate = useNavigate();
   const confirm = useConfirm();
   const [busyId, setBusyId] = useState("");
@@ -33,15 +35,15 @@ export default function CourseTemplateManagementPage() {
     let active = true;
     CourseEnvironmentsService.list()
       .then((rows) => active && setTemplates(rows))
-      .catch((reason) => active && setError(reason?.message ?? "無法讀取多機環境"))
+      .catch((reason) => active && setError(reason?.message ?? t("CourseTemplateManagementPage.loadFailed")))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, []);
+  }, [t]);
   async function retire(template) {
     const ok = await confirm({
-      title: `下架「${template.name}」？`,
-      message: "下架後學生不能再啟動，班級也不能再套用；已經在跑的環境會照原本的期限走完。需要重新開放時建立新版本並發布即可。",
-      confirmText: "下架",
+      title: t("CourseTemplateManagementPage.retireConfirmTitle", { name: template.name }),
+      message: t("CourseTemplateManagementPage.retireConfirmMessage"),
+      confirmText: t("CourseTemplateManagementPage.retireLabel"),
     });
     if (!ok) return;
     setBusyId(template.id);
@@ -50,7 +52,7 @@ export default function CourseTemplateManagementPage() {
       setTemplates((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
       setError("");
     } catch (reason) {
-      setError(reason?.message ?? "下架失敗");
+      setError(reason?.message ?? t("CourseTemplateManagementPage.retireFailed"));
     } finally {
       setBusyId("");
     }
@@ -58,9 +60,9 @@ export default function CourseTemplateManagementPage() {
 
   async function remove(template) {
     const ok = await confirm({
-      title: `刪除「${template.name}」？`,
-      message: "只有從未被班級或練習使用過的環境可以刪除，且無法復原。",
-      confirmText: "刪除",
+      title: t("CourseTemplateManagementPage.removeConfirmTitle", { name: template.name }),
+      message: t("CourseTemplateManagementPage.removeConfirmMessage"),
+      confirmText: t("CourseTemplateManagementPage.deleteLabel"),
       danger: true,
     });
     if (!ok) return;
@@ -70,7 +72,7 @@ export default function CourseTemplateManagementPage() {
       setTemplates((prev) => prev.filter((row) => row.id !== template.id));
       setError("");
     } catch (reason) {
-      setError(reason?.message ?? "刪除失敗");
+      setError(reason?.message ?? t("CourseTemplateManagementPage.removeFailed"));
     } finally {
       setBusyId("");
     }
@@ -81,29 +83,34 @@ export default function CourseTemplateManagementPage() {
     return matchesQuery && (status === "all" || template.status === status);
   }), [query, status, templates]);
 
+  const statusCounts = useMemo(() => templates.reduce(
+    (counts, template) => ({ ...counts, [template.status]: (counts[template.status] ?? 0) + 1 }),
+    { all: templates.length },
+  ), [templates]);
+
   return <div className={`${styles.page} ${styles.listPage}`}>
-    <PageHeader title="多機環境模板" subtitle="定義一組固定機器配置，提供給正式課程、快速練習或兩者共用。">
-      <button type="button" className={styles.btnPrimary} onClick={() => navigate("/course-template-management/new")}><MIcon name="add" size={16} />建立多機環境</button>
+    <PageHeader title={t("CourseTemplateManagementPage.pageTitle")} subtitle={t("CourseTemplateManagementPage.pageSubtitle")}>
+      <button type="button" className={styles.btnPrimary} onClick={() => navigate("/course-template-management/new")}><MIcon name="add" size={16} />{t("CourseTemplateManagementPage.createEnvBtn")}</button>
     </PageHeader>
 
     <section className={styles.card}>
       <div className={styles.toolbar}>
-        <label className={styles.searchInput}><MIcon name="search" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋環境名稱或說明" /></label>
-        <div className={styles.pillTabs}>{[["all", "全部"], ["published", "已發布"], ["draft", "草稿"], ["retired", "已停用"]].map(([key, label]) => <button type="button" key={key} className={status === key ? styles.pillActive : ""} onClick={() => setStatus(key)}>{label}</button>)}</div>
+        <label className={styles.searchInput}><MIcon name="search" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("CourseTemplateManagementPage.searchPlaceholder")} /></label>
+        <div className={styles.pillTabs}>{[["all", "CourseTemplateManagementPage.filterAll"], ["published", "CourseTemplateManagementPage.statusPublished"], ["draft", "CourseTemplateManagementPage.statusDraft"], ["retired", "CourseTemplateManagementPage.statusRetired"]].map(([key, labelKey]) => <button type="button" key={key} className={status === key ? styles.pillActive : ""} onClick={() => setStatus(key)}>{t(labelKey)}<i>{statusCounts[key] ?? 0}</i></button>)}</div>
       </div>
       {error && <p className={styles.errorMessage}>{error}</p>}
-      <div className={styles.listSummary}><span>{loading ? "正在讀取…" : `顯示 ${rows.length} 個可重複使用的多機環境`}</span><span>同一份多機環境可套用到正式課程或快速練習</span></div>{loading ? <LoadingState /> : <><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>環境名稱</th><th>每位學生的機器</th><th>資源合計</th><th>版本</th><th>提供方式</th><th>使用班級</th><th>狀態</th><th /></tr></thead><tbody>{rows.map((template) => <tr key={template.id} className={styles.rowLink} onClick={() => navigate(`/course-template-management/${template.id}`)}>
+      {loading ? <LoadingState /> : <><div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>{t("CourseTemplateManagementPage.thName")}</th><th>{t("CourseTemplateManagementPage.thMachinesPerStudent")}</th><th>{t("CourseTemplateManagementPage.thResourceTotal")}</th><th>{t("CourseTemplateManagementPage.thVersion")}</th><th>{t("CourseTemplateManagementPage.thProvideMode")}</th><th>{t("CourseTemplateManagementPage.thUsingClasses")}</th><th>{t("CourseTemplateManagementPage.thStatus")}</th><th /></tr></thead><tbody>{rows.map((template) => <tr key={template.id} className={styles.rowLink} onClick={() => navigate(`/course-template-management/${template.id}`)}>
         <td><strong>{template.name}</strong><small>{template.description}</small></td>
-        <td><strong>{template.nodes.length} 台／每位學生</strong><small>{template.nodes.map((node) => node.name).join("、")}</small></td>
-        <td>{template.nodes.reduce((sum, node) => sum + node.cpu, 0)} CPU · {template.nodes.reduce((sum, node) => sum + node.memory, 0)} GB RAM</td><td>v{template.version}</td><td><strong>{USAGE_LABEL[template.usageScope] ?? "正式課程"}</strong><small>{audienceNote(template)}</small></td><td>{template.classes} 個班級</td>
-        <td><span className={`${styles.statusBadge} ${styles[`status_${template.status}`]}`}>{STATUS_LABEL[template.status]}</span></td>
+        <td><strong>{t("CourseTemplateManagementPage.machinesPerStudentUnit", { count: template.nodes.length })}</strong><small>{template.nodes.map((node) => node.name).join("、")}</small></td>
+        <td>{t("CourseTemplateManagementPage.resourceSummary", { cpu: template.nodes.reduce((sum, node) => sum + node.cpu, 0), memory: template.nodes.reduce((sum, node) => sum + node.memory, 0) })}</td><td>v{template.version}</td><td><strong>{template.usageScope ? t(USAGE_LABEL_KEYS[template.usageScope] ?? USAGE_LABEL_KEYS.course) : t(USAGE_LABEL_KEYS.course)}</strong><small>{audienceNote(template, t)}</small></td><td>{t("CourseTemplateManagementPage.classesCount", { count: template.classes })}</td>
+        <td><span className={`${styles.statusBadge} ${styles[`status_${template.status}`]}`}>{t(STATUS_LABEL_KEYS[template.status])}</span></td>
         <td onClick={(event) => event.stopPropagation()}><div className={styles.rowActions}>
-          {template.status === "published" && <button type="button" className={styles.btnSecondary} disabled={busyId === template.id} onClick={() => retire(template)}>下架</button>}
-          <button type="button" className={styles.btnSecondary} disabled={busyId === template.id} onClick={() => remove(template)}>刪除</button>
-          <button type="button" className={styles.iconBtn} aria-label="開啟模板" onClick={() => navigate(`/course-template-management/${template.id}`)}><MIcon name="chevron_right" size={19} /></button>
+          {template.status === "published" && <button type="button" className={styles.iconBtn} title={t("CourseTemplateManagementPage.retireLabel")} aria-label={t("CourseTemplateManagementPage.retireLabel")} disabled={busyId === template.id} onClick={() => retire(template)}><MIcon name="unpublished" size={18} /></button>}
+          <button type="button" className={`${styles.iconBtn} ${styles.iconBtnDanger}`} title={t("CourseTemplateManagementPage.deleteLabel")} aria-label={t("CourseTemplateManagementPage.deleteLabel")} disabled={busyId === template.id} onClick={() => remove(template)}><MIcon name="delete" size={18} /></button>
+          <button type="button" className={styles.iconBtn} aria-label={t("CourseTemplateManagementPage.openTemplateAria")} onClick={() => navigate(`/course-template-management/${template.id}`)}><MIcon name="chevron_right" size={19} /></button>
         </div></td>
       </tr>)}</tbody></table></div>
-      {!rows.length && <EmptyState icon="view_quilt" title="沒有符合條件的多機環境。" />}</>}
+      {!rows.length && <EmptyState icon="view_quilt" title={t("CourseTemplateManagementPage.emptyTitle")} />}</>}
     </section>
   </div>;
 }

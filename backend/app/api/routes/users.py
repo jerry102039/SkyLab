@@ -11,6 +11,7 @@ from app.api.deps import (
     SessionDep,
     get_current_active_superuser,
 )
+from app.core.i18n import t
 from app.schemas import (
     Message,
     UpdatePassword,
@@ -91,13 +92,17 @@ async def upload_avatar_me(
     """上傳頭像圖片，存檔後把 avatar_url 指向本服務的頭像端點。"""
     ext = AVATAR_CONTENT_TYPES.get((file.content_type or "").lower())
     if not ext:
-        raise HTTPException(status_code=400, detail="僅支援 PNG / JPEG / WebP / GIF 圖片")
+        raise HTTPException(
+            status_code=400, detail=t("users.avatarUnsupportedFormat")
+        )
     # 邊讀邊檢查大小，超過上限立即中止，避免先把整個檔案讀進記憶體
     buffer = bytearray()
     while chunk := await file.read(64 * 1024):
         buffer.extend(chunk)
         if len(buffer) > AVATAR_MAX_BYTES:
-            raise HTTPException(status_code=400, detail="圖片大小不可超過 2MB")
+            raise HTTPException(
+                status_code=400, detail=t("users.avatarTooLarge")
+            )
     data = bytes(buffer)
 
     AVATAR_DIR.mkdir(parents=True, exist_ok=True)

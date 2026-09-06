@@ -72,6 +72,10 @@ from .spec_change_request import (
 )
 from .subnet_config import SubnetConfig
 from .task_record import TaskRecord, TaskRecordStatus
+from .teacher_judge_attachment import (
+    TeacherJudgeAttachmentStatus,
+    TeacherJudgeSessionAttachment,
+)
 from .teacher_judge_file import TeacherJudgeFile, TeacherJudgeFileStatus
 from .teacher_judge_script_artifact import (
     TeacherJudgeScriptArtifact,
@@ -91,6 +95,7 @@ from .teacher_judge_session import (
     TeacherJudgeSessionMessage,
     TeacherJudgeSessionStatus,
 )
+from .teacher_judge_student_submission import TeacherJudgeStudentSubmission
 from .teacher_judge_template_command import TeacherJudgeTemplateCommand
 from .teaching_class import (
     TeachingClass,
@@ -203,6 +208,8 @@ __all__ = [
     "IpAllocation",
     "TeacherJudgeFile",
     "TeacherJudgeFileStatus",
+    "TeacherJudgeAttachmentStatus",
+    "TeacherJudgeSessionAttachment",
     "TeacherJudgeMessageRole",
     "TeacherJudgeMessageType",
     "TeacherJudgeSession",
@@ -215,6 +222,7 @@ __all__ = [
     "TeacherJudgeScriptRunTargetScope",
     "TeacherJudgeScriptSource",
     "TeacherJudgeScriptStatus",
+    "TeacherJudgeStudentSubmission",
     "TeacherJudgeTemplateCommand",
     # Deletion Request
     "DeletionRequest",

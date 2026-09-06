@@ -1,8 +1,5 @@
 ﻿import { spawn } from "child_process";
 import { app, shell } from "electron";
-import fs from "fs";
-import os from "os";
-import path from "path";
 
 class SystemService {
   async openUrl(url: string) {
@@ -42,20 +39,11 @@ class SystemService {
   ): Promise<void> {
     const sshCmd = `ssh -o StrictHostKeyChecking=accept-new -p ${port} ${user}@${host}`;
     if (process.platform === "win32") {
-      const batPath = path.join(
-        os.tmpdir(),
-        `SkyLab-ssh-${port}-${Date.now()}.bat`
-      );
-      fs.writeFileSync(
-        batPath,
-        `@echo off\r\ntitle SkyLab SSH - ${host}:${port}\r\n${sshCmd}\r\npause\r\n`,
-        { encoding: "utf-8" }
-      );
-      spawn("cmd.exe", ["/c", "start", "", batPath], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: false
-      }).unref();
+      await this._spawnDetached("cmd.exe", [
+        "/d",
+        "/k",
+        `title SkyLab SSH - ${host}:${port} & ${sshCmd}`
+      ]);
     } else if (process.platform === "darwin") {
       const script = `tell application "Terminal" to do script "${sshCmd}"`;
       spawn("osascript", ["-e", script], {

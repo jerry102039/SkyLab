@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./ReverseProxyRuleModal.module.scss";
 import MIcon from "../MIcon";
 import { useToast } from "../../hooks/useToast";
 import { ResourcesService } from "../../services/resources";
 
+/* label 是模組層級常數，無法呼叫 hook，改存 labelKey，實際 render 處再 t() */
 export const COMMON_PORTS = [
-  { value: "80", label: "80 — Nginx / Apache（網頁伺服器）" },
-  { value: "443", label: "443 — HTTPS" },
-  { value: "3000", label: "3000 — Node.js / React / Next.js" },
-  { value: "5000", label: "5000 — Flask / Python" },
-  { value: "8000", label: "8000 — FastAPI / Django" },
-  { value: "8080", label: "8080 — 常見替代 Port" },
-  { value: "8888", label: "8888 — Jupyter Notebook" },
+  { value: "80", labelKey: "ReverseProxyRuleModal.port80" },
+  { value: "443", labelKey: "ReverseProxyRuleModal.port443" },
+  { value: "3000", labelKey: "ReverseProxyRuleModal.port3000" },
+  { value: "5000", labelKey: "ReverseProxyRuleModal.port5000" },
+  { value: "8000", labelKey: "ReverseProxyRuleModal.port8000" },
+  { value: "8080", labelKey: "ReverseProxyRuleModal.port8080" },
+  { value: "8888", labelKey: "ReverseProxyRuleModal.port8888" },
 ];
 
 export function findZoneByDomain(domain, zones = []) {
@@ -41,6 +43,7 @@ export default function ReverseProxyRuleModal({
   onSubmit,
   closing = false,
 }) {
+  const { t } = useTranslation("components");
   const toast = useToast();
   const zones = setupContext?.zones ?? [];
   const matchedZone = rule
@@ -96,15 +99,15 @@ export default function ReverseProxyRuleModal({
     e.preventDefault();
     const parsedPort = Number(effectivePort);
     if (!form.vmid) {
-      toast.error("請先選擇你要綁定的 VM");
+      toast.error(t("ReverseProxyRuleModal.selectVmFirst"));
       return;
     }
     if (!form.zoneId) {
-      toast.error("請先選擇網址結尾");
+      toast.error(t("ReverseProxyRuleModal.selectDomainSuffixFirst"));
       return;
     }
     if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
-      toast.error("Port 必須是 1 到 65535 之間的數字");
+      toast.error(t("ReverseProxyRuleModal.portRangeError"));
       return;
     }
     onSubmit({
@@ -124,13 +127,10 @@ export default function ReverseProxyRuleModal({
       <form className={styles.modal} onSubmit={submit} onMouseDown={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <div>
-            <h2>{rule ? "編輯網址" : "新增網址"}</h2>
-            <p>
-              幫你 VM 裡的服務取一個好記的公開網址。儲存後系統會自動完成所有設定，
-              稍等片刻就能用這個網址打開你的服務。
-            </p>
+            <h2>{rule ? t("ReverseProxyRuleModal.editTitle") : t("ReverseProxyRuleModal.createTitle")}</h2>
+            <p>{t("ReverseProxyRuleModal.headerDescription")}</p>
           </div>
-          <button type="button" className={styles.iconBtn} onClick={onClose} aria-label="關閉">
+          <button type="button" className={styles.iconBtn} onClick={onClose} aria-label={t("ReverseProxyRuleModal.closeAriaLabel")}>
             <MIcon name="close" size={18} />
           </button>
         </div>
@@ -138,16 +138,18 @@ export default function ReverseProxyRuleModal({
         {setupContext?.default_dns_target_type && setupContext?.default_dns_target_value && (
           <div className={styles.noticeInfo}>
             <p>
-              <strong>系統自動處理：</strong>建立或更新網址時，系統會自動把它指向平台入口（
-              {setupContext.default_dns_target_type} {setupContext.default_dns_target_value}
-              ），你不需要自己設定
+              <strong>{t("ReverseProxyRuleModal.autoHandledLabel")}</strong>
+              {t("ReverseProxyRuleModal.autoHandledBody", {
+                type: setupContext.default_dns_target_type,
+                value: setupContext.default_dns_target_value,
+              })}
             </p>
           </div>
         )}
 
         {fixedResource ? (
           <div className={styles.field}>
-            <span>綁定的 VM</span>
+            <span>{t("ReverseProxyRuleModal.boundVm")}</span>
             <div className={styles.fixedVm}>
               <MIcon name="dns" size={16} />
               {fixedResource.name
@@ -157,9 +159,9 @@ export default function ReverseProxyRuleModal({
           </div>
         ) : (
           <label className={styles.field}>
-            <span>選擇你的 VM *</span>
+            <span>{t("ReverseProxyRuleModal.selectYourVm")}</span>
             <select value={form.vmid} onChange={(e) => set("vmid", e.target.value)}>
-              <option value="">{loadingResources ? "載入 VM 列表..." : "選擇一台 VM..."}</option>
+              <option value="">{loadingResources ? t("ReverseProxyRuleModal.loadingVmList") : t("ReverseProxyRuleModal.selectAVm")}</option>
               {resources.map((r) => (
                 <option key={r.vmid} value={String(r.vmid)}>
                   {r.name}（VM {r.vmid}）
@@ -167,24 +169,24 @@ export default function ReverseProxyRuleModal({
               ))}
             </select>
             {!loadingResources && resources.length === 0 && (
-              <em className={styles.fieldHint}>你目前沒有任何 VM，請先建立一台 VM。</em>
+              <em className={styles.fieldHint}>{t("ReverseProxyRuleModal.noVmHint")}</em>
             )}
           </label>
         )}
 
         <div className={styles.fieldRow}>
           <label className={styles.field}>
-            <span>網址開頭（自己取名）</span>
+            <span>{t("ReverseProxyRuleModal.hostnamePrefixLabel")}</span>
             <input
               value={form.hostnamePrefix}
               onChange={(e) => set("hostnamePrefix", e.target.value)}
-              placeholder="例如 myapp，留空代表直接用主網址"
+              placeholder={t("ReverseProxyRuleModal.hostnamePrefixPlaceholder")}
             />
           </label>
           <label className={styles.field}>
-            <span>網址結尾 *</span>
+            <span>{t("ReverseProxyRuleModal.domainSuffixLabel")}</span>
             <select value={form.zoneId} onChange={(e) => set("zoneId", e.target.value)}>
-              <option value="">選擇網址結尾</option>
+              <option value="">{t("ReverseProxyRuleModal.selectDomainSuffix")}</option>
               {zones.map((zone) => (
                 <option key={zone.id} value={zone.id}>{zone.name}</option>
               ))}
@@ -193,11 +195,11 @@ export default function ReverseProxyRuleModal({
         </div>
 
         <label className={styles.field}>
-          <span>你的服務跑在哪個 Port（連接埠）？*</span>
+          <span>{t("ReverseProxyRuleModal.portLabel")}</span>
           {!form.useCustomPort ? (
             <select value={form.port} onChange={(e) => set("port", e.target.value)}>
               {COMMON_PORTS.map((p) => (
-                <option key={p.value} value={p.value}>{p.label}</option>
+                <option key={p.value} value={p.value}>{t(p.labelKey)}</option>
               ))}
             </select>
           ) : (
@@ -207,7 +209,7 @@ export default function ReverseProxyRuleModal({
               max={65535}
               value={form.customPort}
               onChange={(e) => set("customPort", e.target.value)}
-              placeholder="輸入 Port 號碼（1-65535）"
+              placeholder={t("ReverseProxyRuleModal.customPortPlaceholder")}
             />
           )}
           <button
@@ -215,7 +217,7 @@ export default function ReverseProxyRuleModal({
             className={styles.linkBtn}
             onClick={() => set("useCustomPort", !form.useCustomPort)}
           >
-            {form.useCustomPort ? "← 選擇常見 Port" : "我的 Port 不在列表中"}
+            {form.useCustomPort ? t("ReverseProxyRuleModal.backToCommonPorts") : t("ReverseProxyRuleModal.portNotListed")}
           </button>
         </label>
 
@@ -225,25 +227,29 @@ export default function ReverseProxyRuleModal({
             checked={form.enableHttps}
             onChange={(e) => set("enableHttps", e.target.checked)}
           />
-          <span>啟用安全連線（https，瀏覽器網址列會顯示鎖頭）— 憑證由系統自動處理</span>
+          <span>{t("ReverseProxyRuleModal.enableHttpsLabel")}</span>
         </label>
 
         {previewDomain && form.vmid && (
           <div className={styles.noticeInfo}>
             <p>
-              <strong>結果預覽：</strong>之後任何人打開{" "}
-              {form.enableHttps ? "https" : "http"}://{previewDomain}
-              ，就會連到 VM {form.vmid} 裡 Port {effectivePort} 的服務
+              <strong>{t("ReverseProxyRuleModal.previewLabel")}</strong>
+              {t("ReverseProxyRuleModal.previewBody", {
+                scheme: form.enableHttps ? "https" : "http",
+                domain: previewDomain,
+                vmid: form.vmid,
+                port: effectivePort,
+              })}
             </p>
           </div>
         )}
 
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnSecondary} onClick={onClose} disabled={loading}>
-            取消
+            {t("ReverseProxyRuleModal.cancel")}
           </button>
           <button type="submit" className={styles.btnPrimary} disabled={loading}>
-            {loading ? "儲存中..." : rule ? "儲存變更" : "建立網址"}
+            {loading ? t("ReverseProxyRuleModal.saving") : rule ? t("ReverseProxyRuleModal.saveChanges") : t("ReverseProxyRuleModal.createUrl")}
           </button>
         </div>
       </form>

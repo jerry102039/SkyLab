@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { getVmRules, getVmOptions } from "../../services/firewall";
 import styles from "./RulesPanel.module.scss";
 import MIcon from "../MIcon";
@@ -14,6 +15,7 @@ function Badge({ label, variant }) {
 }
 
 export default function RulesPanel({ node, onClose }) {
+  const { t } = useTranslation("components");
   const [rules,   setRules]   = useState([]);
   const [options, setOptions] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -26,9 +28,9 @@ export default function RulesPanel({ node, onClose }) {
 
     Promise.all([getVmRules(node.vmid), getVmOptions(node.vmid)])
       .then(([r, o]) => { setRules(r ?? []); setOptions(o); })
-      .catch((err) => setError(err?.message ?? "載入失敗"))
+      .catch((err) => setError(err?.message ?? t("RulesPanel.loadFailed")))
       .finally(() => setLoading(false));
-  }, [node?.vmid]);
+  }, [node?.vmid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!node) return null;
 
@@ -40,12 +42,12 @@ export default function RulesPanel({ node, onClose }) {
           <MIcon name="security" size={18} />
           <span className={styles.vmName}>{node.name}</span>
         </div>
-        <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="關閉">
+        <button type="button" className={styles.closeBtn} onClick={onClose} aria-label={t("RulesPanel.closeAriaLabel")}>
           <MIcon name="close" size={20} />
         </button>
       </div>
 
-      {loading && <p className={styles.hint}>載入中…</p>}
+      {loading && <p className={styles.hint}>{t("RulesPanel.loading")}</p>}
       {error   && <p className={styles.errorMsg}>{error}</p>}
 
       {!loading && !error && (
@@ -53,20 +55,20 @@ export default function RulesPanel({ node, onClose }) {
           {/* Options */}
           {options && (
             <div className={styles.section}>
-              <h3 className={styles.sectionTitle}>防火牆設定</h3>
+              <h3 className={styles.sectionTitle}>{t("RulesPanel.firewallSettings")}</h3>
               <div className={styles.optionRow}>
-                <span className={styles.optionLabel}>狀態</span>
+                <span className={styles.optionLabel}>{t("RulesPanel.status")}</span>
                 <Badge
-                  label={options.enable ? "已啟用" : "已停用"}
+                  label={options.enable ? t("RulesPanel.enabled") : t("RulesPanel.disabled")}
                   variant={options.enable ? "success" : "muted"}
                 />
               </div>
               <div className={styles.optionRow}>
-                <span className={styles.optionLabel}>預設入站</span>
+                <span className={styles.optionLabel}>{t("RulesPanel.defaultInbound")}</span>
                 <Badge label={options.policy_in  ?? "—"} variant="neutral" />
               </div>
               <div className={styles.optionRow}>
-                <span className={styles.optionLabel}>預設出站</span>
+                <span className={styles.optionLabel}>{t("RulesPanel.defaultOutbound")}</span>
                 <Badge label={options.policy_out ?? "—"} variant="neutral" />
               </div>
             </div>
@@ -74,9 +76,9 @@ export default function RulesPanel({ node, onClose }) {
 
           {/* Rules */}
           <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>規則清單（{rules.length}）</h3>
+            <h3 className={styles.sectionTitle}>{t("RulesPanel.ruleListTitle", { count: rules.length })}</h3>
             {rules.length === 0 ? (
-              <p className={styles.hint}>目前沒有防火牆規則</p>
+              <p className={styles.hint}>{t("RulesPanel.noRules")}</p>
             ) : (
               <div className={styles.ruleList}>
                 {rules.map((rule) => (

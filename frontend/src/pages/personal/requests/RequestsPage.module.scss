@@ -35,6 +35,24 @@
   }
 }
 
+.btnSecondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px $spacing-16;
+  border-radius: $radius-8;
+  font-size: $font-size-14;
+  font-weight: $font-weight-500;
+  cursor: pointer;
+  white-space: nowrap;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  transition: background $transition-base;
+
+  &:hover { background: var(--color-hover); }
+}
+
 /* ── Content ── */
 .content {
   flex: 1;
@@ -49,11 +67,18 @@
 
 .table {
   @include table-base;
-  min-width: 720px;
+  min-width: 960px;
 }
 
+/* 8 欄較擠，水平 padding 收窄一點（預設 16px）。 */
 .th {
   @include table-th;
+  padding-inline: 12px;
+}
+
+/* 表頭文字對齊列內圖示的左緣：欄位 padding 12 + 展開鈕 26 + gap 8 */
+.thName {
+  padding-left: 12px + 26px + 8px;
 }
 
 .tr {
@@ -75,13 +100,24 @@
 
 .td {
   @include table-td;
+  padding-inline: 12px;
 }
 
 .nameCell {
   display: flex;
   align-items: center;
-  gap: $spacing-16;
+  gap: $spacing-8;
   min-width: 160px;
+}
+
+.nameIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: $radius-8;
+  background: var(--color-hover);
+  color: var(--color-primary);
+  @include flex-center;
+  flex-shrink: 0;
 }
 
 .nameMeta {
@@ -91,6 +127,7 @@
 }
 
 .namePrimary {
+  max-width: 150px;
   font-size: $font-size-14;
   font-weight: $font-weight-500;
   color: var(--color-text-primary);
@@ -105,6 +142,33 @@
 
 .osCell,
 .specCell {
+  font-size: $font-size-12;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+/* 原始 template 名可能很長（ubuntu-22.04-standard_…），截斷保寬度。 */
+.osCell {
+  display: inline-block;
+  max-width: 150px;
+  vertical-align: middle;
+  @include text-truncate;
+}
+
+/* 原因是自由文字，設上限寬截斷，全文靠 title 提示。 */
+.reasonCell {
+  display: inline-block;
+  max-width: 160px;
+  font-size: $font-size-12;
+  color: var(--color-text);
+  vertical-align: middle;
+  @include text-truncate;
+}
+
+/* 起訖時間直排兩行，避免單行日期區間撐寬表格。 */
+.periodCell {
+  @include flex-column;
+  gap: 2px;
   font-size: $font-size-12;
   color: var(--color-text);
   white-space: nowrap;
@@ -190,6 +254,27 @@
 }
 
 /* ── Status badge ── */
+/* 狀態徽章與錯誤記錄按鈕同列。 */
+.statusCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 管理員限定的錯誤記錄按鈕，開 ErrorLogModal。 */
+.logBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: $radius-8;
+  color: var(--color-danger);
+  cursor: pointer;
+  flex-shrink: 0;
+  @include flex-center;
+  transition: background $transition-base;
+
+  &:hover { background: color-mix(in srgb, var(--color-danger) 12%, transparent); }
+}
+
 .badge {
   @include badge-base;
   gap: 4px;
@@ -202,6 +287,8 @@
 .badge_danger  { background: color-mix(in srgb, var(--color-danger)  12%, transparent); color: var(--color-danger); }
 .badge_info    { background: color-mix(in srgb, var(--color-info)    12%, transparent); color: var(--color-info); }
 .badge_muted   { background: var(--color-hover); color: var(--color-status-neutral); }
+/* upstream 的「等待資源」狀態用 color: "warning"，但一直沒有對應樣式，這裡補上 */
+.badge_warning { background: color-mix(in srgb, var(--color-pending) 12%, transparent); color: var(--color-pending); }
 
 /* ── Review comment ── */
 /* 駁回原因與失敗訊息是整段文字，在 .detailBody 的橫排裡各自獨佔一行。 */
@@ -216,6 +303,27 @@
   color: var(--color-danger);
   font-size: $font-size-12;
   line-height: $line-height-base;
+}
+
+/* ── Error log modal ── */
+.logModal {
+  max-width: 560px;
+}
+
+.logText {
+  margin: 0;
+  padding: 12px;
+  border-radius: $radius-8;
+  background: var(--color-hover);
+  color: var(--color-text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Courier New", monospace;
+  font-size: $font-size-12;
+  line-height: $line-height-base;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
+  user-select: text;
 }
 
 /* ── Confirm Modal ── */

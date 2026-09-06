@@ -372,12 +372,6 @@
   color: var(--color-primary);
 }
 
-.needIcon {
-  @include flex-center;
-  flex-shrink: 0;
-  border-radius: $radius-12;
-}
-
 .machinePicker {
   position: relative;
   z-index: 1;
@@ -1447,16 +1441,17 @@
   transition: color $transition-base, gap $transition-base;
 }
 
+/* auto-fit 的欄數是用 minmax 的「最大值」估的，之前上限 520px 導致
+   一般頁寬只算得出一欄、卡片永遠疊直排；改 1fr 讓兩張卡並排填滿 */
 .needGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 520px));
-  justify-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: 12px;
 }
 
 .needCard {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-rows: 1fr auto;
   gap: 12px;
   padding: $spacing-16;
 
@@ -1475,24 +1470,8 @@
   }
 
   .secondaryButton {
-    grid-column: 1 / -1;
     justify-self: start;
   }
-}
-
-.needIcon {
-  width: 42px;
-  height: 42px;
-}
-
-.needIcon_primary {
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  color: var(--color-primary);
-}
-
-.needIcon_info {
-  background: color-mix(in srgb, var(--color-info) 12%, transparent);
-  color: var(--color-info);
 }
 
 .needBadge {

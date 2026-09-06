@@ -173,6 +173,48 @@ def test_connect_rejects_public_key_owned_by_another_device(monkeypatch) -> None
         )
 
 
+def test_local_mode_can_transfer_inactive_peer_on_same_device(monkeypatch) -> None:
+    old_user_id = uuid.uuid4()
+    new_user_id = uuid.uuid4()
+    peer = WireGuardPeer(
+        user_id=old_user_id,
+        device_id="device-1234",
+        public_key=_public_key(3),
+        tunnel_ip="10.250.0.9",
+        active=False,
+    )
+    monkeypatch.setattr(
+        wireguard_service.settings,
+        "WIREGUARD_ALLOW_INACTIVE_PEER_TRANSFER",
+        True,
+    )
+    monkeypatch.setattr(
+        wireguard_service.peer_repo,
+        "get_by_public_key",
+        lambda **_: peer,
+    )
+    monkeypatch.setattr(
+        wireguard_service.peer_repo,
+        "get_by_user_device",
+        lambda **_: None,
+    )
+    monkeypatch.setattr(
+        wireguard_service.peer_repo,
+        "save",
+        lambda **kwargs: kwargs["peer"],
+    )
+
+    transferred = wireguard_service._get_or_create_peer(
+        session=object(),
+        user_id=new_user_id,
+        device_id="device-1234",
+        public_key=_public_key(3),
+    )
+
+    assert transferred.id == peer.id
+    assert transferred.user_id == new_user_id
+
+
 def test_connect_revokes_gateway_access_when_database_save_fails(monkeypatch) -> None:
     user_id = uuid.uuid4()
     peer = WireGuardPeer(

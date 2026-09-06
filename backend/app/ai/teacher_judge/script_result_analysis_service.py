@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from app.ai.teacher_judge.config import settings
 from app.ai.teacher_judge.service import _call_vllm
 from app.ai.utils import apply_thinking_control
+from app.core.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +242,9 @@ async def _acquire_ai_slot() -> None:
 
 async def _call_ai_judgement(payload: dict[str, Any]) -> dict[str, Any]:
     if not settings.VLLM_MODEL_NAME:
-        raise HTTPException(status_code=503, detail="VLLM_MODEL_NAME 未設定。")
+        raise HTTPException(
+            status_code=503, detail=t("analysis.model_not_configured")
+        )
 
     request_payload = apply_thinking_control(
         {
@@ -273,9 +276,11 @@ async def _call_ai_judgement(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=502, detail="AI 分析回傳不是 JSON。") from exc
+        raise HTTPException(
+            status_code=502, detail=t("analysis.not_json")
+        ) from exc
     if not isinstance(parsed, dict):
-        raise HTTPException(status_code=502, detail="AI 分析回傳格式不正確。")
+        raise HTTPException(status_code=502, detail=t("analysis.invalid_format"))
     return _normalize_ai_judgement(parsed, metrics=dict(metrics))
 
 

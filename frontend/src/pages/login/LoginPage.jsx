@@ -1,4 +1,5 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import MIcon from "../../components/MIcon";
 import { useAuth } from "../../contexts/AuthContext";
 import { apiPost } from "../../services/api";
@@ -69,6 +70,7 @@ function clearDeviceCodeFromUrl() {
 /* ─── 共用元件 ─────────────────────────────────────────── */
 
 function PasswordField({ id, label, value, onChange, disabled, placeholder }) {
+  const { t } = useTranslation("login");
   const [show, setShow] = useState(false);
   return (
     <div className={styles.field}>
@@ -77,7 +79,7 @@ function PasswordField({ id, label, value, onChange, disabled, placeholder }) {
         <input
           id={id}
           type={show ? "text" : "password"}
-          placeholder={placeholder ?? "請輸入密碼"}
+          placeholder={placeholder ?? t("LoginPage.passwordPlaceholder")}
           value={value}
           onChange={onChange}
           disabled={disabled}
@@ -88,7 +90,9 @@ function PasswordField({ id, label, value, onChange, disabled, placeholder }) {
           className={styles.eyeBtn}
           onClick={() => setShow((v) => !v)}
           tabIndex={-1}
-          aria-label={show ? "隱藏密碼" : "顯示密碼"}
+          aria-label={
+            show ? t("LoginPage.passwordHide") : t("LoginPage.passwordShow")
+          }
         >
           <MIcon name={show ? "visibility_off" : "visibility"} />
         </button>
@@ -98,6 +102,7 @@ function PasswordField({ id, label, value, onChange, disabled, placeholder }) {
 }
 
 function GoogleSignInButton({ onCredential, onError }) {
+  const { t } = useTranslation("login");
   const buttonRef = useRef(null);
 
   useEffect(() => {
@@ -113,7 +118,7 @@ function GoogleSignInButton({ onCredential, onError }) {
           callback: (response) => {
             const credential = response?.credential;
             if (!credential) {
-              onError("Google 登入未取得憑證，請再試一次");
+              onError(t("LoginPage.googleNoCredential"));
               return;
             }
             onCredential(credential);
@@ -133,44 +138,45 @@ function GoogleSignInButton({ onCredential, onError }) {
         });
       })
       .catch(() => {
-        if (!cancelled) onError("無法載入 Google 登入，請檢查網路後再試一次");
+        if (!cancelled) onError(t("LoginPage.googleLoadFailed"));
       });
 
     return () => {
       cancelled = true;
     };
-  }, [onCredential, onError]);
+  }, [onCredential, onError, t]);
 
   if (!GOOGLE_CLIENT_ID) return null;
   return (
     <div
       ref={buttonRef}
       className={styles.googleButton}
-      aria-label="Google 登入"
+      aria-label={t("LoginPage.googleSignInAriaLabel")}
     />
   );
 }
 
-function formatGoogleLoginError(err) {
+function formatGoogleLoginError(err, t) {
   const message = err?.message ?? "";
   if (message === "Google account is not registered") {
-    return "此 Google 信箱尚未註冊，請先建立帳號";
+    return t("LoginPage.googleErrorNotRegistered");
   }
   if (message === "Inactive user") {
-    return "此帳號尚未啟用，請等待管理員審核";
+    return t("LoginPage.googleErrorInactiveUser");
   }
   if (message === "Invalid Google token audience") {
-    return "Google Client ID 設定不一致，請確認前後端環境變數";
+    return t("LoginPage.googleErrorAudienceMismatch");
   }
   if (message === "Invalid Google token") {
-    return "Google 登入憑證無效，請重新登入 Google 後再試一次";
+    return t("LoginPage.googleErrorInvalidToken");
   }
-  return message || "Google 登入失敗，請稍後再試";
+  return message || t("LoginPage.googleErrorGeneric");
 }
 
 /* ─── 登入 ──────────────────────────────────────────────── */
 
 function LoginView({ onForgot, onRegister, deviceApproval = false }) {
+  const { t } = useTranslation("login");
   const { login, googleLogin, ldapLogin } = useAuth();
   const [mode, setMode] = useState("password"); // "password" | "ldap"
   const [ldapEnabled, setLdapEnabled] = useState(false);
@@ -207,7 +213,7 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
     try {
       await login(username, password);
     } catch (err) {
-      setError(err?.message ?? "登入失敗，請確認帳號與密碼");
+      setError(err?.message ?? t("LoginPage.loginErrorDefault"));
     } finally {
       setLoading(false);
     }
@@ -220,7 +226,7 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
     try {
       await ldapLogin(ldapUsername, ldapPassword);
     } catch (err) {
-      setError(err?.message ?? "登入失敗，請確認校園帳號與密碼");
+      setError(err?.message ?? t("LoginPage.ldapLoginErrorDefault"));
     } finally {
       setLoading(false);
     }
@@ -233,12 +239,12 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
       try {
         await googleLogin(credential);
       } catch (err) {
-        setError(formatGoogleLoginError(err));
+        setError(formatGoogleLoginError(err, t));
       } finally {
         setGoogleLoading(false);
       }
     },
-    [googleLogin],
+    [googleLogin, t],
   );
 
   const handleGoogleError = useCallback((message) => {
@@ -248,11 +254,11 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
   const passwordForm = (
     <form className={styles.form} onSubmit={handleSubmit}>
       <div className={styles.field}>
-        <label htmlFor="username">帳號</label>
+        <label htmlFor="username">{t("LoginPage.usernameLabel")}</label>
         <input
           id="username"
           type="text"
-          placeholder="請輸入帳號（電子郵件）"
+          placeholder={t("LoginPage.usernamePlaceholder")}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           disabled={loading}
@@ -262,7 +268,7 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
 
       <PasswordField
         id="password"
-        label="密碼"
+        label={t("LoginPage.passwordLabel")}
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         disabled={loading}
@@ -274,13 +280,13 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
         onClick={onForgot}
         tabIndex={0}
       >
-        忘記密碼？
+        {t("LoginPage.forgotPasswordLink")}
       </button>
 
       {error && <p className={styles.error}>{error}</p>}
 
       <button type="submit" className={styles.btn} disabled={loading}>
-        {loading ? "登入中…" : "登入"}
+        {loading ? t("LoginPage.loggingIn") : t("LoginPage.login")}
       </button>
     </form>
   );
@@ -288,11 +294,11 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
   const ldapForm = (
     <form className={styles.form} onSubmit={handleLdapSubmit}>
       <div className={styles.field}>
-        <label htmlFor="ldap-username">校園帳號</label>
+        <label htmlFor="ldap-username">{t("LoginPage.campusAccount")}</label>
         <input
           id="ldap-username"
           type="text"
-          placeholder="學號 / 教職員帳號"
+          placeholder={t("LoginPage.campusAccountPlaceholder")}
           autoComplete="username"
           value={ldapUsername}
           onChange={(e) => setLdapUsername(e.target.value)}
@@ -303,7 +309,7 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
 
       <PasswordField
         id="ldap-password"
-        label="密碼"
+        label={t("LoginPage.passwordLabel")}
         value={ldapPassword}
         onChange={(e) => setLdapPassword(e.target.value)}
         disabled={loading}
@@ -312,27 +318,33 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
       {error && <p className={styles.error}>{error}</p>}
 
       <button type="submit" className={styles.btn} disabled={loading}>
-        {loading ? "登入中…" : "登入"}
+        {loading ? t("LoginPage.loggingIn") : t("LoginPage.login")}
       </button>
     </form>
   );
 
   return (
     <>
-      <h1 className={styles.title}>SkyLab</h1>
+      <h1 className={styles.title}>{t("LoginPage.appTitle")}</h1>
       <p className={styles.subtitle}>
-        {deviceApproval ? "登入後連接 SkyLab Connect" : "雲端校園管理平台"}
+        {deviceApproval
+          ? t("LoginPage.subtitleDeviceApproval")
+          : t("LoginPage.subtitleDefault")}
       </p>
 
       {deviceApproval && (
         <div className={styles.deviceNotice}>
           <MIcon name="devices" size={22} />
-          <span>完成登入後，這台電腦將取得您的 SkyLab 連線權限。</span>
+          <span>{t("LoginPage.deviceNotice")}</span>
         </div>
       )}
 
       {ldapEnabled && (
-        <div className={styles.loginTabs} role="tablist" aria-label="登入方式">
+        <div
+          className={styles.loginTabs}
+          role="tablist"
+          aria-label={t("LoginPage.loginMethodsAriaLabel")}
+        >
           <button
             type="button"
             role="tab"
@@ -340,7 +352,7 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
             className={`${styles.loginTab} ${mode === "password" ? styles.loginTabActive : ""}`}
             onClick={() => switchMode("password")}
           >
-            Email
+            {t("LoginPage.emailTab")}
           </button>
           <button
             type="button"
@@ -349,7 +361,7 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
             className={`${styles.loginTab} ${mode === "ldap" ? styles.loginTabActive : ""}`}
             onClick={() => switchMode("ldap")}
           >
-            校園帳號
+            {t("LoginPage.campusAccount")}
           </button>
         </div>
       )}
@@ -359,7 +371,7 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
       {GOOGLE_CLIENT_ID && (
         <div className={styles.oauthArea}>
           <div className={styles.divider}>
-            <span>或</span>
+            <span>{t("LoginPage.orDivider")}</span>
           </div>
           <div className={googleLoading ? styles.googleBusy : undefined}>
             <GoogleSignInButton
@@ -367,15 +379,17 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
               onError={handleGoogleError}
             />
           </div>
-          {googleLoading && <p className={styles.oauthHint}>Google 登入中…</p>}
+          {googleLoading && (
+            <p className={styles.oauthHint}>{t("LoginPage.googleLoggingIn")}</p>
+          )}
         </div>
       )}
 
       {ENABLE_SIGNUP && (
         <p className={styles.footerText}>
-          還沒有帳號？{" "}
+          {t("LoginPage.noAccountYet")}{" "}
           <button type="button" className={styles.link} onClick={onRegister}>
-            立即註冊
+            {t("LoginPage.registerNow")}
           </button>
         </p>
       )}
@@ -384,27 +398,30 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
 }
 
 function DeviceApprovalView({ status, error, user, onApprove, onDecline }) {
+  const { t } = useTranslation("login");
+
+  // 同意頁：授權必須由使用者明確按下，不可自動核准（防止釣魚連結）
   if (status === "idle") {
     return (
       <>
-        <h1 className={styles.title}>授權桌面 App 登入</h1>
-        <p className={styles.subtitle}>SkyLab Connect 要求以您的帳號登入</p>
+        <h1 className={styles.title}>{t("LoginPage.deviceConsentTitle")}</h1>
+        <p className={styles.subtitle}>
+          {t("LoginPage.deviceConsentSubtitle")}
+        </p>
         <div className={styles.deviceNotice}>
           <MIcon name="devices" size={20} />
           <span>
-            將以 <strong>{user?.email ?? "目前帳號"}</strong> 的身份授權桌面 App
-            存取您的 VM。
+            {t("LoginPage.deviceConsentIdentity", {
+              email: user?.email ?? t("LoginPage.deviceConsentCurrentAccount"),
+            })}
           </span>
         </div>
-        <p className={styles.deviceHelp}>
-          只有在您剛才親自在 SkyLab Connect 按下「登入」時才按下授權；
-          若這個連結是別人傳給您的，請按「取消」。
-        </p>
+        <p className={styles.deviceHelp}>{t("LoginPage.deviceConsentHelp")}</p>
         <button type="button" className={styles.btn} onClick={onApprove}>
-          授權此裝置
+          {t("LoginPage.deviceConsentApprove")}
         </button>
         <button type="button" className={styles.backBtn} onClick={onDecline}>
-          取消
+          {t("LoginPage.deviceConsentDecline")}
         </button>
       </>
     );
@@ -413,11 +430,13 @@ function DeviceApprovalView({ status, error, user, onApprove, onDecline }) {
   if (status === "approved") {
     return (
       <>
-        <h1 className={styles.title}>連線授權完成</h1>
-        <p className={styles.subtitle}>SkyLab Connect 正在完成登入</p>
+        <h1 className={styles.title}>{t("LoginPage.deviceApprovedTitle")}</h1>
+        <p className={styles.subtitle}>
+          {t("LoginPage.deviceApprovedSubtitle")}
+        </p>
         <div className={styles.successBox}>
           <MIcon name="check_circle" size={40} />
-          <p>您可以關閉這個頁面，回到桌面 App 繼續使用。</p>
+          <p>{t("LoginPage.deviceApprovedMessage")}</p>
         </div>
       </>
     );
@@ -426,14 +445,12 @@ function DeviceApprovalView({ status, error, user, onApprove, onDecline }) {
   if (status === "error") {
     return (
       <>
-        <h1 className={styles.title}>無法完成連線授權</h1>
-        <p className={styles.subtitle}>這組登入連結可能已過期</p>
+        <h1 className={styles.title}>{t("LoginPage.deviceErrorTitle")}</h1>
+        <p className={styles.subtitle}>{t("LoginPage.deviceErrorSubtitle")}</p>
         <p className={styles.error}>{error}</p>
-        <p className={styles.deviceHelp}>
-          請回到 SkyLab Connect，重新按一次登入取得新的連結。
-        </p>
+        <p className={styles.deviceHelp}>{t("LoginPage.deviceErrorHelp")}</p>
         <a className={styles.btnLink} href="/dashboard">
-          回到 SkyLab
+          {t("LoginPage.backToSkyLab")}
         </a>
       </>
     );
@@ -441,8 +458,10 @@ function DeviceApprovalView({ status, error, user, onApprove, onDecline }) {
 
   return (
     <>
-      <h1 className={styles.title}>正在連接 App</h1>
-      <p className={styles.subtitle}>正在授權 SkyLab Connect，請稍候…</p>
+      <h1 className={styles.title}>{t("LoginPage.deviceConnectingTitle")}</h1>
+      <p className={styles.subtitle}>
+        {t("LoginPage.deviceConnectingSubtitle")}
+      </p>
       <div className={styles.deviceProgress} aria-live="polite">
         <MIcon name="sync" size={40} className={styles.spin} />
       </div>
@@ -453,6 +472,7 @@ function DeviceApprovalView({ status, error, user, onApprove, onDecline }) {
 /* ─── 忘記密碼 ──────────────────────────────────────────── */
 
 function ForgotView({ onBack }) {
+  const { t } = useTranslation("login");
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -469,7 +489,7 @@ function ForgotView({ onBack }) {
       );
       setSuccess(true);
     } catch (err) {
-      setError(err?.message ?? "發送失敗，請確認電子郵件是否正確");
+      setError(err?.message ?? t("LoginPage.forgotPasswordErrorDefault"));
     } finally {
       setLoading(false);
     }
@@ -479,25 +499,27 @@ function ForgotView({ onBack }) {
     <>
       <button type="button" className={styles.backBtn} onClick={onBack}>
         <MIcon name="arrow_back" size={18} />
-        <span>返回登入</span>
+        <span>{t("LoginPage.backToLogin")}</span>
       </button>
 
-      <h1 className={styles.title}>忘記密碼</h1>
-      <p className={styles.subtitle}>輸入您的電子郵件，我們將寄送重設連結</p>
+      <h1 className={styles.title}>{t("LoginPage.forgotPasswordTitle")}</h1>
+      <p className={styles.subtitle}>
+        {t("LoginPage.forgotPasswordSubtitle")}
+      </p>
 
       {success ? (
         <div className={styles.successBox}>
           <MIcon name="mark_email_read" size={32} />
-          <p>重設連結已寄出，請至信箱查收</p>
+          <p>{t("LoginPage.resetLinkSent")}</p>
         </div>
       ) : (
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.field}>
-            <label htmlFor="forgot-email">電子郵件</label>
+            <label htmlFor="forgot-email">{t("LoginPage.emailLabel")}</label>
             <input
               id="forgot-email"
               type="email"
-              placeholder="user@example.com"
+              placeholder={t("LoginPage.emailPlaceholderExample")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
@@ -508,7 +530,7 @@ function ForgotView({ onBack }) {
           {error && <p className={styles.error}>{error}</p>}
 
           <button type="submit" className={styles.btn} disabled={loading}>
-            {loading ? "發送中…" : "發送重設連結"}
+            {loading ? t("LoginPage.sending") : t("LoginPage.sendResetLink")}
           </button>
         </form>
       )}
@@ -519,6 +541,7 @@ function ForgotView({ onBack }) {
 /* ─── 重設密碼 ──────────────────────────────────────────── */
 
 function ResetView({ token, onDone }) {
+  const { t } = useTranslation("login");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -530,11 +553,11 @@ function ResetView({ token, onDone }) {
     setError("");
 
     if (password.length < 8) {
-      setError("密碼至少需要 8 個字元");
+      setError(t("LoginPage.passwordMinLength"));
       return;
     }
     if (password !== confirm) {
-      setError("兩次密碼輸入不一致");
+      setError(t("LoginPage.passwordMismatch"));
       return;
     }
 
@@ -546,7 +569,7 @@ function ResetView({ token, onDone }) {
       });
       setSuccess(true);
     } catch (err) {
-      setError(err?.message ?? "重設失敗，連結可能已失效，請重新申請");
+      setError(err?.message ?? t("LoginPage.resetPasswordErrorDefault"));
     } finally {
       setLoading(false);
     }
@@ -554,27 +577,27 @@ function ResetView({ token, onDone }) {
 
   return (
     <>
-      <h1 className={styles.title}>重設密碼</h1>
-      <p className={styles.subtitle}>請輸入新的登入密碼</p>
+      <h1 className={styles.title}>{t("LoginPage.resetPasswordTitle")}</h1>
+      <p className={styles.subtitle}>{t("LoginPage.resetPasswordSubtitle")}</p>
 
       {success ? (
         <div className={styles.successBox}>
           <MIcon name="check_circle" size={32} />
-          <p>密碼已更新，請使用新密碼登入</p>
+          <p>{t("LoginPage.resetPasswordSuccess")}</p>
           <button
             type="button"
             className={styles.btn}
             onClick={onDone}
             style={{ marginTop: "8px" }}
           >
-            前往登入
+            {t("LoginPage.goToLogin")}
           </button>
         </div>
       ) : (
         <form className={styles.form} onSubmit={handleSubmit}>
           <PasswordField
             id="reset-password"
-            label="新密碼（至少 8 個字元）"
+            label={t("LoginPage.newPasswordLabel")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading}
@@ -582,17 +605,17 @@ function ResetView({ token, onDone }) {
 
           <PasswordField
             id="reset-confirm"
-            label="確認新密碼"
+            label={t("LoginPage.confirmNewPasswordLabel")}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             disabled={loading}
-            placeholder="再次輸入新密碼"
+            placeholder={t("LoginPage.confirmNewPasswordPlaceholder")}
           />
 
           {error && <p className={styles.error}>{error}</p>}
 
           <button type="submit" className={styles.btn} disabled={loading}>
-            {loading ? "更新中…" : "更新密碼"}
+            {loading ? t("LoginPage.updating") : t("LoginPage.updatePassword")}
           </button>
         </form>
       )}
@@ -603,6 +626,7 @@ function ResetView({ token, onDone }) {
 /* ─── 註冊 ──────────────────────────────────────────────── */
 
 function RegisterView({ onBack }) {
+  const { t } = useTranslation("login");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -616,11 +640,11 @@ function RegisterView({ onBack }) {
     setError("");
 
     if (password.length < 8) {
-      setError("密碼至少需要 8 個字元");
+      setError(t("LoginPage.passwordMinLength"));
       return;
     }
     if (password !== confirm) {
-      setError("兩次密碼輸入不一致");
+      setError(t("LoginPage.passwordMismatch"));
       return;
     }
 
@@ -633,7 +657,7 @@ function RegisterView({ onBack }) {
       });
       setSuccess(true);
     } catch (err) {
-      setError(err?.message ?? "註冊失敗，請稍後再試");
+      setError(err?.message ?? t("LoginPage.registerErrorDefault"));
     } finally {
       setLoading(false);
     }
@@ -643,33 +667,33 @@ function RegisterView({ onBack }) {
     <>
       <button type="button" className={styles.backBtn} onClick={onBack}>
         <MIcon name="arrow_back" size={18} />
-        <span>返回登入</span>
+        <span>{t("LoginPage.backToLogin")}</span>
       </button>
 
-      <h1 className={styles.title}>建立帳號</h1>
-      <p className={styles.subtitle}>加入 SkyLab 開始使用雲端資源</p>
+      <h1 className={styles.title}>{t("LoginPage.registerTitle")}</h1>
+      <p className={styles.subtitle}>{t("LoginPage.registerSubtitle")}</p>
 
       {success ? (
         <div className={styles.successBox}>
           <MIcon name="check_circle" size={32} />
-          <p>帳號建立成功！請等待管理員審核後即可登入</p>
+          <p>{t("LoginPage.registerSuccess")}</p>
           <button
             type="button"
             className={styles.btn}
             onClick={onBack}
             style={{ marginTop: "8px" }}
           >
-            返回登入
+            {t("LoginPage.backToLogin")}
           </button>
         </div>
       ) : (
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.field}>
-            <label htmlFor="full-name">姓名</label>
+            <label htmlFor="full-name">{t("LoginPage.fullNameLabel")}</label>
             <input
               id="full-name"
               type="text"
-              placeholder="請輸入您的姓名"
+              placeholder={t("LoginPage.fullNamePlaceholder")}
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               disabled={loading}
@@ -678,11 +702,11 @@ function RegisterView({ onBack }) {
           </div>
 
           <div className={styles.field}>
-            <label htmlFor="reg-email">電子郵件</label>
+            <label htmlFor="reg-email">{t("LoginPage.emailLabel")}</label>
             <input
               id="reg-email"
               type="email"
-              placeholder="user@example.com"
+              placeholder={t("LoginPage.emailPlaceholderExample")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
@@ -692,7 +716,7 @@ function RegisterView({ onBack }) {
 
           <PasswordField
             id="reg-password"
-            label="密碼（至少 8 個字元）"
+            label={t("LoginPage.passwordWithMinLengthLabel")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading}
@@ -700,17 +724,17 @@ function RegisterView({ onBack }) {
 
           <PasswordField
             id="reg-confirm"
-            label="確認密碼"
+            label={t("LoginPage.confirmPasswordLabel")}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             disabled={loading}
-            placeholder="再次輸入密碼"
+            placeholder={t("LoginPage.confirmPasswordPlaceholder")}
           />
 
           {error && <p className={styles.error}>{error}</p>}
 
           <button type="submit" className={styles.btn} disabled={loading}>
-            {loading ? "建立中…" : "建立帳號"}
+            {loading ? t("LoginPage.creating") : t("LoginPage.createAccount")}
           </button>
         </form>
       )}
@@ -721,6 +745,7 @@ function RegisterView({ onBack }) {
 /* ─── 主元件 ─────────────────────────────────────────────── */
 
 export default function LoginPage() {
+  const { t } = useTranslation("login");
   const { user } = useAuth();
   const [resetToken, setResetToken] = useState(() => readResetTokenFromUrl());
   const [deviceCode, setDeviceCode] = useState(() => readDeviceCodeFromUrl());
@@ -764,7 +789,7 @@ export default function LoginPage() {
       approvalKeyRef.current = "";
       setDeviceApproval({
         status: "error",
-        error: err?.message ?? "授權失敗，請重新產生登入連結",
+        error: err?.message ?? t("LoginPage.deviceApprovalError"),
       });
     }
   };

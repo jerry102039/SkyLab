@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from app.api.deps import AdminUser, SessionDep
+from app.core.i18n import t
 from app.exceptions import BadRequestError, ProxmoxError
 from app.models import AuditAction
 from app.repositories import gateway_config as gw_repo
@@ -32,7 +33,9 @@ _VALID_SERVICES = {"haproxy", "traefik", "frps", "frpc"}
 
 def _require_valid_service(service: str) -> None:
     if service not in _VALID_SERVICES:
-        raise HTTPException(status_code=400, detail=f"未知服務：{service}")
+        raise HTTPException(
+            status_code=400, detail=t("gateway.unknown_service", service=service)
+        )
 
 
 # ─── 連線設定 ──────────────────────────────────────────────────────────────────
@@ -120,7 +123,7 @@ def test_connection(session: SessionDep, _: AdminUser):
     config = gw_repo.get_gateway_config(session)
     if config is None or not config.host or not config.encrypted_private_key:
         return GatewayConnectionTestResult(
-            success=False, message="尚未設定 Gateway VM IP 或 SSH 金鑰"
+            success=False, message=t("gateway.ssh_not_configured")
         )
     private_key_pem = gw_repo.get_decrypted_private_key(config)
     success, message = gateway_service.test_connection(
@@ -142,7 +145,7 @@ def reset_host_key(session: SessionDep, current_user: AdminUser) -> Message:
         action=AuditAction.gateway_config_update,
         details=f"Reset pinned SSH host key for gateway host {host}",
     )
-    return Message(message=f"已重設 {host} 的 host key，下次連線將重新記錄")
+    return Message(message=t("gateway.host_key_reset", host=host))
 
 
 # ─── 安裝腳本下載 ──────────────────────────────────────────────────────────────
@@ -159,7 +162,9 @@ def download_install_script(_: AdminUser):
     )
     script_path = os.path.abspath(script_path)
     if not os.path.exists(script_path):
-        raise HTTPException(status_code=404, detail="安裝腳本不存在")
+        raise HTTPException(
+            status_code=404, detail=t("gateway.install_script_missing")
+        )
     return FileResponse(
         path=script_path,
         media_type="text/x-sh",
@@ -200,7 +205,7 @@ def write_config(
             action=AuditAction.gateway_config_write,
             details=f"Wrote {service} config to Gateway VM ({len(body.content)} bytes)",
         )
-        return Message(message=f"{service} 設定已儲存")
+        return Message(message=t("gateway.service_config_saved", service=service))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -216,15 +221,17 @@ def sync_traefik_dns_challenge(session: SessionDep, current_user: AdminUser):
             action=AuditAction.gateway_config_write,
             details="Synced Traefik dnsChallenge config from Cloudflare settings",
         )
-        return Message(message="Traefik 已套用 Cloudflare DNS Challenge 設定")
+        return Message(message=t("gateway.traefik_dns_synced"))
     except BadRequestError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except ProxmoxError as exc:
         logger.error("Failed to sync Traefik dnsChallenge config: %s", exc)
-        raise HTTPException(status_code=502, detail="Proxmox 操作失敗")
+        raise HTTPException(status_code=502, detail=t("gateway.proxmox_failed"))
     except Exception:
         logger.exception("Unexpected error syncing Traefik dnsChallenge config")
-        raise HTTPException(status_code=500, detail="同步 Traefik 憑證設定失敗")
+        raise HTTPException(
+            status_code=500, detail=t("gateway.traefik_sync_failed")
+        )
 
 
 # ─── 服務控制 ──────────────────────────────────────────────────────────────────
@@ -268,7 +275,7 @@ def service_logs(service: str, session: SessionDep, _: AdminUser, lines: int = 5
         # 例外細節只記在伺服器端，避免將內部資訊洩漏給呼叫端
         logger.exception("讀取 %s 服務日誌失敗", service)
         raise HTTPException(
-            status_code=502, detail=f"無法讀取 {service} 服務日誌，請稍後再試"
+            status_code=502, detail=t("gateway.log_read_failed", service=service)
         )
     return PlainTextResponse(content=output)
 
@@ -284,7 +291,9 @@ def control_service(
     _require_valid_service(service)
     valid_actions = {"start", "stop", "restart", "reload"}
     if action not in valid_actions:
-        raise HTTPException(status_code=400, detail=f"無效操作：{action}")
+        raise HTTPException(
+            status_code=400, detail=t("gateway.invalid_action", action=action)
+        )
     try:
         success, output = gateway_service.control_service(
             session=session, service=service, action=action

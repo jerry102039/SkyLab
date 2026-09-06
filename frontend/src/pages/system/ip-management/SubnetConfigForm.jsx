@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./IpManagementPage.module.scss";
 
 const IPV4_PATTERN = "^(\\d{1,3}\\.){3}\\d{1,3}$";
@@ -35,6 +36,7 @@ export default function SubnetConfigForm({
   onCancel,
   onDelete,
 }) {
+  const { t } = useTranslation("system");
   const [form, setForm] = useState(() => buildInitialForm(config));
   const set = (name, value) => setForm((prev) => ({ ...prev, [name]: value }));
   const isEdit = Boolean(config);
@@ -55,60 +57,60 @@ export default function SubnetConfigForm({
   return (
     <form className={styles.card} onSubmit={handleSubmit}>
       <h2 className={styles.cardTitle}>
-        {isEdit ? "編輯子網設定" : "建立子網設定"}
+        {isEdit ? t("SubnetConfigForm.editTitle") : t("SubnetConfigForm.createTitle")}
       </h2>
       <p className={styles.cardDesc}>
-        設定子網後，系統才會在建立 VM / LXC 時自動分配靜態 IP。
+        {t("SubnetConfigForm.cardDesc")}
       </p>
 
       <div className={styles.formGrid}>
         <label className={styles.field}>
-          <span>子網 CIDR *</span>
+          <span>{t("SubnetConfigForm.cidr")}</span>
           <input
             value={form.cidr}
             onChange={(e) => set("cidr", e.target.value)}
-            placeholder="例：10.10.0.0/24"
+            placeholder={t("SubnetConfigForm.cidrPlaceholder")}
             readOnly={cidrLocked}
             required
           />
           {cidrLocked && (
             <span className={styles.fieldHint}>
-              已有 VM / LXC 使用此網段，需先刪除這些機器才能變更 CIDR。
+              {t("SubnetConfigForm.cidrLockedHint")}
             </span>
           )}
         </label>
 
         <label className={styles.field}>
-          <span>閘道 IP *</span>
+          <span>{t("SubnetConfigForm.gateway")}</span>
           <input
             value={form.gateway}
             onChange={(e) => set("gateway", e.target.value)}
-            placeholder="例：10.10.0.1"
+            placeholder={t("SubnetConfigForm.gatewayPlaceholder")}
             pattern={IPV4_PATTERN}
             required
           />
         </label>
 
         <label className={styles.field}>
-          <span>Bridge 名稱 *</span>
+          <span>{t("SubnetConfigForm.bridgeName")}</span>
           <input
             value={form.bridge_name}
             onChange={(e) => set("bridge_name", e.target.value)}
-            placeholder="例：vmbr1"
+            placeholder={t("SubnetConfigForm.bridgeNamePlaceholder")}
             required
           />
         </label>
 
         <label className={styles.field}>
-          <span>Gateway VM IP *</span>
+          <span>{t("SubnetConfigForm.gatewayVmIp")}</span>
           <input
             value={form.gateway_vm_ip}
             onChange={(e) => set("gateway_vm_ip", e.target.value)}
-            placeholder="例：10.10.0.2"
+            placeholder={t("SubnetConfigForm.gatewayVmIpPlaceholder")}
             pattern={IPV4_PATTERN}
             required
           />
-          <span className={styles.fieldHint}>不可與閘道 IP 相同。</span>
+          <span className={styles.fieldHint}>{t("SubnetConfigForm.gatewayVmIpHint")}</span>
         </label>
 
         <label className={styles.field}>
@@ -116,22 +118,22 @@ export default function SubnetConfigForm({
           <input
             value={form.dns_servers}
             onChange={(e) => set("dns_servers", e.target.value)}
-            placeholder="選填，多組以逗號分隔：8.8.8.8,1.1.1.1"
+            placeholder={t("SubnetConfigForm.dnsServersPlaceholder")}
           />
         </label>
       </div>
 
       <label className={styles.field}>
-        <span>預設封鎖網段 / IP</span>
+        <span>{t("SubnetConfigForm.extraBlockedSubnets")}</span>
         <textarea
           rows={4}
           value={form.extra_blocked_subnets}
           onChange={(e) => set("extra_blocked_subnets", e.target.value)}
-          placeholder={"選填，每行一個，例：\n192.168.100.0/24\n10.0.0.5"}
+          placeholder={t("SubnetConfigForm.extraBlockedSubnetsPlaceholder")}
           spellCheck={false}
         />
         <span className={styles.fieldHint}>
-          儲存時會在所有 VM / LXC 上建立或更新出站 DROP 規則，並清除已移除的舊規則。
+          {t("SubnetConfigForm.extraBlockedSubnetsHint")}
         </span>
       </label>
 
@@ -143,7 +145,7 @@ export default function SubnetConfigForm({
             onClick={onDelete}
             disabled={busy}
           >
-            {deleting ? "刪除中..." : "刪除子網設定"}
+            {deleting ? t("SubnetConfigForm.deleting") : t("SubnetConfigForm.deleteConfig")}
           </button>
         )}
         <button
@@ -152,10 +154,10 @@ export default function SubnetConfigForm({
           onClick={onCancel}
           disabled={busy}
         >
-          取消
+          {t("SubnetConfigForm.cancel")}
         </button>
         <button type="submit" className={styles.btnPrimary} disabled={busy}>
-          {saving ? "儲存中..." : isEdit ? "更新設定" : "建立設定"}
+          {saving ? t("SubnetConfigForm.saving") : isEdit ? t("SubnetConfigForm.updateConfig") : t("SubnetConfigForm.createConfig")}
         </button>
       </div>
     </form>

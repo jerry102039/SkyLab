@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import MIcon from "../../../components/MIcon";
 import TerminalDialog from "../resources/TerminalDialog";
 import VncDialog from "../resources/VncDialog";
@@ -9,65 +10,68 @@ import { ResourcesService } from "../../../services/resources";
 import { QuickPracticeService } from "../../../services/quickPractice";
 import styles from "./StudentHomePage.module.scss";
 import PageHeader from "../../../components/PageHeader/PageHeader";
+import i18n from "../../../i18n";
+
+const defaultT = (key) => i18n.t(key, { ns: "personal" });
 
 const STATUS_META = {
-  running: { label: "環境已就緒", tone: "success", icon: "check_circle" },
-  provisioning: { label: "環境準備中", tone: "info", icon: "hourglass_top" },
-  failed: { label: "環境建立失敗", tone: "danger", icon: "error" },
-  expired: { label: "環境已到期", tone: "muted", icon: "schedule" },
-  stopped: { label: "環境已關機", tone: "muted", icon: "power_settings_new" },
-  no_lab: { label: "不需要實驗機", tone: "success", icon: "menu_book" },
-  not_started: { label: "尚未啟動", tone: "warning", icon: "play_circle" },
-  empty: { label: "目前沒有課程", tone: "muted", icon: "event_busy" },
+  running: { labelKey: "StudentHomePage.statusRunning", tone: "success", icon: "check_circle" },
+  provisioning: { labelKey: "StudentHomePage.statusProvisioning", tone: "info", icon: "hourglass_top" },
+  failed: { labelKey: "StudentHomePage.statusFailed", tone: "danger", icon: "error" },
+  expired: { labelKey: "StudentHomePage.statusExpired", tone: "muted", icon: "schedule" },
+  stopped: { labelKey: "StudentHomePage.statusStopped", tone: "muted", icon: "power_settings_new" },
+  no_lab: { labelKey: "StudentHomePage.statusNoLab", tone: "success", icon: "menu_book" },
+  not_started: { labelKey: "StudentHomePage.statusNotStarted", tone: "warning", icon: "play_circle" },
+  empty: { labelKey: "StudentHomePage.statusEmpty", tone: "muted", icon: "event_busy" },
 };
 
 const TOUR_STEPS = [
   {
     selector: '[data-student-tour="class"]',
     icon: "school",
-    eyebrow: "上課第一步",
-    title: "先看今天要完成什麼",
-    description: "首頁會依你的課程進度，直接整理出最適合接著完成的章節。按主要按鈕就能進入課堂，不必從功能選單尋找。",
-    tip: "課堂機器由老師或課程準備，不需要另外送申請。",
+    eyebrowKey: "StudentHomePage.tourClassEyebrow",
+    titleKey: "StudentHomePage.tourClassTitle",
+    descriptionKey: "StudentHomePage.tourClassDescription",
+    tipKey: "StudentHomePage.tourClassTip",
   },
   {
     selector: '[data-student-tour="tasks"]',
     icon: "checklist",
-    eyebrow: "課堂任務",
-    title: "完成任務後交給 AI 檢查",
-    description: "這裡會列出截至今天老師已發布的任務。展開任務可以先看 AI 整理的要求，完成後直接送出 AI Check。",
-    tip: "AI 回覆會保留在同一列，方便你依照每一項建議修正後再次送檢。",
+    eyebrowKey: "StudentHomePage.tourTasksEyebrow",
+    titleKey: "StudentHomePage.tourTasksTitle",
+    descriptionKey: "StudentHomePage.tourTasksDescription",
+    tipKey: "StudentHomePage.tourTasksTip",
   },
   {
     selector: '[data-student-tour="practice"]',
     icon: "history",
-    eyebrow: "下課後練習",
-    title: "沿用原本的課堂環境",
-    description: "下課後想繼續練習時，從這裡回到相同課程與機器，檔案和任務進度都會保留。",
-    tip: "課堂練習不需要建立另一台研究機器。",
+    eyebrowKey: "StudentHomePage.tourPracticeEyebrow",
+    titleKey: "StudentHomePage.tourPracticeTitle",
+    descriptionKey: "StudentHomePage.tourPracticeDescription",
+    tipKey: "StudentHomePage.tourPracticeTip",
   },
   {
     selector: '[data-student-tour="research"]',
     icon: "science",
-    eyebrow: "自主研究",
-    title: "只有研究需求才需要申請",
-    description: "專題、開發或個人實驗才從這裡前往申請。一般上課與下課練習都不需要填申請單。",
-    tip: "自主研究流程會再持續優化，目前可先查看既有申請。",
+    eyebrowKey: "StudentHomePage.tourResearchEyebrow",
+    titleKey: "StudentHomePage.tourResearchTitle",
+    descriptionKey: "StudentHomePage.tourResearchDescription",
+    tipKey: "StudentHomePage.tourResearchTip",
   },
 ];
 
 const AI_DETECTABLE_META = {
-  auto: { label: "可自動檢查", icon: "smart_toy", tone: "auto" },
-  partial: { label: "部分自動檢查", icon: "rule", tone: "partial" },
-  manual: { label: "老師人工確認", icon: "person_check", tone: "manual" },
+  auto: { labelKey: "StudentHomePage.detectableAuto", icon: "smart_toy", tone: "auto" },
+  partial: { labelKey: "StudentHomePage.detectablePartial", icon: "rule", tone: "partial" },
+  manual: { labelKey: "StudentHomePage.detectableManual", icon: "how_to_reg", tone: "manual" },
 };
 
 const AI_CHECK_STATUS_META = {
-  pending: { label: "等待 AI Check", icon: "hourglass_top", tone: "pending" },
-  running: { label: "AI 檢查中", icon: "sync", tone: "running" },
-  completed: { label: "已收到 AI 回覆", icon: "task_alt", tone: "completed" },
-  failed: { label: "檢查失敗", icon: "error_outline", tone: "failed" },
-  cancelled: { label: "已取消", icon: "block", tone: "cancelled" },
+  pending: { labelKey: "StudentHomePage.checkPending", icon: "hourglass_top", tone: "pending" },
+  running: { labelKey: "StudentHomePage.checkRunning", icon: "sync", tone: "running" },
+  completed: { labelKey: "StudentHomePage.checkCompleted", icon: "task_alt", tone: "completed" },
+  failed: { labelKey: "StudentHomePage.checkFailed", icon: "error_outline", tone: "failed" },
+  cancelled: { labelKey: "StudentHomePage.checkCancelled", icon: "block", tone: "cancelled" },
 };
 
 export function assignmentsUntilToday(assignments, now = new Date()) {
@@ -95,11 +99,11 @@ export function assignmentsUntilToday(assignments, now = new Date()) {
     });
 }
 
-function formatAssignmentDate(value) {
-  if (!value) return "已發布";
+function formatAssignmentDate(value, t = defaultT) {
+  if (!value) return t("StudentHomePage.published");
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "已發布";
-  return new Intl.DateTimeFormat("zh-TW", {
+  if (Number.isNaN(date.getTime())) return t("StudentHomePage.published");
+  return new Intl.DateTimeFormat(i18n.language, {
     month: "numeric",
     day: "numeric",
   }).format(date);
@@ -110,6 +114,7 @@ function getTourStorageKey(user) {
 }
 
 function TourOverlay({ stepIndex, onBack, onNext, onSkip }) {
+  const { t } = useTranslation("personal");
   const [targetRect, setTargetRect] = useState(null);
   const panelRef = useRef(null);
   const step = TOUR_STEPS[stepIndex];
@@ -209,18 +214,18 @@ function TourOverlay({ stepIndex, onBack, onNext, onSkip }) {
         <div className={styles.tourPanelTop}>
           <span className={styles.tourIcon}><MIcon name={step.icon} size={22} /></span>
           <span className={styles.tourCount}>{stepIndex + 1} / {TOUR_STEPS.length}</span>
-          <button type="button" className={styles.tourClose} onClick={onSkip} aria-label="跳過導覽">
+          <button type="button" className={styles.tourClose} onClick={onSkip} aria-label={t("StudentHomePage.tourSkip")}>
             <MIcon name="close" size={19} />
           </button>
         </div>
-        <p className={styles.tourEyebrow}>{step.eyebrow}</p>
-        <h2 id="student-tour-title">{step.title}</h2>
-        <p className={styles.tourDescription}>{step.description}</p>
+        <p className={styles.tourEyebrow}>{t(step.eyebrowKey)}</p>
+        <h2 id="student-tour-title">{t(step.titleKey)}</h2>
+        <p className={styles.tourDescription}>{t(step.descriptionKey)}</p>
         <div className={styles.tourTip}>
           <MIcon name="lightbulb" size={17} />
-          <span>{step.tip}</span>
+          <span>{t(step.tipKey)}</span>
         </div>
-        <div className={styles.tourProgress} aria-label={`導覽進度 ${stepIndex + 1} / ${TOUR_STEPS.length}`}>
+        <div className={styles.tourProgress} aria-label={t("StudentHomePage.tourProgressAria", { current: stepIndex + 1, total: TOUR_STEPS.length })}>
           {TOUR_STEPS.map((tourStep, index) => (
             <span
               key={tourStep.selector}
@@ -229,15 +234,15 @@ function TourOverlay({ stepIndex, onBack, onNext, onSkip }) {
           ))}
         </div>
         <div className={styles.tourActions}>
-          <button type="button" className={styles.tourSkip} onClick={onSkip}>跳過導覽</button>
+          <button type="button" className={styles.tourSkip} onClick={onSkip}>{t("StudentHomePage.tourSkip")}</button>
           <div>
             {stepIndex > 0 && (
               <button type="button" className={styles.tourBack} onClick={onBack}>
-                上一步
+                {t("StudentHomePage.tourBack")}
               </button>
             )}
             <button type="button" className={styles.tourNext} onClick={onNext}>
-              {isLast ? "完成導覽" : "下一步"}
+              {isLast ? t("StudentHomePage.tourFinish") : t("StudentHomePage.tourNext")}
               <MIcon name={isLast ? "check" : "arrow_forward"} size={17} />
             </button>
           </div>
@@ -271,7 +276,7 @@ function chooseNextRoom(rooms) {
   );
 }
 
-export function buildPracticeMachines(classMachines, resources, deployment, roomTitle) {
+export function buildPracticeMachines(classMachines, resources, deployment, roomTitle, t = defaultT) {
   const machines = (classMachines ?? []).map((machine) => {
     const resource = (resources ?? []).find(
       (item) => machine.vmid != null && Number(item.vmid) === Number(machine.vmid),
@@ -295,20 +300,20 @@ export function buildPracticeMachines(classMachines, resources, deployment, room
       vmid: deployment.vmid,
       status: fallbackResource?.status ?? deployment.status,
       type: fallbackResource?.type ?? "qemu",
-      name: fallbackResource?.name ?? roomTitle ?? "課堂練習機",
-      classMachineName: roomTitle ?? "課堂練習機",
-      classMachineRole: "本章節練習環境",
+      name: fallbackResource?.name ?? roomTitle ?? t("StudentHomePage.defaultPracticeMachineName"),
+      classMachineName: roomTitle ?? t("StudentHomePage.defaultPracticeMachineName"),
+      classMachineRole: t("StudentHomePage.defaultPracticeMachineRole"),
     });
   }
 
   return machines;
 }
 
-export function practiceMachineActionLabel(machine, openingMachineId = null) {
-  if (machine?.vmid == null) return "環境配置中";
-  if (openingMachineId === machine.vmid) return "正在啟動…";
-  if (machine.status === "running") return "進入機器";
-  return "啟動並進入";
+export function practiceMachineActionLabel(machine, openingMachineId = null, t = defaultT) {
+  if (machine?.vmid == null) return t("StudentHomePage.actionConfiguring");
+  if (openingMachineId === machine.vmid) return t("StudentHomePage.actionStarting");
+  if (machine.status === "running") return t("StudentHomePage.actionEnter");
+  return t("StudentHomePage.actionStartAndEnter");
 }
 
 async function waitForPracticeMachine(vmid, attempts = 20) {
@@ -324,21 +329,23 @@ async function waitForPracticeMachine(vmid, attempts = 20) {
 }
 
 function StatusBadge({ meta }) {
+  const { t } = useTranslation("personal");
   return (
     <span className={`${styles.statusBadge} ${styles[meta.tone]}`}>
       <MIcon name={meta.icon} size={16} />
-      {meta.label}
+      {meta.label ?? t(meta.labelKey)}
     </span>
   );
 }
 
 function LoadingState() {
+  const { t } = useTranslation("personal");
   return (
-    <div className={styles.loadingState} aria-label="正在整理你的課堂資訊">
+    <div className={styles.loadingState} aria-label={t("StudentHomePage.loadingLabel")}>
       <span className={styles.loadingIcon}><MIcon name="school" size={28} /></span>
       <div>
-        <strong>正在整理你的課堂資訊</strong>
-        <p>確認課程進度與老師分發的實驗環境中…</p>
+        <strong>{t("StudentHomePage.loadingLabel")}</strong>
+        <p>{t("StudentHomePage.loadingDesc")}</p>
       </div>
     </div>
   );
@@ -348,24 +355,24 @@ function formatScheduleTime(value) {
   if (!value) return "";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "";
-  return new Intl.DateTimeFormat("zh-TW", {
+  return new Intl.DateTimeFormat(i18n.language, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   }).format(parsed);
 }
 
-function normalizeSchedule(row) {
+function normalizeSchedule(row, t = defaultT) {
   const sessionDate = row.session_date ? new Date(`${row.session_date}T00:00:00`) : null;
   const sessionLabel = sessionDate && !Number.isNaN(sessionDate.getTime())
-    ? new Intl.DateTimeFormat("zh-TW", { month: "numeric", day: "numeric", weekday: "short" }).format(sessionDate)
+    ? new Intl.DateTimeFormat(i18n.language, { month: "numeric", day: "numeric", weekday: "short" }).format(sessionDate)
     : "";
   return {
     ...row,
     schedule: {
       state: row.state,
       label: row.label,
-      time: `${row.state === "available" && sessionLabel ? `下次 ${sessionLabel} · ` : ""}${formatScheduleTime(row.start_at)}–${formatScheduleTime(row.end_at)}`,
+      time: `${row.state === "available" && sessionLabel ? t("StudentHomePage.nextSession", { session: sessionLabel }) : ""}${formatScheduleTime(row.start_at)}–${formatScheduleTime(row.end_at)}`,
       teacher: row.teacher,
       place: row.location,
     },
@@ -376,6 +383,7 @@ export default function StudentHomePage({ courseView = false }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { pathId } = useParams();
+  const { t } = useTranslation("personal");
   const [view, setView] = useState({
     loading: true,
     hasError: false,
@@ -402,7 +410,7 @@ export default function StudentHomePage({ courseView = false }) {
   const [openingDocumentId, setOpeningDocumentId] = useState(null);
 
   const todayLabel = useMemo(
-    () => new Intl.DateTimeFormat("zh-TW", {
+    () => new Intl.DateTimeFormat(i18n.language, {
       month: "long",
       day: "numeric",
       weekday: "long",
@@ -426,7 +434,7 @@ export default function StudentHomePage({ courseView = false }) {
         ? pathsResult.value
         : [];
       const schedulePaths = scheduleResult.status === "fulfilled" && Array.isArray(scheduleResult.value)
-        ? scheduleResult.value.map(normalizeSchedule)
+        ? scheduleResult.value.map((row) => normalizeSchedule(row))
         : [];
       const paths = courseView ? catalogPaths : schedulePaths;
       const resources = resourcesResult.status === "fulfilled" && Array.isArray(resourcesResult.value)
@@ -626,18 +634,17 @@ export default function StudentHomePage({ courseView = false }) {
     0,
   );
   const displayedQuickTemplates = quickTemplates;
-  const primaryTarget = nextRoom ? `/courses/rooms/${nextRoom.id}` : "/courses";
-  const primaryLabel = nextRoom ? "開始練習" : "查看可用課程";
+  const primaryLabel = nextRoom ? t("StudentHomePage.startPractice") : t("StudentHomePage.viewAvailableCourses");
   const currentSchedule = view.activePath?.schedule;
   const heroStatusMeta = view.activePath
     ? currentSchedule?.state === "now"
-      ? { label: "正在上課", tone: "success", icon: "sensors" }
-      : { label: "可以開始", tone: "success", icon: "play_circle" }
+      ? { label: t("StudentHomePage.statusLive"), tone: "success", icon: "sensors" }
+      : { label: t("StudentHomePage.statusReady"), tone: "success", icon: "play_circle" }
     : STATUS_META.empty;
 
   const openPracticeMachine = async (machine) => {
     if (!machine?.vmid) {
-      toast.error("這台課堂機器尚未建立完成");
+      toast.error(t("StudentHomePage.machineNotReady"));
       return;
     }
     setOpeningMachineId(machine.vmid);
@@ -645,24 +652,24 @@ export default function StudentHomePage({ courseView = false }) {
     try {
       resource = await ResourcesService.get(resource.vmid);
       if (resource.status !== "running") {
-        toast.info("正在啟動課堂機器，通常需要一點時間…", {
+        toast.info(t("StudentHomePage.machineStarting"), {
           id: `start-class-machine-${machine.vmid}`,
         });
         await ResourcesService.start(resource.vmid);
         resource = await waitForPracticeMachine(resource.vmid);
         if (resource?.status !== "running") {
-          toast.info("機器仍在啟動中，請稍後再試。", {
+          toast.info(t("StudentHomePage.machineStillStarting"), {
             id: `start-class-machine-${machine.vmid}`,
           });
           return;
         }
-        toast.success("課堂機器已啟動", {
+        toast.success(t("StudentHomePage.machineStarted"), {
           id: `start-class-machine-${machine.vmid}`,
         });
       }
       setActivePracticeResource({ ...machine, ...resource });
     } catch (error) {
-      toast.error(error?.message ?? "無法開啟課堂機器");
+      toast.error(error?.message ?? t("StudentHomePage.machineOpenFailed"));
     } finally {
       setOpeningMachineId(null);
     }
@@ -670,7 +677,7 @@ export default function StudentHomePage({ courseView = false }) {
 
   const openMachineInformation = (machine) => {
     if (!machine?.vmid) {
-      toast.info("這台課堂機器尚未建立完成。");
+      toast.info(t("StudentHomePage.machineNotReadyPeriod"));
       return;
     }
     navigate(`/my-resources/${machine.vmid}`);
@@ -678,7 +685,7 @@ export default function StudentHomePage({ courseView = false }) {
 
   const openCourseOverview = (path = view.activePath) => {
     if (!path) {
-      navigate("/courses");
+      navigate("/dashboard");
       return;
     }
     navigate(`/dashboard/course/${path.id}`, { state: { from: "/dashboard" } });
@@ -703,7 +710,7 @@ export default function StudentHomePage({ courseView = false }) {
         displayName: assignment.source_document.display_name,
       });
     } catch (error) {
-      toast.error(error?.message ?? "目前無法開啟老師上傳的任務 PDF");
+      toast.error(error?.message ?? t("StudentHomePage.pdfOpenFailed"));
     } finally {
       setOpeningDocumentId(null);
     }
@@ -721,7 +728,7 @@ export default function StudentHomePage({ courseView = false }) {
       const url = window.URL.createObjectURL(blob);
       setDocumentPreview({ url, filename: file.filename, displayName: file.filename });
     } catch (error) {
-      toast.error(error?.message ?? "目前無法開啟老師上傳的任務 PDF");
+      toast.error(error?.message ?? t("StudentHomePage.pdfOpenFailed"));
     } finally {
       setOpeningDocumentId(null);
     }
@@ -737,9 +744,9 @@ export default function StudentHomePage({ courseView = false }) {
         assignment.id,
       );
       setAssignmentChecks((current) => ({ ...current, [assignment.id]: check }));
-      toast.success(check.status === "completed" ? "AI Check 已完成" : "已送出，AI 正在檢查你的課堂環境");
+      toast.success(check.status === "completed" ? t("StudentHomePage.aiCheckCompleted") : t("StudentHomePage.aiCheckSubmitted"));
     } catch (error) {
-      toast.error(error?.message ?? "目前無法送出 AI Check");
+      toast.error(error?.message ?? t("StudentHomePage.aiCheckSubmitFailed"));
     } finally {
       setCheckingAssignmentId(null);
     }
@@ -759,9 +766,9 @@ export default function StudentHomePage({ courseView = false }) {
         ...current,
         [key]: { assignmentId: checkpoint.assignment_id, itemId: checkpoint.id, check },
       }));
-      toast.success(check.status === "completed" ? "Checkpoint 檢查完成" : "已送出，正在檢查這個 Checkpoint");
+      toast.success(check.status === "completed" ? t("StudentHomePage.checkpointCompleted") : t("StudentHomePage.checkpointSubmitted"));
     } catch (error) {
-      toast.error(error?.message ?? "目前無法檢查這個 Checkpoint");
+      toast.error(error?.message ?? t("StudentHomePage.checkpointCheckFailed"));
     } finally {
       setCheckingCheckpointKey(null);
     }
@@ -785,12 +792,12 @@ export default function StudentHomePage({ courseView = false }) {
             onClick={() => navigate(location.state?.from ?? "/dashboard")}
           >
             <MIcon name="arrow_back" size={18} />
-            返回我的課程
+            {t("StudentHomePage.backToMyCourses")}
           </button>
           <div className={styles.coursePageTitle}>
-            <p className={styles.eyebrow}>課程總覽</p>
-            <h1>{view.activePath?.title ?? "課程"}</h1>
-            <p>{view.activePath?.description ?? "查看今天的環境與任務。"}</p>
+            <p className={styles.eyebrow}>{t("StudentHomePage.courseOverview")}</p>
+            <h1>{view.activePath?.title ?? t("StudentHomePage.courseFallback")}</h1>
+            <p>{view.activePath?.description ?? t("StudentHomePage.courseDescriptionFallback")}</p>
           </div>
         </header>
       )}
@@ -799,8 +806,8 @@ export default function StudentHomePage({ courseView = false }) {
         <div className={styles.notice} role="status">
           <MIcon name="cloud_off" size={20} />
           <div>
-            <strong>暫時無法取得最新資訊</strong>
-            <span>你仍可直接前往課程或我的資源查看。</span>
+            <strong>{t("StudentHomePage.errorTitle")}</strong>
+            <span>{t("StudentHomePage.errorDesc")}</span>
           </div>
         </div>
       )}
@@ -808,16 +815,16 @@ export default function StudentHomePage({ courseView = false }) {
       {!courseView && (
         <>
           <PageHeader
-            title="我的課程"
-            subtitle={view.paths.length > 0 ? `${todayLabel} · ${view.paths.length} 堂進行中課程` : `${todayLabel} · 目前沒有進行中課程`}
+            title={t("StudentHomePage.myCourses")}
+            subtitle={view.paths.length > 0 ? t("StudentHomePage.subtitleWithCourses", { today: todayLabel, count: view.paths.length }) : t("StudentHomePage.subtitleNoCourses", { today: todayLabel })}
           >
             {view.paths.some((path) => path.schedule?.state === "now") && (
               <div className={styles.scheduleActions}>
-                <span>有一堂正在進行</span>
+                <span>{t("StudentHomePage.oneClassInProgress")}</span>
               </div>
             )}
           </PageHeader>
-          <section className={styles.todaySchedule} aria-label="進行中的課程" data-guide="home-schedule">
+          <section className={styles.todaySchedule} aria-label={t("StudentHomePage.ongoingCoursesAria")} data-guide="home-schedule">
             {view.paths.length > 0 ? (
             <div className={styles.scheduleGrid}>
               {view.paths.map((path, index) => (
@@ -832,7 +839,7 @@ export default function StudentHomePage({ courseView = false }) {
                     <div className={styles.scheduleTopline}>
                       <span className={`${styles.scheduleState} ${path.schedule?.state === "now" ? styles.scheduleStateNow : ""}`}>
                         {path.schedule?.state === "now" && <span className={styles.liveDot} />}
-                        {path.schedule?.label ?? "可繼續學習"}
+                        {path.schedule?.label ?? t("StudentHomePage.continueLearning")}
                       </span>
                       {path.schedule?.time && <span>{path.schedule.time}</span>}
                     </div>
@@ -857,8 +864,8 @@ export default function StudentHomePage({ courseView = false }) {
               <div className={styles.courseEmptyState}>
                 <span><MIcon name="school" size={25} /></span>
                 <div>
-                  <strong>老師還沒有發布可使用的課程</strong>
-                  <p>課程發布後會直接出現在這裡，不需要另外申請上課機器。</p>
+                  <strong>{t("StudentHomePage.noPublishedCoursesTitle")}</strong>
+                  <p>{t("StudentHomePage.noPublishedCoursesDesc")}</p>
                 </div>
               </div>
             )}
@@ -873,15 +880,15 @@ export default function StudentHomePage({ courseView = false }) {
         <section className={styles.classCard} aria-labelledby="today-class-title" data-student-tour="class" data-guide="home-current-course">
           <div className={styles.classCardTop}>
             <div>
-              <p className={styles.eyebrow}>{currentSchedule?.state === "now" ? "現在正在進行" : "接下來可以練習"}</p>
+              <p className={styles.eyebrow}>{currentSchedule?.state === "now" ? t("StudentHomePage.inProgressNow") : t("StudentHomePage.upNextForPractice")}</p>
               <h2 id="today-class-title">
-                {view.activePath?.title ?? "目前沒有可開始的課程"}
+                {view.activePath?.title ?? t("StudentHomePage.noCourseToStart")}
               </h2>
               <p className={styles.classDescription}>
                 {nextRoom
-                  ? `這堂課要做：${nextRoom.title}`
+                  ? t("StudentHomePage.thisLessonTask", { title: nextRoom.title })
                   : view.activePath?.description
-                    ?? "老師發布內容後，這裡會直接告訴你現在要做什麼。"}
+                    ?? t("StudentHomePage.waitingForTeacherContent")}
               </p>
             </div>
             <StatusBadge meta={heroStatusMeta} />
@@ -897,11 +904,11 @@ export default function StudentHomePage({ courseView = false }) {
                     <span><MIcon name="location_on" size={18} />{currentSchedule.place}</span>
                   </>
                 ) : (
-                  <span><MIcon name="task_alt" size={18} />任務進度 {roomProgress}%</span>
+                  <span><MIcon name="task_alt" size={18} />{t("StudentHomePage.taskProgress", { percent: roomProgress })}</span>
                 )}
               </div>
 
-              <div className={styles.progressTrack} aria-label={`章節進度 ${roomProgress}%`} data-guide="home-progress">
+              <div className={styles.progressTrack} aria-label={t("StudentHomePage.chapterProgressAria", { percent: roomProgress })} data-guide="home-progress">
                 <span style={{ width: `${roomProgress}%` }} />
               </div>
 
@@ -909,8 +916,8 @@ export default function StudentHomePage({ courseView = false }) {
                 <MIcon name="check_circle" size={18} />
                 <span>
                   {deployment?.status === "running" || !nextRoom?.has_lab
-                    ? "練習內容已可使用，直接開始即可。"
-                    : "開始後系統會自動準備需要的內容。"}
+                    ? t("StudentHomePage.practiceReady")
+                    : t("StudentHomePage.willPrepareOnStart")}
                 </span>
               </div>
             </>
@@ -918,15 +925,15 @@ export default function StudentHomePage({ courseView = false }) {
             <div className={styles.emptyClass}>
               <MIcon name="event_available" size={28} />
               <div>
-                <strong>目前沒有待完成的課程</strong>
-                <p>可以先查看所有課程，或等待老師發布今天的內容。</p>
+                <strong>{t("StudentHomePage.noPendingCourseTitle")}</strong>
+                <p>{t("StudentHomePage.noPendingCourseDesc")}</p>
               </div>
             </div>
           )}
 
           {practiceMachines.length === 0 && (
             <div className={styles.primaryActions}>
-              <button type="button" className={styles.primaryButton} onClick={() => navigate(primaryTarget)}>
+              <button type="button" className={styles.primaryButton} onClick={() => openCourseOverview()}>
                 {primaryLabel}
                 <MIcon name="arrow_forward" size={18} />
               </button>
@@ -934,9 +941,9 @@ export default function StudentHomePage({ courseView = false }) {
           )}
 
           {practiceMachines.length > 0 && (
-            <section className={styles.machinePicker} aria-label="課堂機器" data-guide="home-start">
+            <section className={styles.machinePicker} aria-label={t("StudentHomePage.classMachinesAria")} data-guide="home-start">
               <header>
-                <div><strong>你的課堂機器</strong><span>直接點擊機器即可進入；右側資訊按鈕可查看完整設定。</span></div>
+                <div><strong>{t("StudentHomePage.yourClassMachines")}</strong><span>{t("StudentHomePage.classMachinesHint")}</span></div>
               </header>
               <div className={styles.machineGrid}>
                 {practiceMachines.map((machine) => (
@@ -949,18 +956,18 @@ export default function StudentHomePage({ courseView = false }) {
                       className={styles.machineLaunchButton}
                       onClick={() => openPracticeMachine(machine)}
                       disabled={openingMachineId !== null || machine.vmid == null}
-                      aria-label={`${practiceMachineActionLabel(machine, openingMachineId)}：${machine.classMachineName ?? machine.name}`}
+                      aria-label={t("StudentHomePage.machineLaunchAria", { action: practiceMachineActionLabel(machine, openingMachineId, t), name: machine.classMachineName ?? machine.name })}
                     >
                       <span className={styles.machineIcon}><MIcon name={machine.type === "lxc" ? "terminal" : "desktop_windows"} size={22} /></span>
                       <span className={styles.machineCopy}>
                         <strong>{machine.classMachineName ?? machine.name}</strong>
                         <small>
-                          {machine.classMachineRole ?? "課堂練習機"}
-                          {machine.vmid != null ? ` · VMID ${machine.vmid}` : " · 尚未配置"}
+                          {machine.classMachineRole ?? t("StudentHomePage.defaultPracticeMachineName")}
+                          {machine.vmid != null ? t("StudentHomePage.machineVmidSuffix", { vmid: machine.vmid }) : t("StudentHomePage.machineNotConfigured")}
                         </small>
                       </span>
                       <span className={`${styles.machineState} ${machine.status === "running" ? styles.machineStateReady : ""}`}>
-                        {practiceMachineActionLabel(machine, openingMachineId)}
+                        {practiceMachineActionLabel(machine, openingMachineId, t)}
                       </span>
                       <span className={styles.machineArrow}><MIcon name="arrow_forward" size={20} /></span>
                     </button>
@@ -969,8 +976,8 @@ export default function StudentHomePage({ courseView = false }) {
                       className={styles.machineInfoButton}
                       onClick={() => openMachineInformation(machine)}
                       disabled={machine.vmid == null}
-                      aria-label={`查看 ${machine.classMachineName ?? machine.name} 的完整資源資訊`}
-                      title="前往我的資源查看完整設定"
+                      aria-label={t("StudentHomePage.machineInfoAria", { name: machine.classMachineName ?? machine.name })}
+                      title={t("StudentHomePage.machineInfoTitle")}
                     >
                       <MIcon name="info" size={20} />
                     </button>
@@ -986,14 +993,14 @@ export default function StudentHomePage({ courseView = false }) {
       <section className={styles.taskSection} aria-labelledby="task-title" data-student-tour="tasks" data-guide="home-tasks">
         <div className={styles.sectionHeading}>
           <div>
-            <p className={styles.eyebrow}>老師已發布 · 任務與檢查集中在這裡</p>
-            <h2 id="task-title">課程任務</h2>
+            <p className={styles.eyebrow}>{t("StudentHomePage.publishedByTeacher")}</p>
+            <h2 id="task-title">{t("StudentHomePage.courseTasks")}</h2>
           </div>
-          {(view.weeklyTasks.length > 0 || aiRequirementCount > 0) && <span>{view.weeklyTasks.length} 個課堂任務 · {weeklyCheckpointCount + standaloneAiAssignments.reduce((count, assignment) => count + (assignment.items?.length ?? 0), 0)} 個 Checkpoint</span>}
+          {(view.weeklyTasks.length > 0 || aiRequirementCount > 0) && <span>{t("StudentHomePage.taskSummary", { taskCount: view.weeklyTasks.length, checkpointCount: weeklyCheckpointCount + standaloneAiAssignments.reduce((count, assignment) => count + (assignment.items?.length ?? 0), 0) })}</span>}
         </div>
 
         {view.weeklyTasks.length > 0 && (
-          <div className={styles.weeklyTaskList} aria-label="老師發布的課堂任務">
+          <div className={styles.weeklyTaskList} aria-label={t("StudentHomePage.weeklyTaskListAria")}>
             {view.weeklyTasks.map((task, index) => {
               const expanded = expandedWeeklyTaskId === task.id;
               const checkpoints = task.checkpoints ?? [];
@@ -1002,14 +1009,14 @@ export default function StudentHomePage({ courseView = false }) {
                   <span className={styles.taskNumber}>{index + 1}</span>
                   <span className={styles.assignmentTitle}>
                     <strong>{task.title}</strong>
-                    <small>第 {task.week_number} 週 · {task.session_date} · {checkpoints.length} 個 Checkpoint</small>
+                    <small>{t("StudentHomePage.weekSummary", { week: task.week_number, date: task.session_date, count: checkpoints.length })}</small>
                   </span>
-                  <span className={styles.weeklyTaskHint}>{expanded ? "收合" : "展開任務"}</span>
+                  <span className={styles.weeklyTaskHint}>{expanded ? t("StudentHomePage.collapse") : t("StudentHomePage.expandTask")}</span>
                   <MIcon name={expanded ? "expand_less" : "expand_more"} size={22} />
                 </button>
                 {expanded && <div className={styles.weeklyTaskDetail} id={`weekly-task-${task.id}`}>
                   <div className={styles.weeklyTaskFiles}>
-                    {(task.files ?? []).length > 0 ? task.files.map((file) => <button type="button" className={styles.pdfButton} key={file.id} onClick={() => openWeeklyTaskDocument(task, file)} disabled={openingDocumentId !== null} title={file.filename}><MIcon name={openingDocumentId === file.id ? "hourglass_top" : "picture_as_pdf"} size={18} />{openingDocumentId === file.id ? "正在開啟…" : `查看 PDF · ${file.filename}`}</button>) : <span className={styles.noTaskFile}>本週沒有附加 PDF</span>}
+                    {(task.files ?? []).length > 0 ? task.files.map((file) => <button type="button" className={styles.pdfButton} key={file.id} onClick={() => openWeeklyTaskDocument(task, file)} disabled={openingDocumentId !== null} title={file.filename}><MIcon name={openingDocumentId === file.id ? "hourglass_top" : "picture_as_pdf"} size={18} />{openingDocumentId === file.id ? t("StudentHomePage.opening") : t("StudentHomePage.viewPdfNamed", { filename: file.filename })}</button>) : <span className={styles.noTaskFile}>{t("StudentHomePage.noWeeklyPdf")}</span>}
                   </div>
                   {checkpoints.length > 0 ? <ol className={styles.checkpointList}>
                     {checkpoints.map((checkpoint, checkpointIndex) => {
@@ -1020,11 +1027,11 @@ export default function StudentHomePage({ courseView = false }) {
                       const resultItem = check?.items?.[0];
                       return <li className={styles.checkpointRow} key={key}>
                         <span className={styles.aiRequirementNumber}>{checkpointIndex + 1}</span>
-                        <div className={styles.checkpointContent}><small className={styles.checkpointSource}>AI 檢查任務 · {checkpoint.assignment_title}</small><strong>{checkpoint.title}</strong>{checkpoint.description && <p>{checkpoint.description}</p>}{check && !running && <div className={`${styles.checkpointResult} ${styles[`checkpointResult_${check.status}`]}`}><MIcon name={check.status === "completed" ? "task_alt" : "error_outline"} size={17} /><span><b>{resultItem?.comment || check.error || check.summary || checkMeta?.label}</b>{typeof resultItem?.score === "number" && <small>得分 {resultItem.score}/{resultItem.max_score ?? 1}</small>}</span></div>}</div>
-                        <button type="button" className={styles.checkpointCheckButton} onClick={() => submitCheckpointCheck(checkpoint)} disabled={Boolean(checkingCheckpointKey) || running || !checkpoint.check_available} title={checkpoint.check_available ? "" : "老師尚未產生並核准這份任務的檢查腳本"}><MIcon name={running ? "sync" : checkpoint.check_available && check?.status === "completed" ? "refresh" : checkpoint.check_available ? "fact_check" : "schedule"} size={17} />{running ? "檢查中…" : checkingCheckpointKey === key ? "送出中…" : !checkpoint.check_available ? "等待老師啟用" : check ? "重新檢查" : "檢查這一項"}</button>
+                        <div className={styles.checkpointContent}><small className={styles.checkpointSource}>{t("StudentHomePage.aiCheckTaskSource", { title: checkpoint.assignment_title })}</small><strong>{checkpoint.title}</strong>{checkpoint.description && <p>{checkpoint.description}</p>}{check && !running && <div className={`${styles.checkpointResult} ${styles[`checkpointResult_${check.status}`]}`}><MIcon name={check.status === "completed" ? "task_alt" : "error_outline"} size={17} /><span><b>{resultItem?.comment || check.error || check.summary || (checkMeta && t(checkMeta.labelKey))}</b>{typeof resultItem?.score === "number" && <small>{t("StudentHomePage.scoreLine", { score: resultItem.score, max: resultItem.max_score ?? 1 })}</small>}</span></div>}</div>
+                        <button type="button" className={styles.checkpointCheckButton} onClick={() => submitCheckpointCheck(checkpoint)} disabled={Boolean(checkingCheckpointKey) || running || !checkpoint.check_available} title={checkpoint.check_available ? "" : t("StudentHomePage.checkpointNotApproved")}><MIcon name={running ? "sync" : checkpoint.check_available && check?.status === "completed" ? "refresh" : checkpoint.check_available ? "fact_check" : "schedule"} size={17} />{running ? t("StudentHomePage.checking") : checkingCheckpointKey === key ? t("StudentHomePage.submitting") : !checkpoint.check_available ? t("StudentHomePage.waitingForTeacherEnable") : check ? t("StudentHomePage.recheck") : t("StudentHomePage.checkThisOne")}</button>
                       </li>;
                     })}
-                  </ol> : <div className={styles.checkpointEmpty}><MIcon name="pending_actions" size={20} /><span>老師尚未為這週發布 Checkpoint。</span></div>}
+                  </ol> : <div className={styles.checkpointEmpty}><MIcon name="pending_actions" size={20} /><span>{t("StudentHomePage.noCheckpointsPublished")}</span></div>}
                 </div>}
               </article>;
             })}
@@ -1050,15 +1057,15 @@ export default function StudentHomePage({ courseView = false }) {
                     <span className={styles.taskNumber}>{index + 1}</span>
                     <span className={styles.assignmentTitle}>
                       <strong>{assignment.title}</strong>
-                      <small>{formatAssignmentDate(assignment.approved_at)} · {assignment.teaching_class_name} · {assignment.items?.length ?? 0} 個檢查項目</small>
+                      <small>{t("StudentHomePage.assignmentSummary", { date: formatAssignmentDate(assignment.approved_at, t), className: assignment.teaching_class_name, count: assignment.items?.length ?? 0 })}</small>
                     </span>
                     {checkMeta ? (
                       <span className={`${styles.assignmentStatus} ${styles[`assignmentStatus_${checkMeta.tone}`]}`}>
-                        <MIcon name={checkMeta.icon} size={16} />{checkMeta.label}
+                        <MIcon name={checkMeta.icon} size={16} />{t(checkMeta.labelKey)}
                       </span>
                     ) : (
                       <span className={`${styles.assignmentStatus} ${styles.assignmentStatus_ready}`}>
-                        <MIcon name="radio_button_unchecked" size={16} />尚未送檢
+                        <MIcon name="radio_button_unchecked" size={16} />{t("StudentHomePage.notYetChecked")}
                       </span>
                     )}
                     <MIcon name={expanded ? "expand_less" : "expand_more"} size={21} />
@@ -1069,8 +1076,8 @@ export default function StudentHomePage({ courseView = false }) {
                       <div className={styles.aiBrief}>
                         <span><MIcon name="auto_awesome" size={19} /></span>
                         <div>
-                          <strong>AI 整理的任務重點</strong>
-                          <p>{assignment.summary || "依照下面的項目完成操作，完成後再送出 AI Check。"}</p>
+                          <strong>{t("StudentHomePage.aiSummaryTitle")}</strong>
+                          <p>{assignment.summary || t("StudentHomePage.aiSummaryFallback")}</p>
                         </div>
                       </div>
 
@@ -1078,10 +1085,10 @@ export default function StudentHomePage({ courseView = false }) {
                         <div className={styles.assignmentDocumentMeta}>
                           <span><MIcon name="picture_as_pdf" size={21} /></span>
                           <div>
-                            <strong>老師上傳的任務 PDF</strong>
+                            <strong>{t("StudentHomePage.teacherUploadedPdf")}</strong>
                             <small>
                               {assignment.source_document.display_name || assignment.source_document.filename}
-                              {` · 對應下方 ${assignment.items?.length ?? 0} 個檢查項目`}
+                              {t("StudentHomePage.correspondingItems", { count: assignment.items?.length ?? 0 })}
                             </small>
                           </div>
                         </div>
@@ -1100,7 +1107,7 @@ export default function StudentHomePage({ courseView = false }) {
                               </div>
                               <span className={`${styles.aiCheckBadge} ${styles[detectableMeta.tone]}`}>
                                 <MIcon name={detectableMeta.icon} size={15} />
-                                {detectableMeta.label}
+                                {t(detectableMeta.labelKey)}
                               </span>
                             </li>
                           );
@@ -1108,13 +1115,13 @@ export default function StudentHomePage({ courseView = false }) {
                       </ol>
 
                       {check && (
-                        <section className={`${styles.aiReply} ${styles[`aiReply_${check.status}`]}`} aria-label="AI Check 回覆">
+                        <section className={`${styles.aiReply} ${styles[`aiReply_${check.status}`]}`} aria-label={t("StudentHomePage.aiReplyAria")}>
                           <header>
                             <span><MIcon name={checkRunning ? "sync" : check.status === "completed" ? "smart_toy" : "error_outline"} size={20} /></span>
                             <div>
-                              <strong>{checkRunning ? "AI 正在檢查你的課堂環境" : "AI Check 回覆"}</strong>
+                              <strong>{checkRunning ? t("StudentHomePage.aiCheckingEnvironment") : t("StudentHomePage.aiCheckReply")}</strong>
                               <small>
-                                {typeof check.score === "number" ? `評分 ${check.score}/${check.max_score ?? 5}` : checkMeta?.label}
+                                {typeof check.score === "number" ? t("StudentHomePage.scoreLineWithDefault", { score: check.score, max: check.max_score ?? 5 }) : (checkMeta && t(checkMeta.labelKey))}
                               </small>
                             </div>
                           </header>
@@ -1124,7 +1131,7 @@ export default function StudentHomePage({ courseView = false }) {
                               {check.items.map((item, itemIndex) => (
                                 <div key={`${item.item_id}-${itemIndex}`}>
                                   <MIcon name={item.status === "passed" ? "check_circle" : "tips_and_updates"} size={17} />
-                                  <span><strong>{item.title || "評分項目"}</strong>{item.comment && <small>{item.comment}</small>}</span>
+                                  <span><strong>{item.title || t("StudentHomePage.scoringItem")}</strong>{item.comment && <small>{item.comment}</small>}</span>
                                   {typeof item.score === "number" && <em>{item.score}/{item.max_score ?? 1}</em>}
                                 </div>
                               ))}
@@ -1134,7 +1141,7 @@ export default function StudentHomePage({ courseView = false }) {
                       )}
 
                       <footer className={styles.assignmentActions}>
-                        <span><MIcon name="info" size={16} />送出前請先啟動課堂機器，AI 只會檢查你自己的環境。</span>
+                        <span><MIcon name="info" size={16} />{t("StudentHomePage.startMachineBeforeSubmit")}</span>
                         <div className={styles.assignmentActionButtons}>
                           {assignment.source_document && (
                             <button
@@ -1145,7 +1152,7 @@ export default function StudentHomePage({ courseView = false }) {
                               title={assignment.source_document.filename}
                             >
                               <MIcon name={openingDocumentId === assignment.id ? "hourglass_top" : "picture_as_pdf"} size={18} />
-                              {openingDocumentId === assignment.id ? "正在開啟…" : "查看任務 PDF"}
+                              {openingDocumentId === assignment.id ? t("StudentHomePage.opening") : t("StudentHomePage.viewTaskPdf")}
                             </button>
                           )}
                           <button
@@ -1156,12 +1163,12 @@ export default function StudentHomePage({ courseView = false }) {
                           >
                             <MIcon name={checkRunning ? "sync" : "fact_check"} size={18} />
                             {checkRunning
-                              ? "AI 檢查中…"
+                              ? t("StudentHomePage.aiChecking")
                               : checkingAssignmentId === assignment.id
-                                ? "正在送出…"
+                                ? t("StudentHomePage.submitting")
                                 : check?.status === "completed"
-                                  ? "完成修正，再次 AI Check"
-                                  : "我完成了，送出 AI Check"}
+                                  ? t("StudentHomePage.fixedRecheck")
+                                  : t("StudentHomePage.doneSubmitCheck")}
                           </button>
                         </div>
                       </footer>
@@ -1175,8 +1182,8 @@ export default function StudentHomePage({ courseView = false }) {
           <div className={styles.taskEmpty}>
             <MIcon name="checklist" size={24} />
             <div>
-              <strong>老師尚未發布 AI 檢查任務</strong>
-              <p>老師在 AI 檢查頁建立、綁定週次並核准後，任務與 Checkpoint 就會出現在這裡。</p>
+              <strong>{t("StudentHomePage.noAiTasksPublished")}</strong>
+              <p>{t("StudentHomePage.noAiTasksDesc")}</p>
             </div>
           </div>
         ) : null}
@@ -1188,34 +1195,31 @@ export default function StudentHomePage({ courseView = false }) {
       <section className={styles.otherNeeds} aria-labelledby="other-needs-title" data-guide="home-other-needs">
         <div className={styles.sectionHeading}>
           <div>
-            <p className={styles.eyebrow}>不是現在要上課？</p>
-            <h2 id="other-needs-title">其他使用情境</h2>
+            <h2 id="other-needs-title">{t("StudentHomePage.otherUseCases")}</h2>
           </div>
         </div>
 
         <div className={styles.needGrid}>
           <article className={styles.needCard} data-student-tour="practice">
-            <span className={`${styles.needIcon} ${styles.needIcon_primary}`}><MIcon name="history" size={22} /></span>
             <div>
-              <span className={styles.needBadge}>下課後練習 · 沿用原環境</span>
-              <h3>繼續上次的課堂進度</h3>
-              <p>回到相同課程與機器，任務、檔案及作答進度都會保留。</p>
+              <span className={styles.needBadge}>{t("StudentHomePage.afterClassBadge")}</span>
+              <h3>{t("StudentHomePage.continueLastProgress")}</h3>
+              <p>{t("StudentHomePage.continueLastProgressDesc")}</p>
             </div>
             <button type="button" className={styles.secondaryButton} onClick={() => openCourseOverview()}>
-              繼續練習
+              {t("StudentHomePage.continuePractice")}
               <MIcon name="arrow_forward" size={18} />
             </button>
           </article>
 
           <article className={`${styles.needCard} ${styles.researchCard}`} data-student-tour="research">
-            <span className={`${styles.needIcon} ${styles.needIcon_info}`}><MIcon name="science" size={22} /></span>
             <div>
-              <span className={`${styles.needBadge} ${styles.needBadge_info}`}>自主研究 · 需要申請</span>
-              <h3>建立自己的研究環境</h3>
-              <p>適合專題、開發或實驗需求；這個入口先保留，申請流程將再持續優化。</p>
+              <span className={`${styles.needBadge} ${styles.needBadge_info}`}>{t("StudentHomePage.researchBadge")}</span>
+              <h3>{t("StudentHomePage.buildResearchEnv")}</h3>
+              <p>{t("StudentHomePage.buildResearchEnvDesc")}</p>
             </div>
             <button type="button" className={styles.secondaryButton} onClick={() => navigate("/my-requests")}>
-              前往我的申請
+              {t("StudentHomePage.goToMyRequests")}
               <MIcon name="arrow_forward" size={18} />
             </button>
           </article>
@@ -1224,14 +1228,13 @@ export default function StudentHomePage({ courseView = false }) {
         <section className={styles.quickTemplateSection} aria-labelledby="quick-template-title" data-guide="home-quick-templates">
           <div className={styles.sectionHeading}>
             <div>
-              <p className={styles.eyebrow}>免等待人工審核</p>
-              <h2 id="quick-template-title">快速練習環境</h2>
+              <h2 id="quick-template-title">{t("StudentHomePage.quickPracticeEnv")}</h2>
             </div>
-            <span>選擇固定配置的多機環境，整組啟動並受練習時限管理</span>
+            <span>{t("StudentHomePage.quickPracticeEnvDesc")}</span>
           </div>
 
           {templatesLoading ? (
-            <div className={styles.quickTemplateGrid} aria-label="正在載入快速模板">
+            <div className={styles.quickTemplateGrid} aria-label={t("StudentHomePage.loadingTemplatesAria")}>
               {[0, 1, 2].map((item) => <div key={item} className={styles.quickTemplateSkeleton} />)}
             </div>
           ) : displayedQuickTemplates.length > 0 ? (
@@ -1247,18 +1250,18 @@ export default function StudentHomePage({ courseView = false }) {
                   <div className={styles.templateHeader}>
                     <span className={styles.templateLogo}><MIcon name="layers" size={22} /></span>
                     <span className={styles.templateCategoryChip}>
-                      免人工審核
+                      {t("StudentHomePage.noManualReviewChip")}
                     </span>
                   </div>
                   <div className={styles.templateBody}>
                     <h4 className={styles.templateName}>{template.name}</h4>
                     <p className={styles.templateDesc}>
-                      {template.description || `包含 ${template.nodes.length} 台機器，適合臨時練習與課後操作。`}
+                      {template.description || t("StudentHomePage.templateDescFallback", { count: template.nodes.length })}
                     </p>
                   </div>
                   <div className={styles.templateFooter}>
                     <span className={styles.templateAction}>
-                      立即建立
+                      {t("StudentHomePage.createNow")}
                       <MIcon name="arrow_forward" size={14} />
                     </span>
                   </div>
@@ -1269,8 +1272,8 @@ export default function StudentHomePage({ courseView = false }) {
             <div className={styles.quickTemplateEmpty}>
               <span><MIcon name="inventory_2" size={23} /></span>
               <div>
-                <strong>目前沒有可快速建立的模板</strong>
-                <p>老師發布可供快速練習的多機環境後，就會顯示在這裡。</p>
+                <strong>{t("StudentHomePage.noQuickTemplatesTitle")}</strong>
+                <p>{t("StudentHomePage.noQuickTemplatesDesc")}</p>
               </div>
             </div>
           )}
@@ -1291,7 +1294,7 @@ export default function StudentHomePage({ courseView = false }) {
             className={styles.pdfDialog}
             role="dialog"
             aria-modal="true"
-            aria-label={`任務 PDF：${documentPreview.displayName}`}
+            aria-label={t("StudentHomePage.taskPdfAria", { name: documentPreview.displayName })}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <header>
@@ -1304,9 +1307,9 @@ export default function StudentHomePage({ courseView = false }) {
               </div>
               <div className={styles.pdfDialogActions}>
                 <a href={documentPreview.url} target="_blank" rel="noreferrer">
-                  <MIcon name="open_in_new" size={18} />新分頁開啟
+                  <MIcon name="open_in_new" size={18} />{t("StudentHomePage.openInNewTab")}
                 </a>
-                <button type="button" onClick={() => setDocumentPreview(null)} aria-label="關閉任務 PDF">
+                <button type="button" onClick={() => setDocumentPreview(null)} aria-label={t("StudentHomePage.closeTaskPdf")}>
                   <MIcon name="close" size={20} />
                 </button>
               </div>

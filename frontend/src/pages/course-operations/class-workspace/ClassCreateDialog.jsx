@@ -1,12 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import MIcon from "../../../components/MIcon";
 import { TeachingClassesService } from "../../../services/teachingClasses";
+import { focusInvalidField } from "../../../utils/focusField";
 import {
-  CLASS_TIMEZONES,
+  BOOT_LEAD_OPTIONS,
   classSchedulePayload,
   createClassScheduleForm,
+  SHUTDOWN_GRACE_OPTIONS,
 } from "../classScheduleForm";
 import styles from "../CourseOperations.module.scss";
+
+const WEEKDAY_KEYS = [
+  "ClassCreateDialog.weekdayMon",
+  "ClassCreateDialog.weekdayTue",
+  "ClassCreateDialog.weekdayWed",
+  "ClassCreateDialog.weekdayThu",
+  "ClassCreateDialog.weekdayFri",
+  "ClassCreateDialog.weekdaySat",
+  "ClassCreateDialog.weekdaySun",
+];
 
 export default function ClassCreateDialog({
   item = null,
@@ -15,10 +28,13 @@ export default function ClassCreateDialog({
   onCreated,
   onUpdated,
 }) {
+  const { t } = useTranslation("teaching");
   const isEdit = Boolean(item);
   const [form, setForm] = useState(() => createClassScheduleForm(item));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [nameInvalid, setNameInvalid] = useState(false);
+  const nameInputRef = useRef(null);
 
   useEffect(() => {
     function closeOnEscape(event) {
@@ -34,7 +50,11 @@ export default function ClassCreateDialog({
 
   async function submit(event) {
     event.preventDefault();
-    if (!form.name.trim()) return;
+    if (!form.name.trim()) {
+      setNameInvalid(true);
+      focusInvalidField(nameInputRef.current);
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
@@ -47,8 +67,8 @@ export default function ClassCreateDialog({
       setError(
         reason?.message ??
           (isEdit
-            ? "儲存班級失敗，請稍後再試。"
-            : "建立班級失敗，請稍後再試。"),
+            ? t("ClassCreateDialog.saveFailed")
+            : t("ClassCreateDialog.createFailed")),
       );
     } finally {
       setSubmitting(false);
@@ -71,12 +91,12 @@ export default function ClassCreateDialog({
       >
         <header className={styles.createDialogHeader}>
           <h2 id="create-class-title">
-            {isEdit ? "編輯班級與課表" : "建立班級"}
+            {isEdit ? t("ClassCreateDialog.editTitle") : t("ClassCreateDialog.createTitle")}
           </h2>
           <button
             type="button"
             className={styles.iconBtn}
-            aria-label="關閉"
+            aria-label={t("ClassCreateDialog.closeAria")}
             disabled={submitting}
             onClick={onClose}
           >
@@ -87,42 +107,36 @@ export default function ClassCreateDialog({
         <form onSubmit={submit}>
           <div className={styles.createDialogBody}>
             <div className={styles.compactFormSection}>
-              <h3>班級資料</h3>
+              <h3>{t("ClassCreateDialog.sectionClassInfo")}</h3>
               <div className={styles.createFormGrid}>
                 <label className={`${styles.field} ${styles.createNameField}`}>
-                  <span>班級名稱</span>
+                  <span>{t("ClassCreateDialog.fieldClassName")}</span>
                   <input
+                    ref={nameInputRef}
+                    className={nameInvalid ? styles.fieldInvalid : undefined}
                     value={form.name}
-                    onChange={(event) => update("name", event.target.value)}
-                    placeholder="Linux 系統管理｜114-1"
+                    onChange={(event) => { update("name", event.target.value); setNameInvalid(false); }}
+                    placeholder={t("ClassCreateDialog.classNamePlaceholder")}
                     autoFocus
                   />
                 </label>
                 <label className={styles.field}>
-                  <span>班級代碼</span>
-                  <input
-                    value={form.code}
-                    onChange={(event) => update("code", event.target.value)}
-                    placeholder="CS-LINUX-1141"
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>學期</span>
+                  <span>{t("ClassCreateDialog.fieldTerm")}</span>
                   <input
                     value={form.term}
                     onChange={(event) => update("term", event.target.value)}
                   />
                 </label>
                 <label className={styles.field}>
-                  <span>上課地點</span>
+                  <span>{t("ClassCreateDialog.fieldLocation")}</span>
                   <input
                     value={form.location}
                     onChange={(event) => update("location", event.target.value)}
-                    placeholder="例如：電腦教室 A"
+                    placeholder={t("ClassCreateDialog.locationPlaceholder")}
                   />
                 </label>
                 <label className={styles.field}>
-                  <span>開始日期</span>
+                  <span>{t("ClassCreateDialog.fieldStartDate")}</span>
                   <input
                     type="date"
                     value={form.startDate}
@@ -132,7 +146,7 @@ export default function ClassCreateDialog({
                   />
                 </label>
                 <label className={styles.field}>
-                  <span>結束日期</span>
+                  <span>{t("ClassCreateDialog.fieldEndDate")}</span>
                   <input
                     type="date"
                     value={form.endDate}
@@ -143,73 +157,73 @@ export default function ClassCreateDialog({
             </div>
 
             <div className={styles.compactFormSection}>
-              <h3>固定上課時段</h3>
+              <h3>{t("ClassCreateDialog.sectionFixedSchedule")}</h3>
               <div className={styles.createFormGrid}>
                 <label className={styles.field}>
-                  <span>每週星期</span>
+                  <span>{t("ClassCreateDialog.fieldWeekday")}</span>
                   <select
                     value={form.weekday}
                     onChange={(event) =>
                       update("weekday", Number(event.target.value))
                     }
                   >
-                    {[
-                      "星期一",
-                      "星期二",
-                      "星期三",
-                      "星期四",
-                      "星期五",
-                      "星期六",
-                      "星期日",
-                    ].map((label, index) => (
-                      <option key={label} value={index}>
-                        {label}
+                    {WEEKDAY_KEYS.map((labelKey, index) => (
+                      <option key={labelKey} value={index}>
+                        {t(labelKey)}
                       </option>
                     ))}
                   </select>
                 </label>
                 <label className={styles.field}>
-                  <span>開始時間</span>
-                  <input
-                    type="time"
-                    value={form.startTime}
-                    onChange={(event) =>
-                      update("startTime", event.target.value)
-                    }
-                  />
+                  <span>{t("ClassCreateDialog.fieldClassTime")}</span>
+                  <div className={styles.timePair}>
+                    <input
+                      type="time"
+                      value={form.startTime}
+                      onChange={(event) =>
+                        update("startTime", event.target.value)
+                      }
+                    />
+                    <i>{t("ClassCreateDialog.timeRangeSeparator")}</i>
+                    <input
+                      type="time"
+                      value={form.endTime}
+                      onChange={(event) => update("endTime", event.target.value)}
+                    />
+                  </div>
                 </label>
                 <label className={styles.field}>
-                  <span>結束時間</span>
-                  <input
-                    type="time"
-                    value={form.endTime}
-                    onChange={(event) => update("endTime", event.target.value)}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>時區</span>
-                  <select
-                    value={form.timezone}
-                    onChange={(event) => update("timezone", event.target.value)}
-                  >
-                    {CLASS_TIMEZONES.map((timezone) => (
-                      <option key={timezone}>{timezone}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className={styles.field}>
-                  <span>提前開機</span>
+                  <span>{t("ClassCreateDialog.fieldBootLead")}</span>
                   <select
                     value={form.bootLeadMinutes}
                     onChange={(event) =>
                       update("bootLeadMinutes", Number(event.target.value))
                     }
                   >
-                    <option value={0}>準時開機</option>
-                    <option value={5}>提前 5 分鐘</option>
-                    <option value={10}>提前 10 分鐘</option>
-                    <option value={15}>提前 15 分鐘</option>
-                    <option value={30}>提前 30 分鐘</option>
+                    {BOOT_LEAD_OPTIONS.map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutes === 0
+                          ? t("ClassCreateDialog.bootLeadOnTime")
+                          : t("ClassCreateDialog.bootLeadMinutesOption", { minutes })}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={styles.field}>
+                  <span>{t("ClassCreateDialog.fieldShutdownGrace")}</span>
+                  <select
+                    value={form.shutdownGraceMinutes}
+                    onChange={(event) =>
+                      update("shutdownGraceMinutes", Number(event.target.value))
+                    }
+                  >
+                    {SHUTDOWN_GRACE_OPTIONS.map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutes === 0
+                          ? t("ClassCreateDialog.shutdownGraceImmediate")
+                          : t("ClassCreateDialog.shutdownGraceMinutesOption", { minutes })}
+                      </option>
+                    ))}
                   </select>
                 </label>
               </div>
@@ -224,14 +238,14 @@ export default function ClassCreateDialog({
               disabled={submitting}
               onClick={onClose}
             >
-              取消
+              {t("ClassCreateDialog.cancelBtn")}
             </button>
             <button
               type="submit"
               className={styles.btnPrimary}
-              disabled={!form.name.trim() || submitting}
+              disabled={submitting}
             >
-              {submitting ? "儲存中…" : isEdit ? "儲存變更" : "建立班級"}
+              {submitting ? t("ClassCreateDialog.savingBtn") : isEdit ? t("ClassCreateDialog.saveChangesBtn") : t("ClassCreateDialog.createClassBtn")}
             </button>
           </footer>
         </form>

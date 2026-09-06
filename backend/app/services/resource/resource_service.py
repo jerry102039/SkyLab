@@ -5,10 +5,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.exceptions import BadRequestError, ProxmoxError
 from app.models import TeachingClass, TeachingClassStatus
+from app.models.quick_practice import QuickPracticeSessionMachine
 from app.models.vm_request import VMProvisioningStatus, VMRequest, VMRequestStatus
 from app.repositories import audit_log as audit_log_repo
 from app.repositories import batch_provision as batch_provision_repo
@@ -123,13 +124,47 @@ def _placeholder_resource_status(req) -> ResourceStatus:
     return "provisioning"
 
 
+def practice_request_ids(session: Session) -> set[uuid.UUID]:
+    """快速練習機器對應的申請單 id，用來判斷規格是否已被環境版本鎖定。"""
+    return set(
+        session.exec(select(QuickPracticeSessionMachine.vm_request_id)).all()
+    )
+
+
+def _is_practice_resource(
+    session: Session | None,
+    db_resource,
+    known_ids: set[uuid.UUID] | None,
+) -> bool:
+    request_id = getattr(db_resource, "request_id", None)
+    if request_id is None:
+        return False
+    if known_ids is not None:
+        return request_id in known_ids
+    if session is None:
+        return False
+    return (
+        session.exec(
+            select(QuickPracticeSessionMachine.vm_request_id).where(
+                QuickPracticeSessionMachine.vm_request_id == request_id
+            )
+        ).first()
+        is not None
+    )
+
+
 def _build_resource_public(
     resource: dict, db_resource, node: str, vm_type: str,
     session: Session | None = None,
+    known_practice_ids: set[uuid.UUID] | None = None,
 ) -> ResourcePublic:
     vmid = resource.get("vmid")
     class_governed = bool(
         db_resource and db_resource.allocation_scope == "teaching_class"
+    )
+    # 課堂與快速練習的機器都照課程環境版本建立，規格不接受個別調整。
+    spec_fixed = class_governed or _is_practice_resource(
+        session, db_resource, known_practice_ids
     )
     class_available = not class_governed
     if class_governed and session is not None and db_resource.teaching_class_id:
@@ -179,7 +214,7 @@ def _build_resource_public(
         type=vm_type,
         can_control=class_available,
         can_delete=not class_governed,
-        can_request_spec_change=not class_governed,
+        can_request_spec_change=not spec_fixed,
         can_extend=class_available and not quick_practice_limited,
         environment_type=db_resource.environment_type if db_resource else None,
         os_info=db_resource.os_info if db_resource else None,
@@ -214,6 +249,7 @@ def list_all(
 ) -> list[ResourcePublic]:
     try:
         resources = proxmox_service.list_all_resources()
+        known_practice_ids = practice_request_ids(session)
         result = []
         for r in resources:
             if (node and r.get("node") != node) or r.get("template") == 1:
@@ -225,7 +261,9 @@ def list_all(
                 session=session, vmid=vmid
             )
             result.append(
-                _build_resource_public(r, db_resource, vm_node, vm_type, session)
+                _build_resource_public(
+                    r, db_resource, vm_node, vm_type, session, known_practice_ids
+                )
             )
         return result
     except Exception as e:
@@ -332,6 +370,7 @@ def list_by_user(
         )
         if user_resources:
             owned_vmids = {r.vmid: r for r in user_resources}
+            known_practice_ids = practice_request_ids(session)
             try:
                 for r in proxmox_service.list_all_resources():
                     if r.get("template") == 1:
@@ -346,6 +385,7 @@ def list_by_user(
                             r.get("node", ""),
                             r.get("type", ""),
                             session,
+                            known_practice_ids,
                         )
                     )
                     shown_vmids.add(vmid)

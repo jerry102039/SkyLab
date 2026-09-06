@@ -4,14 +4,12 @@ import threading
 import time
 from collections import Counter
 from dataclasses import dataclass
-from math import floor
 
 from app.domain.placement.config import settings
 from app.domain.placement.schemas import (
     NodeCapacity,
     NodeSnapshot,
     PlacementDecision,
-    PlacementPlan,
     PlacementRequest,
     ResourceSnapshot,
     ResourceType,
@@ -126,6 +124,7 @@ def _build_node_capacities(
                 node=node.node,
                 status=node.status,
                 gpu_count=node.gpu_count,
+                allocatable_gpu_slots=node.gpu_count,
                 running_resources=running_resources,
                 guest_soft_limit=guest_soft_limit,
                 guest_pressure_ratio=guest_pressure_ratio,
@@ -152,113 +151,6 @@ def _build_node_capacities(
         )
 
     return sorted(capacities, key=lambda item: item.node)
-
-
-def _build_rule_based_plan(
-    *,
-    request: PlacementRequest,
-    node_capacities: list[NodeCapacity],
-    effective_resource_type: ResourceType,
-    resource_type_reason: str,
-) -> PlacementPlan:
-    working_nodes = [item.model_copy(deep=True) for item in node_capacities]
-    required_cpu = _effective_cpu_cores(request, effective_resource_type)
-    required_memory = _effective_memory_bytes(request, effective_resource_type)
-    required_disk = request.disk_gb * GIB
-    placements: dict[str, int] = {item.node: 0 for item in working_nodes}
-    remaining = request.instance_count
-
-    while remaining > 0:
-        candidates = [
-            item
-            for item in working_nodes
-            if item.candidate
-            and _can_fit(
-                item,
-                cores=required_cpu,
-                memory_bytes=required_memory,
-                disk_bytes=required_disk,
-                gpu_required=request.gpu_required,
-            )
-        ]
-        if not candidates:
-            break
-
-        chosen = _choose_node(
-            nodes=candidates,
-            placements=placements,
-            cores=required_cpu,
-            memory_bytes=required_memory,
-            disk_bytes=required_disk,
-        )
-        placements[chosen.node] += 1
-        chosen.allocatable_cpu_cores = max(chosen.allocatable_cpu_cores - required_cpu, 0.0)
-        chosen.allocatable_memory_bytes = max(chosen.allocatable_memory_bytes - required_memory, 0)
-        chosen.allocatable_disk_bytes = max(chosen.allocatable_disk_bytes - required_disk, 0)
-        chosen.running_resources += 1
-        chosen.guest_pressure_ratio = _guest_pressure_ratio(
-            chosen.running_resources,
-            int(chosen.total_cpu_cores),
-        )
-        chosen.guest_overloaded = (
-            chosen.guest_pressure_ratio >= settings.guest_pressure_threshold
-        )
-        chosen.candidate = (
-            chosen.status == "online"
-            and chosen.allocatable_cpu_cores > 0
-            and chosen.allocatable_memory_bytes > 0
-            and chosen.allocatable_disk_bytes > 0
-            and not chosen.guest_overloaded
-        )
-        remaining -= 1
-
-    assigned = request.instance_count - remaining
-    placement_decisions = [
-        PlacementDecision(
-            node=item.node,
-            instance_count=placements[item.node],
-            cpu_cores_reserved=round(placements[item.node] * required_cpu, 2),
-            memory_bytes_reserved=placements[item.node] * required_memory,
-            disk_bytes_reserved=placements[item.node] * required_disk,
-            remaining_cpu_cores=round(item.allocatable_cpu_cores, 2),
-            remaining_memory_bytes=item.allocatable_memory_bytes,
-            remaining_disk_bytes=item.allocatable_disk_bytes,
-        )
-        for item in working_nodes
-        if placements[item.node] > 0
-    ]
-    placement_decisions.sort(key=lambda item: (-item.instance_count, item.node))
-
-    return PlacementPlan(
-        feasible=remaining == 0,
-        requested_resource_type=request.resource_type,
-        effective_resource_type=effective_resource_type,
-        resource_type_reason=resource_type_reason,
-        assigned_instances=assigned,
-        unassigned_instances=remaining,
-        recommended_node=placement_decisions[0].node if placement_decisions else None,
-        summary=_build_summary_text(
-            request=request,
-            placement_decisions=placement_decisions,
-            effective_resource_type=effective_resource_type,
-            assigned=assigned,
-            remaining=remaining,
-        ),
-        rationale=_build_rationale(
-            request=request,
-            placement_decisions=placement_decisions,
-            effective_resource_type=effective_resource_type,
-            node_capacities=node_capacities,
-        ),
-        warnings=_build_warnings(
-            node_capacities=node_capacities,
-            request=request,
-            effective_resource_type=effective_resource_type,
-            remaining=remaining,
-        ),
-        placements=placement_decisions,
-        candidate_nodes=node_capacities,
-    )
 
 
 def _build_warnings(
@@ -399,86 +291,6 @@ def _set_cached_cluster_state(
             nodes=nodes,
             resources=resources,
         )
-
-
-def _choose_node(
-    *,
-    nodes: list[NodeCapacity],
-    placements: dict[str, int],
-    cores: float,
-    memory_bytes: int,
-    disk_bytes: int,
-) -> NodeCapacity:
-    return max(
-        nodes,
-        key=lambda item: (
-            _fit_count(item, cores=cores, memory_bytes=memory_bytes, disk_bytes=disk_bytes),
-            _weighted_headroom_score(
-                item,
-                cores=cores,
-                memory_bytes=memory_bytes,
-                disk_bytes=disk_bytes,
-            ),
-            -placements[item.node],
-            -item.guest_pressure_ratio,
-        ),
-    )
-
-
-def _fit_count(
-    node: NodeCapacity,
-    *,
-    cores: float,
-    memory_bytes: int,
-    disk_bytes: int,
-) -> int:
-    cpu_fit = floor(node.allocatable_cpu_cores / float(cores)) if cores > 0 else 0
-    memory_fit = floor(node.allocatable_memory_bytes / memory_bytes) if memory_bytes > 0 else 0
-    disk_fit = floor(node.allocatable_disk_bytes / disk_bytes) if disk_bytes > 0 else 0
-    guest_fit = max(node.guest_soft_limit - node.running_resources, 0)
-    return max(min(cpu_fit, memory_fit, disk_fit, guest_fit), 0)
-
-
-def _weighted_headroom_score(
-    node: NodeCapacity,
-    *,
-    cores: float,
-    memory_bytes: int,
-    disk_bytes: int,
-) -> float:
-    cpu_total = max(node.total_cpu_cores, 1.0)
-    memory_total = max(float(node.total_memory_bytes), 1.0)
-    disk_total = max(float(node.total_disk_bytes), 1.0)
-    guest_total = max(float(node.guest_soft_limit), 1.0)
-
-    cpu_headroom = max(node.allocatable_cpu_cores - cores, 0.0) / cpu_total
-    memory_headroom = max(node.allocatable_memory_bytes - memory_bytes, 0) / memory_total
-    disk_headroom = max(node.allocatable_disk_bytes - disk_bytes, 0) / disk_total
-    guest_headroom = max(node.guest_soft_limit - node.running_resources - 1, 0) / guest_total
-
-    return (
-        (settings.placement_weight_cpu * cpu_headroom)
-        + (settings.placement_weight_memory * memory_headroom)
-        + (settings.placement_weight_disk * disk_headroom)
-        + (settings.placement_weight_guest * guest_headroom)
-    )
-
-
-def _can_fit(
-    node: NodeCapacity,
-    *,
-    cores: float,
-    memory_bytes: int,
-    disk_bytes: int,
-    gpu_required: int,
-) -> bool:
-    return (
-        node.allocatable_cpu_cores >= cores
-        and node.allocatable_memory_bytes >= memory_bytes
-        and node.allocatable_disk_bytes >= disk_bytes
-        and node.gpu_count >= gpu_required
-        and node.running_resources < node.guest_soft_limit
-    )
 
 
 def _effective_cpu_cores(request: PlacementRequest, resource_type: ResourceType) -> float:

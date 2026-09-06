@@ -255,52 +255,6 @@
 .badge_danger  { background: color-mix(in srgb, var(--color-danger) 12%, transparent); color: var(--color-danger); }
 .badge_muted   { background: var(--color-hover); color: var(--color-status-neutral); }
 
-/* ── 放置策略 ── */
-.strategyGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: $spacing-16;
-
-  @include respond-to(md) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-.strategyCard,
-.strategyCardActive {
-  @include flex-column;
-  gap: $spacing-4;
-  padding: $spacing-16;
-  border-radius: $radius-12;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color $transition-base, background $transition-base;
-}
-
-.strategyCard {
-  border: 2px solid var(--color-border);
-  background: transparent;
-
-  &:hover { border-color: var(--color-text-muted); }
-}
-
-.strategyCardActive {
-  border: 2px solid var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
-}
-
-.strategyTitle {
-  font-size: $font-size-14;
-  font-weight: $font-weight-700;
-  color: var(--color-text-primary);
-}
-
-.strategyDesc {
-  font-size: $font-size-12;
-  color: var(--color-text-secondary);
-  line-height: $line-height-base;
-}
-
 /* ── 節點 / Storage 列表 ── */
 .list {
   @include flex-column;

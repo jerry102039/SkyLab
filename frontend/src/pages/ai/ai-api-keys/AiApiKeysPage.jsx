@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./AiApiKeysPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -15,29 +16,27 @@ function fmtTime(iso) {
   return iso ? new Date(iso).toLocaleString("zh-TW") : "—";
 }
 
-function inactiveReasonLabel(reason) {
-  if (!reason) return "—";
-  return reason === "revoked" ? "已撤銷" : "已過期";
-}
-
 function StatusBadge({ item }) {
+  const { t } = useTranslation("ai");
   const isActive = item.status === "active";
   return (
     <span className={`${styles.badge} ${isActive ? styles.badge_active : styles.badge_inactive}`}>
       <span className={styles.dot} />
-      {isActive ? "啟用" : "失效"}
+      {isActive ? t("AiApiKeysPage.statusActive") : t("AiApiKeysPage.statusInactive")}
     </span>
   );
 }
 
 function EmptyState() {
+  const { t } = useTranslation("ai");
   return (
-    <SharedEmptyState icon="vpn_key" title="尚無金鑰紀錄" />
+    <SharedEmptyState icon="vpn_key" title={t("AiApiKeysPage.emptyTitle")} />
   );
 }
 
 /* ── Delete dialog ── */
 function DeleteDialog({ item, closing = false, onClose, onDone }) {
+  const { t } = useTranslation("ai");
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -47,11 +46,11 @@ function DeleteDialog({ item, closing = false, onClose, onDone }) {
     setBusy(true);
     try {
       await AiApiService.revokeCredential(item.id);
-      toast.success("金鑰已刪除");
+      toast.success(t("AiApiKeysPage.deleteSuccess"));
       onClose();
       onDone();
     } catch (e) {
-      toast.error(e?.message ?? "刪除失敗");
+      toast.error(e?.message ?? t("AiApiKeysPage.deleteError"));
     } finally {
       setBusy(false);
     }
@@ -64,17 +63,17 @@ function DeleteDialog({ item, closing = false, onClose, onDone }) {
     >
       <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
         <div className={styles.dialogHeader}>
-          <h3 className={styles.dialogTitle}>確認刪除這把金鑰？</h3>
+          <h3 className={styles.dialogTitle}>{t("AiApiKeysPage.deleteConfirmTitle")}</h3>
           <p className={styles.dialogDesc}>
-            你即將刪除「{item.api_key_name}」。這個動作無法復原。
+            {t("AiApiKeysPage.deleteConfirmDesc", { name: item.api_key_name })}
           </p>
         </div>
         <div className={styles.dialogFooter}>
           <button type="button" className={styles.btnOutline} onClick={onClose} disabled={busy}>
-            取消
+            {t("AiApiKeysPage.cancel")}
           </button>
           <button type="button" className={styles.btnDanger} onClick={handleDelete} disabled={busy}>
-            {busy ? "刪除中…" : "確認刪除"}
+            {busy ? t("AiApiKeysPage.deleting") : t("AiApiKeysPage.confirmDelete")}
           </button>
         </div>
       </div>
@@ -83,6 +82,7 @@ function DeleteDialog({ item, closing = false, onClose, onDone }) {
 }
 
 export default function AiApiKeysPage() {
+  const { t } = useTranslation("ai");
   const toast = useToast();
   const [statusFilter, setStatusFilter] = useState("all");
   const [userEmail, setUserEmail] = useState("");
@@ -92,6 +92,11 @@ export default function AiApiKeysPage() {
   const [loading, setLoading] = useState(true);
   const [deletingItem, setDeletingItem] = useState(null);
   const deleteDialog = useDialogPresence(deletingItem);
+
+  function inactiveReasonLabel(reason) {
+    if (!reason) return "—";
+    return reason === "revoked" ? t("AiApiKeysPage.inactiveReasonRevoked") : t("AiApiKeysPage.inactiveReasonExpired");
+  }
 
   /* ── counts ── */
   const [allCount, setAllCount] = useState(0);
@@ -128,70 +133,76 @@ export default function AiApiKeysPage() {
       const start = page * PAGE_SIZE;
       setRows(filtered.slice(start, start + PAGE_SIZE));
     } catch (e) {
-      if (!silent) toast.error(e?.message ?? "載入金鑰資料失敗");
+      if (!silent) toast.error(e?.message ?? t("AiApiKeysPage.loadError"));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [statusFilter, userEmail, page, toast]);
+  }, [statusFilter, userEmail, page, toast, t]);
 
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(() => load(true));
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const COLS = ["使用者", "金鑰名稱", "金鑰前綴", "狀態", "失效原因", "建立時間", "過期時間", "撤銷時間", "操作"];
+  const COLS = [
+    t("AiApiKeysPage.colUser"),
+    t("AiApiKeysPage.colKeyName"),
+    t("AiApiKeysPage.colKeyPrefix"),
+    t("AiApiKeysPage.colStatus"),
+    t("AiApiKeysPage.colInactiveReason"),
+    t("AiApiKeysPage.colCreatedAt"),
+    t("AiApiKeysPage.colExpiresAt"),
+    t("AiApiKeysPage.colRevokedAt"),
+    t("AiApiKeysPage.colActions"),
+  ];
 
   return (
     <div className={styles.page}>
-      <PageHeader title="金鑰管理" subtitle="查看目前資料庫中所有 AI API 金鑰紀錄與狀態（僅顯示現存紀錄）。" />
+      <PageHeader title={t("AiApiKeysPage.pageTitle")} subtitle={t("AiApiKeysPage.pageSubtitle")} />
 
       {/* ── Stat cards ── */}
       <div className={styles.statRow}>
         <div className={styles.statCard}>
           <div className={styles.statIcon}><MIcon name="key" size={20} /></div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>全部紀錄</span>
+            <span className={styles.statLabel}>{t("AiApiKeysPage.statAll")}</span>
             <span className={styles.statValue}>{allCount}</span>
           </div>
         </div>
         <div className={styles.statCard}>
           <div className={`${styles.statIcon} ${styles.statIconOk}`}><MIcon name="check_circle" size={20} /></div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>啟用</span>
+            <span className={styles.statLabel}>{t("AiApiKeysPage.statActive")}</span>
             <span className={styles.statValue}>{activeCount}</span>
           </div>
         </div>
         <div className={styles.statCard}>
           <div className={`${styles.statIcon} ${styles.statIconErr}`}><MIcon name="cancel" size={20} /></div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>失效</span>
+            <span className={styles.statLabel}>{t("AiApiKeysPage.statInactive")}</span>
             <span className={styles.statValue}>{inactiveCount}</span>
           </div>
         </div>
       </div>
 
-      {/* ── Filters ── */}
-      <div className={styles.filterCard}>
-        <h3 className={styles.filterTitle}>篩選</h3>
-        <p className={styles.filterDesc}>可依狀態與使用者 Email 篩選。</p>
-        <div className={styles.filterRow}>
-          <select
-            className={styles.filterSelect}
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
-          >
-            <option value="all">全部</option>
-            <option value="active">啟用</option>
-            <option value="inactive">失效</option>
-          </select>
-          <input
-            type="text"
-            className={styles.filterInput}
-            placeholder="使用者 Email 關鍵字"
-            value={userEmail}
-            onChange={(e) => { setUserEmail(e.target.value); setPage(0); }}
-          />
-        </div>
+      {/* 篩選就是兩個輸入框，標題與說明只是把畫面上看得到的事再講一次 */}
+      <div className={styles.filterRow}>
+        <select
+          className={styles.filterSelect}
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
+        >
+          <option value="all">{t("AiApiKeysPage.filterAll")}</option>
+          <option value="active">{t("AiApiKeysPage.filterActive")}</option>
+          <option value="inactive">{t("AiApiKeysPage.filterInactive")}</option>
+        </select>
+        <input
+          type="text"
+          className={styles.filterInput}
+          placeholder={t("AiApiKeysPage.filterEmailPlaceholder")}
+          value={userEmail}
+          onChange={(e) => { setUserEmail(e.target.value); setPage(0); }}
+        />
       </div>
 
       {/* ── Table ── */}
@@ -234,11 +245,11 @@ export default function AiApiKeysPage() {
                         <button
                           type="button"
                           className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-                          title="刪除"
+                          title={t("AiApiKeysPage.deleteAction")}
                           onClick={() => setDeletingItem(item)}
                         >
                           <MIcon name="delete" size={16} />
-                          刪除
+                          {t("AiApiKeysPage.deleteAction")}
                         </button>
                       </td>
                     </tr>
@@ -251,7 +262,7 @@ export default function AiApiKeysPage() {
             {totalPages > 1 && (
               <div className={styles.pagination}>
                 <span className={styles.paginationInfo}>
-                  第 {page + 1} / {totalPages} 頁，共 {total} 筆
+                  {t("AiApiKeysPage.paginationInfo", { page: page + 1, totalPages, total })}
                 </span>
                 <div className={styles.paginationBtns}>
                   <button
@@ -260,7 +271,7 @@ export default function AiApiKeysPage() {
                     disabled={page === 0}
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                   >
-                    上一頁
+                    {t("AiApiKeysPage.prevPage")}
                   </button>
                   <button
                     type="button"
@@ -268,7 +279,7 @@ export default function AiApiKeysPage() {
                     disabled={page + 1 >= totalPages}
                     onClick={() => setPage((p) => (p + 1 >= totalPages ? p : p + 1))}
                   >
-                    下一頁
+                    {t("AiApiKeysPage.nextPage")}
                   </button>
                 </div>
               </div>

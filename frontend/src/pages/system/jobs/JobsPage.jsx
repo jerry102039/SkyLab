@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./JobsPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -9,42 +10,37 @@ import { useToast } from "../../../hooks/useToast";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-const COLUMNS = ["任務", "類型", "狀態", "進度", "建立時間", "更新時間", "申請人"];
+function useKindLabels() {
+  const { t } = useTranslation("system");
+  return {
+    vm_request:    t("JobsPage.kindVmRequest"),
+    spec_change:   t("JobsPage.kindSpecChange"),
+    deletion:      t("JobsPage.kindDeletion"),
+    template:      t("JobsPage.kindTemplate"),
+  };
+}
 
-const KIND_LABELS = {
-  vm_request:    "VM 申請",
-  spec_change:   "規格變更",
-  deletion:      "刪除",
-  template:      "機器範本",
-};
-
-const STATUS_LABELS = {
-  pending:   "等待中",
-  running:   "執行中",
-  completed: "已完成",
-  failed:    "失敗",
-  blocked:   "受阻",
-  cancelled: "已取消",
-};
-
-const KIND_OPTIONS = [
-  { value: "all", label: "全部類型" },
-  ...Object.entries(KIND_LABELS).map(([value, label]) => ({ value, label })),
-];
-
-const STATUS_OPTIONS = [
-  { value: "all",    label: "全部狀態" },
-  { value: "active", label: "進行中" },
-  ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })),
-];
+function useStatusLabels() {
+  const { t } = useTranslation("system");
+  return {
+    pending:   t("JobsPage.statusPending"),
+    running:   t("JobsPage.statusRunning"),
+    completed: t("JobsPage.statusCompleted"),
+    failed:    t("JobsPage.statusFailed"),
+    blocked:   t("JobsPage.statusBlocked"),
+    cancelled: t("JobsPage.statusCancelled"),
+  };
+}
 
 function EmptyState() {
+  const { t } = useTranslation("system");
   return (
-    <SharedEmptyState icon="hourglass_empty" title="沒有符合條件的任務" />
+    <SharedEmptyState icon="hourglass_empty" title={t("JobsPage.emptyNoResult")} />
   );
 }
 
 function StatusBadge({ status }) {
+  const STATUS_LABELS = useStatusLabels();
   const label = STATUS_LABELS[status] ?? status ?? "—";
   return (
     <span className={`${styles.badge} ${styles[`badge_${status ?? "unknown"}`]}`}>
@@ -71,7 +67,19 @@ function fmtDate(iso) {
 }
 
 export default function JobsPage() {
+  const { t } = useTranslation("system");
   const toast = useToast();
+  const KIND_LABELS = useKindLabels();
+  const STATUS_LABELS = useStatusLabels();
+  const KIND_OPTIONS = [
+    { value: "all", label: t("JobsPage.allKinds") },
+    ...Object.entries(KIND_LABELS).map(([value, label]) => ({ value, label })),
+  ];
+  const STATUS_OPTIONS = [
+    { value: "all",    label: t("JobsPage.allStatuses") },
+    { value: "active", label: t("JobsPage.statusActive") },
+    ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })),
+  ];
   const [jobs, setJobs] = useState([]);
   const [activeCount, setActiveCount] = useState(0);
   const [kind, setKind] = useState("all");
@@ -91,11 +99,11 @@ export default function JobsPage() {
       setJobs(res?.items ?? []);
       setActiveCount(res?.active_count ?? 0);
     } catch (e) {
-      if (!silent) toast.error(e?.message ?? "載入背景任務失敗");
+      if (!silent) toast.error(e?.message ?? t("JobsPage.toastLoadFailed"));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [kind, status, toast]);
+  }, [kind, status, toast, t]);
 
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(() => load(true));
@@ -110,7 +118,7 @@ export default function JobsPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="背景任務" subtitle="追蹤部署、申請與資源配置等長時間執行的任務" />
+      <PageHeader title={t("JobsPage.pageTitle")} subtitle={t("JobsPage.pageSubtitle")} />
 
       <div className={styles.statRow}>
         <div className={styles.statCard}>
@@ -118,7 +126,7 @@ export default function JobsPage() {
             <MIcon name="autorenew" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>進行中</span>
+            <span className={styles.statLabel}>{t("JobsPage.statActive")}</span>
             <span className={styles.statValue}>{stats.active}</span>
           </div>
         </div>
@@ -127,7 +135,7 @@ export default function JobsPage() {
             <MIcon name="task_alt" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>已完成</span>
+            <span className={styles.statLabel}>{t("JobsPage.statCompleted")}</span>
             <span className={styles.statValue}>{stats.completed}</span>
           </div>
         </div>
@@ -136,7 +144,7 @@ export default function JobsPage() {
             <MIcon name="error_outline" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>失敗</span>
+            <span className={styles.statLabel}>{t("JobsPage.statFailed")}</span>
             <span className={styles.statValue}>{stats.failed}</span>
           </div>
         </div>
@@ -144,7 +152,7 @@ export default function JobsPage() {
 
       <div className={styles.toolbar}>
         <label className={styles.selectWrap}>
-          <span className={styles.selectLabel}>類型</span>
+          <span className={styles.selectLabel}>{t("JobsPage.filterKind")}</span>
           <select
             className={styles.select}
             value={kind}
@@ -156,7 +164,7 @@ export default function JobsPage() {
           </select>
         </label>
         <label className={styles.selectWrap}>
-          <span className={styles.selectLabel}>狀態</span>
+          <span className={styles.selectLabel}>{t("JobsPage.filterStatus")}</span>
           <select
             className={styles.select}
             value={status}
@@ -171,7 +179,7 @@ export default function JobsPage() {
 
       <div className={styles.content}>
         {loading ? (
-          <LoadingState fullPage text="載入背景任務..." />
+          <LoadingState fullPage text={t("JobsPage.loading")} />
         ) : visible.length === 0 ? (
           <EmptyState />
         ) : (
@@ -179,7 +187,7 @@ export default function JobsPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  {COLUMNS.map((col) => (
+                  {[t("JobsPage.colTask"), t("JobsPage.colKind"), t("JobsPage.colStatus"), t("JobsPage.colProgress"), t("JobsPage.colCreatedAt"), t("JobsPage.colUpdatedAt"), t("JobsPage.colApplicant")].map((col) => (
                     <th key={col} className={styles.th}>{col}</th>
                   ))}
                 </tr>
@@ -193,6 +201,9 @@ export default function JobsPage() {
                   >
                     <td className={styles.td}>
                       <div className={styles.nameCell}>
+                        <div className={styles.nameIcon}>
+                          <MIcon name="task" size={18} />
+                        </div>
                         <div>
                           <div className={styles.namePrimary}>{j.title ?? j.id}</div>
                           <div className={styles.nameSub}>{j.id}</div>

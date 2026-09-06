@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from functools import lru_cache
 from inspect import signature
 from typing import Any, Literal, cast
 
@@ -34,13 +36,15 @@ from app.ai.teacher_judge.schemas import (
 from app.ai.teacher_judge.script_generation_contract import (
     RESULT_SCHEMA_VERSION,
     SCRIPT_GENERATION_CONTRACT_PROMPT,
-    SCRIPT_GENERATION_MAX_ATTEMPTS,
+    SCRIPT_GENERATION_MAX_RETRIES,
+    SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES,
 )
 from app.ai.teacher_judge.script_policy import check_script_policy
 from app.ai.teacher_judge.script_quality_validator import check_script_quality
 from app.ai.teacher_judge.service import _call_vllm
 from app.ai.teacher_judge.template_command_service import get_enabled_template_commands
 from app.ai.utils import apply_thinking_control
+from app.core.i18n import t
 from app.models.teacher_judge_script_artifact import (
     TeacherJudgeScriptArtifact,
     TeacherJudgeScriptLanguage,
@@ -100,24 +104,27 @@ SCRIPT_GENERATION_SYSTEM_PROMPT = f"""
 
 # 任務
 根據 rubric snapshot 產生一份安全、受管、可重複執行的 Python managed data collection script。
-腳本負責收集同學 VM/LXC 內的服務、port、process、localhost HTTP 等資料；若 rubric 明確引用允許執行程式入口的 catalog command，才可依下列限制執行該入口。最後整理成 JSON，供後續解讀與評分使用。
+腳本負責收集同學 VM/LXC 內可客觀觀察的資料；若 rubric 明確引用 catalog command，可依下列限制執行唯讀／診斷命令。最後整理成 JSON，供後續解讀與評分使用。
 
 # 硬性規則
 - 只能輸出 JSON，不要 markdown。
 - JSON 欄位必須是 {{"script_content": "..."}}。
 - script_content 必須是完整 Python 程式。
-- 腳本預設只能收集本機服務狀態、port、process、HTTP localhost endpoint。
+- 腳本可收集本機檔案內容、目錄、command log、服務、port、process、localhost HTTP 與受控命令執行結果。
 - 腳本不得刪除、修改、修復、安裝、重啟、停用或重設任何環境。
-- 腳本不得讀取 .env、.ssh、private key 或把資料送到外部網路。
+- 指令輸出的 stdout/stderr 必須原樣帶回，不做遮蔽；仍不得把資料送到外部網路。
 - 若需要執行指令，只能使用 subprocess.run([...], timeout=秒數, capture_output=True, text=True, check=False)。
 - subprocess.run 第一個參數必須是 argv list，不得使用字串指令，不得使用 shell=True。
 - 不得使用 os.system、os.popen、subprocess.Popen 或任何未設定 timeout 的指令執行方式。
+- 不得以 bash、sh、zsh、cmd、PowerShell 等 shell launcher 間接執行指令。
 - 若 template command 含 pipe、redirect、grep 等 shell 寫法，請改用 Python 程式解析 stdout，不要原樣 shell=True 執行。
 - HTTP request 只允許 GET/HEAD localhost/127.0.0.1/::1，必須設定 timeout。
 - 腳本最後必須 print 單一 JSON，schema_version 固定為 {RESULT_SCHEMA_VERSION}，並使用 json.dumps(..., ensure_ascii=False)。
 - 輸出 JSON 的 metadata 必須包含 timestamp 與 platform。
 - 優先根據 rubric item 的 check_steps.command_key 對應 template_commands 產生收集項目。
 - `python.run_entrypoint` 是執行觀察能力，不是原始碼審查：只有 rubric item 已明確提供工作目錄、實際 Python 命令／參數與成功條件時才可執行。
+- `system.run_command` 是跨 template 的通用受控能力。cat、pwd、echo、唯讀 git、有限次數 ping 等命令使用同一能力，不要建立命令特例；`cd` 必須轉成 subprocess 的 `cwd`，不可啟動 shell。
+- `system.run_command` 只允許單一唯讀／診斷 argv；禁止 pipe、redirect、寫入型 Git 子命令及其他會改變環境的操作。
 - 執行 Python 入口時，必須使用 argv list、明確 `cwd`、有限 timeout，並把 exit code、stdout、stderr、未捕捉例外與 timeout 寫成該 check 的證據。
 - 若 rubric 缺少工作目錄、命令或「正常結束／常駐服務」判準，不得搜尋檔案系統或猜路徑；該 check 必須回傳 `unknown`，清楚寫出缺少的資訊。
 - 不得把 Python 執行檢查替換成 n8n、Port 或程序存在檢查；這些只能在 rubric 本來就要求時使用。
@@ -126,8 +133,8 @@ SCRIPT_GENERATION_SYSTEM_PROMPT = f"""
 
 # 簡潔程式碼骨架
 - 產生單檔 Python script；不要建立 class、plugin 架構、retry framework 或多層抽象。
-- helper 只保留這 5 個：`truncate_output`、`redact_sensitive_text`、`command_available`、`run_command`、`record_check`。
-- `run_command()` 只負責執行 argv list 並回傳 `stdout`、`stderr`、`returncode`；若捕捉例外，回傳 `returncode=None` 與錯誤文字，不要在 helper 內吞掉資訊。
+- helper 只保留這 4 個：`truncate_output`、`command_available`、`run_command`、`record_check`。
+- `run_command()` 只負責接受 argv list、cwd 與 timeout，並回傳未遮蔽的 `stdout`、`stderr`、`returncode`；若捕捉例外，回傳 `returncode=None` 與錯誤文字，不要在 helper 內吞掉資訊。
 - 每個收集項目使用同一個簡潔模式：
   1. 先決定 `check_id`
   2. 檢查工具是否存在；缺工具時 `record_check(..., "unknown", ...)`
@@ -167,8 +174,9 @@ AI_REVIEWER_SYSTEM_PROMPT = """
 只審查腳本，不執行腳本。請依 policy 判斷它是否只做 read-only inspection，或只執行 rubric 與 catalog 明確授權的受控程式入口。
 
 ## 安全審查
-若腳本可能刪除、修改、修復、安裝、重啟、讀取敏感檔案或對外傳資料，approved 必須是 false。
-若腳本使用 `python.run_entrypoint`，只有在 rubric 已提供明確 cwd、argv、timeout 與成功條件，且程式只收集 exit code/stdout/stderr、沒有安裝或修復動作時才可核准；risk_level 至少為 medium，後續仍需老師核准腳本與執行。
+若腳本可能刪除、修改、修復、安裝、重啟或對外傳資料，approved 必須是 false。讀取檔案與原樣回傳受控命令的 stdout/stderr 本身不是拒絕理由。
+若腳本使用 `python.run_entrypoint`，只有在 rubric 已提供明確 cwd、argv、timeout 與成功條件，且程式只收集 exit code/stdout/stderr、沒有安裝或修復動作時才可核准；risk_level 至少為 medium。只有靜態政策與本 AI reviewer 都核准時，腳本才會進入可執行狀態。
+若腳本使用 `system.run_command`，確認它採 argv list、cwd、有限 timeout、無 shell/pipe/redirect，且只做唯讀／診斷操作；stdout/stderr 不需遮蔽。
 
 ## 錯誤記錄完整性
 - 檢查腳本有 subprocess.run / HTTP 請求等外部呼叫時，是否有對應的 try/except 並在 except 中 call errors.append()。
@@ -357,7 +365,7 @@ def _resolve_status(
     ai_review: AIReviewResult,
 ) -> TeacherJudgeScriptStatus:
     if policy_check.get("approved") is True and ai_review.get("approved") is True:
-        return TeacherJudgeScriptStatus.reviewed
+        return TeacherJudgeScriptStatus.approved
     return TeacherJudgeScriptStatus.review_failed
 
 
@@ -419,6 +427,97 @@ def _gate_attempt_record(
         else [],
         "fix_hints": fix_hints,
     }
+
+
+@lru_cache(maxsize=2048)
+def _cached_hint_fingerprint(hint_key: str) -> str:
+    """Cache stable sha256 fingerprints for retry signatures.
+
+    Pure memoization: same input string yields the same 16-hex digest as the
+    inline hashlib call it replaces. Bounded LRU, no retry-semantics change.
+    """
+    return hashlib.sha256(hint_key.encode("utf-8")).hexdigest()[:16]
+
+
+@lru_cache(maxsize=2048)
+def _cached_issue_fingerprint(normalized_issue: str) -> str:
+    """Cache stable sha256 fingerprints for retry signatures (see above)."""
+    return hashlib.sha256(normalized_issue.encode("utf-8")).hexdigest()[:16]
+
+
+def _failure_signature(
+    *,
+    phase: str,
+    issues: list[str],
+    fix_hints: list[FixHint],
+) -> str:
+    """Build a stable, non-sensitive key for the repeated-error guard."""
+    hint_parts = [
+        _cached_hint_fingerprint(
+            ":".join(
+                str(hint.get(key) or "")
+                for key in ("type", "target", "field", "function", "command")
+            )
+        )
+        for hint in fix_hints
+    ]
+    issue_parts = [
+        _cached_issue_fingerprint(" ".join(str(issue).split()).lower())
+        for issue in issues
+    ]
+    parts = [
+        part
+        for part in (
+            *(f"hint:{fingerprint}" for fingerprint in hint_parts),
+            *(f"issue:{fingerprint}" for fingerprint in issue_parts),
+        )
+        if part.strip(":")
+    ]
+    if not parts:
+        parts = ["unclassified"]
+    return f"{phase}:{'|'.join(dict.fromkeys(parts))[:300]}"
+
+
+def _retry_summary(
+    *,
+    retry_count: int,
+    failure_counts: dict[str, int],
+    stop_reason: str,
+) -> dict[str, object]:
+    return {
+        "retry_count": retry_count,
+        "max_retries": SCRIPT_GENERATION_MAX_RETRIES,
+        "same_failure_retry_limit": SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES,
+        "stop_reason": stop_reason,
+        "failure_counts": dict(failure_counts),
+    }
+
+
+def _feedback_snapshot(
+    *,
+    rubric_snapshot: dict[str, Any],
+    attempt: int,
+    gate_result: GateResult,
+    ai_review: AIReviewResult | None = None,
+) -> dict[str, Any]:
+    feedback: dict[str, Any] = {
+        "attempt": attempt,
+        "policy_approved": gate_result.get("safety_approved"),
+        "policy_issues": gate_result.get("safety_issues", []),
+        "quality_approved": gate_result.get("quality_approved"),
+        "quality_issues": gate_result.get("quality_issues", []),
+    }
+    if ai_review is not None:
+        feedback.update(
+            {
+                "ai_review_approved": ai_review.get("approved"),
+                "ai_review_issues": ai_review.get("issues", []),
+                "ai_review_suggested_fix": ai_review.get("suggested_fix"),
+            }
+        )
+    next_snapshot = dict(rubric_snapshot)
+    next_snapshot["previous_review_feedback"] = feedback
+    return next_snapshot
 
 
 def _repair_instructions(fix_hints: list[FixHint]) -> list[dict[str, object]]:
@@ -507,7 +606,9 @@ async def generate_script_content(
     template_key: str,
 ) -> tuple[str, dict[str, Any]]:
     if not settings.VLLM_MODEL_NAME:
-        raise HTTPException(status_code=503, detail="VLLM_MODEL_NAME 未設定。")
+        raise HTTPException(
+            status_code=503, detail=t("artifact.model_not_configured")
+        )
 
     payload = apply_thinking_control(
         {
@@ -544,12 +645,12 @@ async def generate_script_content(
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
         raise HTTPException(
-            status_code=502, detail="AI 產生腳本格式不是 JSON。"
+            status_code=502, detail=t("artifact.generation_not_json")
         ) from exc
 
     script_content = str(parsed.get("script_content") or "").strip()
     if not script_content:
-        raise HTTPException(status_code=502, detail="AI 未產生 script_content。")
+        raise HTTPException(status_code=502, detail=t("artifact.no_script_content"))
     return script_content, dict(metrics)
 
 
@@ -559,7 +660,9 @@ async def review_script_with_ai(
     rubric_snapshot: dict[str, Any],
 ) -> tuple[AIReviewResult, dict[str, Any]]:
     if not settings.VLLM_MODEL_NAME:
-        raise HTTPException(status_code=503, detail="VLLM_MODEL_NAME 未設定。")
+        raise HTTPException(
+            status_code=503, detail=t("artifact.model_not_configured")
+        )
 
     payload = apply_thinking_control(
         {
@@ -598,13 +701,17 @@ def _apply_line_replacements(
     raw_replacements: Any,
 ) -> str:
     if not isinstance(raw_replacements, list) or not raw_replacements:
-        raise HTTPException(status_code=502, detail="AI 未產生 line_replacements。")
+        raise HTTPException(
+            status_code=502, detail=t("artifact.no_line_replacements")
+        )
 
     lines = script_content.split("\n")
     replacements: list[tuple[int, int, str]] = []
     for raw in raw_replacements:
         if not isinstance(raw, dict):
-            raise HTTPException(status_code=502, detail="AI 修正腳本格式不正確。")
+            raise HTTPException(
+                status_code=502, detail=t("artifact.fix_format_invalid")
+            )
         start_line = raw.get("start_line")
         end_line = raw.get("end_line")
         replacement = raw.get("replacement")
@@ -615,16 +722,22 @@ def _apply_line_replacements(
             or isinstance(end_line, bool)
             or not isinstance(replacement, str)
         ):
-            raise HTTPException(status_code=502, detail="AI 修正腳本行號格式不正確。")
+            raise HTTPException(
+                status_code=502, detail=t("artifact.fix_line_number_invalid")
+            )
         if start_line < 1 or end_line < start_line or end_line > len(lines):
-            raise HTTPException(status_code=502, detail="AI 修正腳本行號超出範圍。")
+            raise HTTPException(
+                status_code=502, detail=t("artifact.fix_line_out_of_range")
+            )
         replacements.append((start_line, end_line, replacement))
 
     sorted_replacements = sorted(replacements, key=lambda item: item[0])
     previous_end = 0
     for start_line, end_line, _replacement in sorted_replacements:
         if start_line <= previous_end:
-            raise HTTPException(status_code=502, detail="AI 修正腳本行號區間重疊。")
+            raise HTTPException(
+                status_code=502, detail=t("artifact.fix_line_overlap")
+            )
         previous_end = end_line
 
     patched_lines = list(lines)
@@ -634,7 +747,7 @@ def _apply_line_replacements(
 
     result = "\n".join(patched_lines).strip()
     if not result:
-        raise HTTPException(status_code=502, detail="AI 未產生修正後腳本。")
+        raise HTTPException(status_code=502, detail=t("artifact.fix_no_result"))
     return result
 
 
@@ -644,7 +757,9 @@ async def fix_script_content(
     fix_hints: list[FixHint],
 ) -> tuple[str, dict[str, Any]]:
     if not settings.VLLM_MODEL_NAME:
-        raise HTTPException(status_code=503, detail="VLLM_MODEL_NAME 未設定。")
+        raise HTTPException(
+            status_code=503, detail=t("artifact.model_not_configured")
+        )
 
     lines = script_content.split("\n")
     numbered = "\n".join(f"{i + 1:04d}|{line}" for i, line in enumerate(lines))
@@ -684,7 +799,7 @@ async def fix_script_content(
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
         raise HTTPException(
-            status_code=502, detail="AI 修正腳本格式不是 JSON。"
+            status_code=502, detail=t("artifact.fix_not_json")
         ) from exc
 
     logger.info(
@@ -723,8 +838,10 @@ async def build_reviewed_script(
 ):
     attempt_snapshot = dict(rubric_snapshot)
     usage_records: list[ScriptUsageRecord] = []
+    attempt_records: list[dict[str, object]] = []
+    failure_counts: dict[str, int] = {}
+    retry_count = 0
 
-    # Phase 1: initial generation
     script_content, metrics = _script_result(
         await generate_script_content(
             rubric_snapshot=attempt_snapshot,
@@ -737,72 +854,104 @@ async def build_reviewed_script(
             "metrics": metrics,
         }
     )
-    attempt_records: list[dict[str, object]] = []
 
-    # Phase 2: fix loop (policy + quality only, no AI reviewer yet)
-    for attempt in range(1, SCRIPT_GENERATION_MAX_ATTEMPTS + 1):
+    gate_result: GateResult = {
+        "approved": False,
+        "blocked": True,
+        "risk_level": "high",
+        "issues": [],
+        "safety_approved": False,
+        "safety_issues": [],
+        "quality_approved": False,
+        "quality_issues": [],
+    }
+    last_ai_review: AIReviewResult = {
+        "approved": False,
+        "risk_level": "high",
+        "issues": [],
+        "suggested_fix": None,
+    }
+    stop_reason = "unrecoverable_error"
+
+    while True:
         safety_check = check_script_policy(script_content)
         quality_check = check_script_quality(script_content)
         gate_result = _merge_gate_results(safety_check, quality_check)
 
-        if gate_result["approved"]:
-            break
-
-        fix_hints = safety_check.get("fix_hints", []) + quality_check.get(
-            "fix_hints", []
-        )
-        attempt_record = _gate_attempt_record(
-            attempt=attempt,
-            safety_check=safety_check,
-            quality_check=quality_check,
-            fix_hints=fix_hints,
-        )
-        attempt_records.append(attempt_record)
-        logger.warning(
-            "Teacher Judge script gate failed on attempt %s/%s: safety_issues=%s quality_issues=%s fix_hints=%s",
-            attempt,
-            SCRIPT_GENERATION_MAX_ATTEMPTS,
-            attempt_record["safety_issues"],
-            attempt_record["quality_issues"],
-            _fix_hint_log_summary(fix_hints),
-        )
-
-        if attempt >= SCRIPT_GENERATION_MAX_ATTEMPTS:
-            gate_result["review_attempts"] = attempt_records
-            last_ai_review, metrics = _review_result(
-                await review_script_with_ai(
-                    script_content=script_content,
-                    rubric_snapshot=attempt_snapshot,
-                )
+        if not gate_result["approved"]:
+            fix_hints = safety_check.get("fix_hints", []) + quality_check.get(
+                "fix_hints", []
             )
-            usage_records.append(
+            signature = _failure_signature(
+                phase="static",
+                issues=gate_result["issues"],
+                fix_hints=fix_hints,
+            )
+            failure_counts[signature] = failure_counts.get(signature, 0) + 1
+            attempt_record = _gate_attempt_record(
+                attempt=len(attempt_records) + 1,
+                safety_check=safety_check,
+                quality_check=quality_check,
+                fix_hints=fix_hints,
+            )
+            attempt_record.update(
                 {
-                    "call_type": CALL_TJ_SCRIPT_REVIEW,
-                    "metrics": metrics,
+                    "phase": "static",
+                    "failure_signature": signature,
+                    "retry_count": retry_count,
+                    "same_failure_count": failure_counts[signature],
                 }
             )
-            status = _resolve_status(gate_result, last_ai_review)
-            result = (script_content, gate_result, last_ai_review, status)
-            if include_usage:
-                return (*result, usage_records)
-            return result
-
-        if not fix_hints:
-            # no structured hints available — fallback to full re-generate
-            attempt_snapshot = dict(rubric_snapshot)
-            attempt_snapshot["previous_review_feedback"] = {
-                "attempt": attempt,
-                "policy_approved": gate_result.get("safety_approved"),
-                "policy_issues": gate_result.get("safety_issues", []),
-                "quality_approved": gate_result.get("quality_approved"),
-                "quality_issues": gate_result.get("quality_issues", []),
-            }
-            script_content, metrics = _script_result(
-                await generate_script_content(
-                    rubric_snapshot=attempt_snapshot,
-                    template_key=template_key,
-                )
+            attempt_records.append(attempt_record)
+            logger.warning(
+                "Teacher Judge script gate failed retry=%s/%s same_failure=%s/%s signature=%s hints=%s",
+                retry_count,
+                SCRIPT_GENERATION_MAX_RETRIES,
+                failure_counts[signature],
+                SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES,
+                signature,
+                _fix_hint_log_summary(fix_hints),
             )
+
+            if failure_counts[signature] > SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES:
+                stop_reason = "same_failure_limit"
+                break
+            if retry_count >= SCRIPT_GENERATION_MAX_RETRIES:
+                stop_reason = "total_retry_limit"
+                break
+
+            retry_count += 1
+            attempt_snapshot = _feedback_snapshot(
+                rubric_snapshot=rubric_snapshot,
+                attempt=len(attempt_records),
+                gate_result=gate_result,
+            )
+            if fix_hints:
+                try:
+                    script_content, metrics = _script_result(
+                        await fix_script_content(
+                            script_content=script_content,
+                            fix_hints=fix_hints,
+                        )
+                    )
+                except HTTPException as exc:
+                    logger.warning(
+                        "Teacher Judge script patch failed; falling back to regenerate: %s",
+                        exc.detail,
+                    )
+                    script_content, metrics = _script_result(
+                        await generate_script_content(
+                            rubric_snapshot=attempt_snapshot,
+                            template_key=template_key,
+                        )
+                    )
+            else:
+                script_content, metrics = _script_result(
+                    await generate_script_content(
+                        rubric_snapshot=attempt_snapshot,
+                        template_key=template_key,
+                    )
+                )
             usage_records.append(
                 {
                     "call_type": CALL_TJ_SCRIPT_GENERATION,
@@ -811,67 +960,22 @@ async def build_reviewed_script(
             )
             continue
 
-        # incremental fix via LLM
-        try:
-            script_content, metrics = _script_result(
-                await fix_script_content(
-                    script_content=script_content,
-                    fix_hints=fix_hints,
-                )
+        last_ai_review, metrics = _review_result(
+            await review_script_with_ai(
+                script_content=script_content,
+                rubric_snapshot=attempt_snapshot,
             )
-            usage_records.append(
-                {
-                    "call_type": CALL_TJ_SCRIPT_GENERATION,
-                    "metrics": metrics,
-                }
-            )
-        except HTTPException as exc:
-            logger.warning(
-                "Teacher Judge script patch failed; falling back to regenerate: %s",
-                exc.detail,
-            )
-            # fix failed — fallback to full re-generate
-            attempt_snapshot = dict(rubric_snapshot)
-            attempt_snapshot["previous_review_feedback"] = {
-                "attempt": attempt,
-                "policy_approved": gate_result.get("safety_approved"),
-                "policy_issues": gate_result.get("safety_issues", []),
-                "quality_approved": gate_result.get("quality_approved"),
-                "quality_issues": gate_result.get("quality_issues", []),
-            }
-            script_content, metrics = _script_result(
-                await generate_script_content(
-                    rubric_snapshot=attempt_snapshot,
-                    template_key=template_key,
-                )
-            )
-            usage_records.append(
-                {
-                    "call_type": CALL_TJ_SCRIPT_GENERATION,
-                    "metrics": metrics,
-                }
-            )
-
-    # Phase 3: final AI reviewer (only once)
-    final_safety = check_script_policy(script_content)
-    final_quality = check_script_quality(script_content)
-    final_gate = _merge_gate_results(final_safety, final_quality)
-    final_gate["review_attempts"] = attempt_records
-    last_ai_review, metrics = _review_result(
-        await review_script_with_ai(
-            script_content=script_content,
-            rubric_snapshot=rubric_snapshot,
         )
-    )
-    usage_records.append(
-        {
-            "call_type": CALL_TJ_SCRIPT_REVIEW,
-            "metrics": metrics,
-        }
-    )
+        usage_records.append(
+            {
+                "call_type": CALL_TJ_SCRIPT_REVIEW,
+                "metrics": metrics,
+            }
+        )
+        if last_ai_review.get("approved") is True:
+            stop_reason = "passed"
+            break
 
-    # if AI reviewer failed, try one fix with AI feedback
-    if last_ai_review.get("approved") is not True and last_ai_review.get("issues"):
         ai_fix_hints: list[FixHint] = [
             cast(
                 "FixHint",
@@ -882,6 +986,47 @@ async def build_reviewed_script(
                 },
             )
         ]
+        signature = _failure_signature(
+            phase="ai_review",
+            issues=last_ai_review.get("issues", []),
+            fix_hints=ai_fix_hints,
+        )
+        failure_counts[signature] = failure_counts.get(signature, 0) + 1
+        attempt_records.append(
+            {
+                "attempt": len(attempt_records) + 1,
+                "phase": "ai_review",
+                "failure_signature": signature,
+                "retry_count": retry_count,
+                "same_failure_count": failure_counts[signature],
+                "safety_approved": gate_result["safety_approved"],
+                "safety_issues": gate_result["safety_issues"],
+                "quality_approved": gate_result["quality_approved"],
+                "quality_issues": gate_result["quality_issues"],
+                "ai_review_issues": last_ai_review.get("issues", []),
+                "ai_review_suggested_fix": last_ai_review.get("suggested_fix"),
+                "fix_hints": ai_fix_hints,
+            }
+        )
+        if not last_ai_review.get("issues") and not last_ai_review.get(
+            "suggested_fix"
+        ):
+            stop_reason = "unrecoverable_error"
+            break
+        if failure_counts[signature] > SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES:
+            stop_reason = "same_failure_limit"
+            break
+        if retry_count >= SCRIPT_GENERATION_MAX_RETRIES:
+            stop_reason = "total_retry_limit"
+            break
+
+        retry_count += 1
+        attempt_snapshot = _feedback_snapshot(
+            rubric_snapshot=rubric_snapshot,
+            attempt=len(attempt_records),
+            gate_result=gate_result,
+            ai_review=last_ai_review,
+        )
         try:
             script_content, metrics = _script_result(
                 await fix_script_content(
@@ -889,35 +1034,32 @@ async def build_reviewed_script(
                     fix_hints=ai_fix_hints,
                 )
             )
-            usage_records.append(
-                {
-                    "call_type": CALL_TJ_SCRIPT_GENERATION,
-                    "metrics": metrics,
-                }
+        except HTTPException as exc:
+            logger.warning(
+                "Teacher Judge AI feedback patch failed; falling back to regenerate: %s",
+                exc.detail,
             )
-            final_safety = check_script_policy(script_content)
-            final_quality = check_script_quality(script_content)
-            final_gate = _merge_gate_results(final_safety, final_quality)
-            final_gate["review_attempts"] = attempt_records
-            if final_gate["approved"]:
-                last_ai_review, metrics = _review_result(
-                    await review_script_with_ai(
-                        script_content=script_content,
-                        rubric_snapshot=rubric_snapshot,
-                    )
+            script_content, metrics = _script_result(
+                await generate_script_content(
+                    rubric_snapshot=attempt_snapshot,
+                    template_key=template_key,
                 )
-                usage_records.append(
-                    {
-                        "call_type": CALL_TJ_SCRIPT_REVIEW,
-                        "metrics": metrics,
-                    }
-                )
-        except HTTPException:
-            # 用量記錄失敗不影響審查主流程
-            pass
+            )
+        usage_records.append(
+            {
+                "call_type": CALL_TJ_SCRIPT_GENERATION,
+                "metrics": metrics,
+            }
+        )
 
-    status = _resolve_status(final_gate, last_ai_review)
-    result = (script_content, final_gate, last_ai_review, status)
+    gate_result["review_attempts"] = attempt_records
+    gate_result["retry_summary"] = _retry_summary(
+        retry_count=retry_count,
+        failure_counts=failure_counts,
+        stop_reason=stop_reason,
+    )
+    status = _resolve_status(gate_result, last_ai_review)
+    result = (script_content, gate_result, last_ai_review, status)
     if include_usage:
         return (*result, usage_records)
     return result
@@ -1034,15 +1176,22 @@ async def create_artifact(
 ) -> TeacherJudgeScriptArtifactPublic:
     artifact_name = name.strip()
     if not artifact_name:
-        raise HTTPException(status_code=400, detail="腳本名稱不可空白。")
+        raise HTTPException(status_code=400, detail=t("artifact.name_blank"))
 
     if template_commands is None:
         template_commands = get_enabled_template_commands(
             session, template_key, include_cross_template=True
         )
 
+    # Single model_dump reused for both the artifact rubric snapshot and the
+    # source file analysis_json (previously dumped twice with equal content).
+    # The snapshot takes a shallow top-level copy plus template_key, so
+    # analysis_json never gains template_key. Nested items are shared
+    # read-only: downstream only shallow-copies the top level and serializes
+    # each dict to its own JSON column on commit (no in-place nested mutation).
+    analysis_dump = rubric_analysis.model_dump(mode="json")
     rubric_snapshot = _with_template_command_catalog(
-        _rubric_snapshot(rubric_analysis, template_key),
+        {**analysis_dump, "template_key": template_key},
         template_commands,
     )
     source_file, source_file_snapshot_json = source_file_snapshot(
@@ -1051,7 +1200,7 @@ async def create_artifact(
         file_id=source_file_id,
     )
     if source_file is not None:
-        source_file.analysis_json = rubric_analysis.model_dump(mode="json")
+        source_file.analysis_json = analysis_dump
         source_file.updated_at = _now()
         session.add(source_file)
     (
@@ -1064,6 +1213,15 @@ async def create_artifact(
         rubric_snapshot=rubric_snapshot,
         template_key=template_key,
     )
+    if (
+        status == TeacherJudgeScriptStatus.reviewed
+        and policy_check.get("approved") is True
+        and ai_review.get("approved") is True
+    ):
+        # Compatibility for older test doubles/callers: a fully passed new
+        # workflow is system-approved even if the legacy helper name/status is
+        # still returned.
+        status = TeacherJudgeScriptStatus.approved
 
     artifact = TeacherJudgeScriptArtifact(
         teaching_class_id=teaching_class_id,
@@ -1081,6 +1239,7 @@ async def create_artifact(
         policy_check_result_json=cast("dict[str, Any]", policy_check),
         ai_review_result_json=cast("dict[str, Any]", ai_review),
         created_by=created_by,
+        approved_at=_now() if status == TeacherJudgeScriptStatus.approved else None,
         updated_at=_now(),
     )
     session.add(artifact)
@@ -1110,17 +1269,25 @@ async def regenerate_artifact(
         artifact_id=artifact_id,
     )
     if artifact.status == TeacherJudgeScriptStatus.archived:
-        raise HTTPException(status_code=400, detail="已封存的腳本不能重新生成。")
+        raise HTTPException(
+            status_code=400, detail=t("artifact.archived_cannot_regenerate")
+        )
     template_key = artifact.template_key
     if template_commands is None:
         template_commands = get_enabled_template_commands(
             session, template_key, include_cross_template=True
         )
 
+    # Reuse a single model_dump for snapshot + source analysis_json when a fresh
+    # analysis is provided (same sharing rationale as create_artifact above).
+    analysis_dump: dict[str, Any] | None = None
+    if rubric_analysis is not None:
+        analysis_dump = rubric_analysis.model_dump(mode="json")
+        rubric_base: dict[str, Any] = {**analysis_dump, "template_key": template_key}
+    else:
+        rubric_base = artifact.rubric_snapshot_json
     rubric_snapshot = _with_template_command_catalog(
-        _rubric_snapshot(rubric_analysis, template_key)
-        if rubric_analysis is not None
-        else artifact.rubric_snapshot_json,
+        rubric_base,
         template_commands,
     )
     source_file_id = artifact.source_file_id
@@ -1132,7 +1299,7 @@ async def regenerate_artifact(
             file_id=source_file_id,
         )
         if source_file is not None:
-            source_file.analysis_json = rubric_analysis.model_dump(mode="json")
+            source_file.analysis_json = cast("dict[str, Any]", analysis_dump)
             source_file.updated_at = _now()
             session.add(source_file)
     generation_snapshot = dict(rubric_snapshot)
@@ -1149,11 +1316,18 @@ async def regenerate_artifact(
         rubric_snapshot=generation_snapshot,
         template_key=template_key,
     )
+    if (
+        status == TeacherJudgeScriptStatus.reviewed
+        and policy_check.get("approved") is True
+        and ai_review.get("approved") is True
+    ):
+        status = TeacherJudgeScriptStatus.approved
 
     if artifact.status == TeacherJudgeScriptStatus.approved:
         next_version = _next_artifact_version(session=session, artifact=artifact)
         next_artifact = TeacherJudgeScriptArtifact(
             teaching_class_id=teaching_class_id,
+            session_id=artifact.session_id,
             name=artifact.name,
             template_key=template_key,
             rubric_snapshot_json=rubric_snapshot,
@@ -1167,6 +1341,7 @@ async def regenerate_artifact(
             policy_check_result_json=cast("dict[str, Any]", policy_check),
             ai_review_result_json=cast("dict[str, Any]", ai_review),
             created_by=created_by,
+            approved_at=_now() if status == TeacherJudgeScriptStatus.approved else None,
             updated_at=_now(),
         )
         session.add(next_artifact)
@@ -1187,6 +1362,10 @@ async def regenerate_artifact(
     artifact.status = status
     artifact.policy_check_result_json = cast("dict[str, Any]", policy_check)
     artifact.ai_review_result_json = cast("dict[str, Any]", ai_review)
+    artifact.approved_by = None
+    artifact.approved_at = (
+        _now() if status == TeacherJudgeScriptStatus.approved else None
+    )
     artifact.updated_at = _now()
     session.add(artifact)
     session.commit()
@@ -1213,11 +1392,13 @@ def approve_artifact(
         artifact_id=artifact_id,
     )
     if artifact.status != TeacherJudgeScriptStatus.reviewed:
-        raise HTTPException(status_code=400, detail="只有審查通過的腳本可以核准。")
+        raise HTTPException(status_code=400, detail=t("artifact.not_reviewed"))
     if artifact.policy_check_result_json.get("approved") is not True:
-        raise HTTPException(status_code=400, detail="腳本未通過安全/品質檢查。")
+        raise HTTPException(
+            status_code=400, detail=t("artifact.policy_check_failed")
+        )
     if artifact.ai_review_result_json.get("approved") is not True:
-        raise HTTPException(status_code=400, detail="腳本未通過 AI reviewer。")
+        raise HTTPException(status_code=400, detail=t("artifact.ai_review_failed"))
 
     artifact.status = TeacherJudgeScriptStatus.approved
     artifact.approved_by = approved_by
@@ -1241,6 +1422,31 @@ def archive_artifact(
         artifact_id=artifact_id,
     )
     artifact.status = TeacherJudgeScriptStatus.archived
+    artifact.updated_at = _now()
+    session.add(artifact)
+    session.commit()
+    session.refresh(artifact)
+    return _artifact_to_public(artifact)
+
+
+def rename_artifact(
+    *,
+    session: Session,
+    teaching_class_id: uuid.UUID,
+    artifact_id: uuid.UUID,
+    name: str,
+) -> TeacherJudgeScriptArtifactPublic:
+    artifact = get_artifact(
+        session=session,
+        teaching_class_id=teaching_class_id,
+        artifact_id=artifact_id,
+    )
+    new_name = name.strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail=t("artifact.name_blank"))
+    if len(new_name) > 255:
+        raise HTTPException(status_code=400, detail=t("artifact.name_blank"))
+    artifact.name = new_name
     artifact.updated_at = _now()
     session.add(artifact)
     session.commit()

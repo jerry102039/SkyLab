@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig(({ mode }) => {
-  const rootEnv = loadEnv(mode, path.resolve(__dirname, ".."), "");
+  const rootEnv = loadEnv(mode, path.resolve(import.meta.dirname, ".."), "");
   const enableSignup = process.env.ENABLE_SIGNUP ?? rootEnv.ENABLE_SIGNUP ?? "true";
 
   return {
@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "src"),
+        "@": path.resolve(import.meta.dirname, "src"),
       },
     },
     css: {

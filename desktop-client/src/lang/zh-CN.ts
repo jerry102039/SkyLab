@@ -67,7 +67,8 @@
       title: "連線到 SkyLab",
       description: "按一下建立安全連線，完成後就能直接查看並連接你的虛擬機。",
       button: "開始連線",
-      connecting: "連線中"
+      connecting: "正在建立安全連線",
+      secureHint: "WireGuard 加密 · 一鍵完成"
     },
     machines: {
       summary: "連線已建立 · {machines} 台機器 · {courses} 個課程環境",

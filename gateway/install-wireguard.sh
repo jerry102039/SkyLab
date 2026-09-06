@@ -67,13 +67,24 @@ fi
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup="${BACKUP_ROOT}/wireguard-${stamp}"
 install -d -m 700 "${backup}"
-iptables-save >"${backup}/iptables-save.txt"
+if command -v iptables-save >/dev/null 2>&1; then
+  iptables-save >"${backup}/iptables-save.txt"
+else
+  printf '%s\n' "iptables-save unavailable" >"${backup}/iptables-save.txt"
+fi
 ip -details address show >"${backup}/ip-address.txt"
 ip route show table all >"${backup}/ip-routes.txt"
 ufw status numbered >"${backup}/ufw-status.txt"
-tar_paths=(etc/ufw etc/systemd/network etc/systemd/system etc/sysctl.d)
+tar_paths=()
+for path in etc/ufw etc/systemd/network etc/systemd/system etc/sysctl.d; do
+  [[ -e "/${path}" ]] && tar_paths+=("${path}")
+done
 [[ -f /etc/sysctl.conf ]] && tar_paths+=(etc/sysctl.conf)
-tar -C / -czf "${backup}/etc-network-firewall.tgz" "${tar_paths[@]}"
+if ((${#tar_paths[@]})); then
+  tar -C / -czf "${backup}/etc-network-firewall.tgz" "${tar_paths[@]}"
+else
+  tar -C / -czf "${backup}/etc-network-firewall.tgz" --files-from /dev/null
+fi
 find "${backup}" -maxdepth 1 -type f ! -name SHA256SUMS -print0 \
   | sort -z \
   | xargs -0 sha256sum >"${backup}/SHA256SUMS"

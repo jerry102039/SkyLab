@@ -1,0 +1,22 @@
+{
+  "vnc_session.session_already_active": "VM {vmid} already has an active classroom session",
+  "vnc_session.session_not_found": "Classroom session not found",
+  "vnc_session.subscriber_limit_reached": "Classroom subscriber limit reached",
+  "classroom.teaching_class_not_found": "Teaching class not found",
+  "classroom.class_not_ready": "班級機器全部就緒後才能使用上課監看",
+  "classroom.machine_not_in_class": "This machine does not belong to the teaching class",
+  "classroom.watch_vm_only": "目前上課監看只支援 VM",
+  "classroom.resource_not_found": "Resource {vmid} not found",
+  "classroom.broadcast_own_vm_only": "You can only broadcast your own VM",
+  "classroom.session_not_found": "Classroom session not found",
+  "classroom.stop_forbidden": "Only the session starter or an admin can stop it",
+  "classroom.control_monitor_only": "Control is only available for monitor sessions",
+  "classroom.control_forbidden": "Only the session starter or an admin can take control",
+  "ai_gateway.credential_not_found": "AI API credential not found",
+  "ai_gateway.request_not_found": "AI API request not found",
+  "ai_gateway.request_already_reviewed": "This AI API request has already been reviewed",
+  "ai_gateway.connection_incomplete": "AI API connection settings are incomplete",
+  "ai_gateway.credential_already_revoked": "This AI API credential has already been revoked",
+  "monitoring.invalid_timeframe": "timeframe must be one of {allowed}",
+  "monitoring.resource_not_found": "Resource {vmid} not found"
+}

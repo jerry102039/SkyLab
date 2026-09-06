@@ -10,6 +10,22 @@ from app.models.teacher_judge_template_command import TeacherJudgeTemplateComman
 
 SUPPORTED_TEMPLATE_KEYS = {"linux", "python", "n8n", "postgresql"}
 
+GENERAL_COMMAND = TeacherJudgeTemplateCommand(
+    template_key="linux",
+    command_key="system.run_command",
+    command_label="通用受控指令",
+    category="inspection",
+    command_template="argv + cwd + timeout",
+    description=(
+        "在指定工作目錄以 argv list 與有限 timeout 執行單一唯讀／診斷指令，"
+        "可使用 cat、pwd、echo、唯讀 git 子命令、有限次數 ping 等一般工具，"
+        "並原樣收集 exit code、stdout、stderr。cd 請以 cwd 表示；"
+        "不得使用 shell、pipe、redirect、寫入、安裝、修復或破壞性操作。"
+    ),
+    risk_level="executes_command",
+    requires_confirmation=True,
+)
+
 
 def get_enabled_template_commands(
     session: Session,
@@ -33,6 +49,10 @@ def get_enabled_template_commands(
         )
     commands = list(session.exec(statement).all())
     if include_cross_template:
+        if not any(
+            command.command_key == GENERAL_COMMAND.command_key for command in commands
+        ):
+            commands.append(GENERAL_COMMAND)
         commands.sort(
             key=lambda command: (
                 command.template_key != template_key,
@@ -110,6 +130,7 @@ def validate_check_steps(
 
 
 __all__ = [
+    "GENERAL_COMMAND",
     "SUPPORTED_TEMPLATE_KEYS",
     "format_template_commands_for_prompt",
     "get_enabled_template_commands",

@@ -115,7 +115,7 @@ def test_class_capacity_preview_hides_caught_exception_details(monkeypatch):
                 custom_image_ref=None,
             )
         ],
-        students=[SimpleNamespace(id=uuid.uuid4())],
+        students=[SimpleNamespace(id=uuid.uuid4(), user_id=uuid.uuid4())],
         check_cluster=True,
     )
 
@@ -478,7 +478,7 @@ def test_class_provision_uses_reserved_capacity_not_personal_quota(monkeypatch):
 
 
 def test_class_provision_rejects_missing_capacity_reservation():
-    with pytest.raises(BadRequestError, match="capacity reservation"):
+    with pytest.raises(BadRequestError, match="容量保留"):
         batch_provision_service._provision_one(
             session=_Session(reservation=None),
             resource_type="qemu",

@@ -1,6 +1,9 @@
 import { ResourcesService } from "../../../../services/resources";
+import i18n from "../../../../i18n";
 
 /* 學生首頁與課程總覽共用的純邏輯；不含任何畫面，方便單獨測試。 */
+
+const defaultT = (key) => i18n.t(key, { ns: "personal" });
 
 /** 把任意進度值收斂成 0–100 的整數。 */
 export function toPercent(value) {
@@ -52,11 +55,11 @@ export function assignmentsUntilToday(assignments, now = new Date()) {
 }
 
 /** 任務列上的發布日期；沒有日期或格式錯誤時退回「已發布」。 */
-export function formatAssignmentDate(value) {
-  if (!value) return "已發布";
+export function formatAssignmentDate(value, t = defaultT) {
+  if (!value) return t("studentDashboard.published");
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "已發布";
-  return new Intl.DateTimeFormat("zh-TW", { month: "numeric", day: "numeric" }).format(date);
+  if (Number.isNaN(date.getTime())) return t("studentDashboard.published");
+  return new Intl.DateTimeFormat(i18n.language, { month: "numeric", day: "numeric" }).format(date);
 }
 
 /** 課表時間（HH:MM，24 小時制）；無法解析時回空字串。 */
@@ -89,7 +92,7 @@ export function normalizeSchedule(row) {
  * 合併「課程定義的機器」與「我的資源即時狀態」。
  * 舊課程只有單一房間部署時，退回用 deployment 補一台。
  */
-export function buildPracticeMachines(classMachines, resources, deployment, roomTitle) {
+export function buildPracticeMachines(classMachines, resources, deployment, roomTitle, t = defaultT) {
   const machines = (classMachines ?? []).map((machine) => {
     const resource = (resources ?? []).find(
       (item) => machine.vmid != null && Number(item.vmid) === Number(machine.vmid),
@@ -113,9 +116,9 @@ export function buildPracticeMachines(classMachines, resources, deployment, room
       vmid: deployment.vmid,
       status: fallbackResource?.status ?? deployment.status,
       type: fallbackResource?.type ?? "qemu",
-      name: fallbackResource?.name ?? roomTitle ?? "課堂練習機",
-      classMachineName: roomTitle ?? "課堂練習機",
-      classMachineRole: "本章節練習環境",
+      name: fallbackResource?.name ?? roomTitle ?? t("studentDashboard.defaultPracticeMachineName"),
+      classMachineName: roomTitle ?? t("studentDashboard.defaultPracticeMachineName"),
+      classMachineRole: t("studentDashboard.defaultPracticeMachineRole"),
     });
   }
 
@@ -123,11 +126,11 @@ export function buildPracticeMachines(classMachines, resources, deployment, room
 }
 
 /** 課堂機器按鈕的文字；學生只看到狀態，不提供手動開關機。 */
-export function practiceMachineActionLabel(machine, openingMachineId = null) {
-  if (machine?.vmid == null) return "環境配置中";
-  if (openingMachineId === machine.vmid) return "正在啟動…";
-  if (machine.status === "running") return "進入機器";
-  return "啟動並進入";
+export function practiceMachineActionLabel(machine, openingMachineId = null, t = defaultT) {
+  if (machine?.vmid == null) return t("studentDashboard.actionConfiguring");
+  if (openingMachineId === machine.vmid) return t("studentDashboard.actionStarting");
+  if (machine.status === "running") return t("studentDashboard.actionEnter");
+  return t("studentDashboard.actionStartAndEnter");
 }
 
 /** 送出開機後輪詢資源狀態，直到 running 或次數用盡（約 20 秒）。 */

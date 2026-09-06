@@ -155,7 +155,7 @@ def test_approved_request_with_vmid_is_rejected(
     repo = FakeRepo(request)
     monkeypatch.setattr(vm_request_service, "vm_request_repo", repo)
 
-    with pytest.raises(BadRequestError, match="[Dd]elete the resource") as exc:
+    with pytest.raises(BadRequestError, match="請改為刪除該資源") as exc:
         _cancel(fake_env, request)
 
     assert exc.value.status_code == 400

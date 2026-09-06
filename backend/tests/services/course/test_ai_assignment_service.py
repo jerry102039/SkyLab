@@ -5,7 +5,7 @@ from datetime import date, time
 
 import pytest
 from fastapi import HTTPException
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from app import models  # noqa: F401
 from app.models.course import CoursePath, CoursePathStatus
@@ -157,6 +157,98 @@ def test_student_sees_only_approved_assignments_from_linked_class() -> None:
     assert assignment.items[0].detectable == "auto"
     assert not hasattr(assignment.items[0], "detection_method")
     assert not hasattr(assignment.items[0], "check_steps")
+
+
+def test_student_can_toggle_each_task_item_without_starting_ai_check() -> None:
+    session = _session()
+    teacher_id = uuid.uuid4()
+    student_id = uuid.uuid4()
+    teaching_class = TeachingClass(
+        name="Linux Toggle",
+        code="linux-toggle",
+        term="2026-1",
+        owner_id=teacher_id,
+        start_date=date(2026, 8, 1),
+        end_date=date(2026, 12, 31),
+        weekday=1,
+        start_time=time(9),
+        end_time=time(11),
+    )
+    path = CoursePath(
+        title="Linux",
+        status=CoursePathStatus.published,
+        created_by=teacher_id,
+        teaching_class_id=teaching_class.id,
+    )
+    artifact = _artifact(
+        teaching_class_id=teaching_class.id,
+        status=TeacherJudgeScriptStatus.approved,
+        name="Linux completion toggle",
+    )
+    artifact.rubric_snapshot_json["items"].append(
+        {
+            "id": "resources",
+            "title": "Check system resources",
+            "description": "Inspect RAM and CPU information.",
+            "detectable": "auto",
+        }
+    )
+    session.add(teaching_class)
+    session.add(path)
+    session.add(artifact)
+    session.add(TeachingClassStudent(class_id=teaching_class.id, user_id=student_id))
+    session.commit()
+
+    first_item = ai_assignment_service.update_student_completion(
+        session,
+        user_id=student_id,
+        path_id=path.id,
+        assignment_id=artifact.id,
+        item_id="permissions",
+        completed=True,
+    )
+
+    assert first_item.completed is False
+    assert first_item.completed_item_ids == ["permissions"]
+    assert first_item.ready_at is None
+    assert list_student_ai_assignments(
+        session,
+        user_id=student_id,
+        path_id=path.id,
+    )[0].completion.completed_item_ids == ["permissions"]
+    assert session.exec(select(TeacherJudgeScriptRun)).all() == []
+
+    all_completed = ai_assignment_service.update_student_completion(
+        session,
+        user_id=student_id,
+        path_id=path.id,
+        assignment_id=artifact.id,
+        item_id="resources",
+        completed=True,
+    )
+
+    assert all_completed.completed is True
+    assert all_completed.completed_item_ids == ["permissions", "resources"]
+    assert all_completed.ready_at is not None
+
+    first_item_unchecked = ai_assignment_service.update_student_completion(
+        session,
+        user_id=student_id,
+        path_id=path.id,
+        assignment_id=artifact.id,
+        item_id="permissions",
+        completed=False,
+    )
+
+    assert first_item_unchecked.completed is False
+    assert first_item_unchecked.completed_item_ids == ["resources"]
+    assert first_item_unchecked.ready_at is None
+    assert list_student_ai_assignments(
+        session,
+        user_id=student_id,
+        path_id=path.id,
+    )[0].completion.completed is False
+    assert session.exec(select(TeacherJudgeScriptRun)).all() == []
 
 
 def test_student_can_view_one_uploaded_pdf_for_multiple_checkpoints(

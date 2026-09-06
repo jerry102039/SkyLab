@@ -33,6 +33,7 @@ from app.ai.template_recommendation.schemas import (
 )
 from app.ai.utils import apply_thinking_control, strip_think_tags
 from app.api.deps import CurrentUser, SessionDep
+from app.core.i18n import t
 from app.core.permissions import Permission, has_permission
 from app.infrastructure.ai.template_recommendation import client
 from app.repositories import vm_request as vm_request_repo
@@ -315,7 +316,7 @@ async def chat(
     if not model_name:
         raise HTTPException(
             status_code=503,
-            detail="AI model binding is missing in config/system-ai.json.",
+            detail=t("aiTemplateRecommendation.modelBindingMissing"),
         )
 
     is_first_turn = len(request.messages) <= 1
@@ -428,7 +429,7 @@ async def chat(
             logger.error("vLLM upstream error: %s", exc)
             raise HTTPException(
                 status_code=502,
-                detail="上游 AI 服務錯誤，請確認 vLLM 伺服器與模型設定（VLLM_BASE_URL / VLLM_MODEL_NAME）。",
+                detail=t("aiTemplateRecommendation.upstreamError"),
             ) from exc
         raise
 
@@ -530,7 +531,7 @@ async def recommend(
             logger.error("vLLM upstream error: %s", exc)
             raise HTTPException(
                 status_code=502,
-                detail="上游 AI 服務錯誤，請確認 vLLM 伺服器與模型設定（VLLM_BASE_URL / VLLM_MODEL_NAME）。",
+                detail=t("aiTemplateRecommendation.upstreamError"),
             ) from exc
         raise
 

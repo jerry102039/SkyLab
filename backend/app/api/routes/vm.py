@@ -6,6 +6,7 @@ from sqlmodel import Session
 
 from app.api.deps import AdminUser, CurrentUser, SessionDep, VmInfoDep
 from app.api.websocket.vnc import register_vnc_session_cookie
+from app.core.i18n import t
 from app.core.permissions import Permission, has_permission
 from app.exceptions import BadRequestError, ProxmoxError
 from app.infrastructure.worker import background_tasks
@@ -82,7 +83,7 @@ def create_vm(
     )
     return VMCreateResponse(
         task_id=task_id or None,
-        message="VM 建立中，請稍後於資源列表查看",
+        message=t("vm.creating"),
     )
 
 

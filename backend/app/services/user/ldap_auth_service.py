@@ -10,6 +10,7 @@ from sqlmodel import Session
 
 from app.core import security
 from app.core.config import settings
+from app.core.i18n import t
 from app.exceptions import AppError, AuthenticationError, BadRequestError
 from app.infrastructure import ldap as ldap_client
 from app.models import AuditAction, User, UserRole
@@ -53,7 +54,7 @@ def _role_from_groups(
 def login_ldap(*, session: Session, username: str, password: str) -> Token:
     config = get_ldap_config(session=session)
     if not config.enabled:
-        raise BadRequestError("LDAP login is not enabled")
+        raise BadRequestError(t("ldapAuth.notEnabled"))
 
     def _fail(reason: str) -> None:
         audit_service.log_action(
@@ -76,7 +77,7 @@ def login_ldap(*, session: Session, username: str, password: str) -> Token:
     if user is None:
         if not config.auto_create_users:
             _fail(f"no local account for {info.email}")
-            raise BadRequestError("Account is not registered")
+            raise BadRequestError(t("ldapAuth.accountNotRegistered"))
         role = _role_from_groups(
             info.groups,
             teacher_group_dn=config.teacher_group_dn,
@@ -101,7 +102,7 @@ def login_ldap(*, session: Session, username: str, password: str) -> Token:
 
     if not user.is_active:
         _fail(f"inactive user {info.email}")
-        raise BadRequestError("Inactive user")
+        raise BadRequestError(t("auth.inactiveUser"))
 
     audit_service.log_action(
         session=session,

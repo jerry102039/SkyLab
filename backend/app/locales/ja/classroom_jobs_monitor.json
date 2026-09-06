@@ -1,0 +1,22 @@
+{
+  "vnc_session.session_already_active": "VM {vmid} にはすでにアクティブな教室セッションがあります",
+  "vnc_session.session_not_found": "教室セッションが見つかりません",
+  "vnc_session.subscriber_limit_reached": "教室の視聴者数が上限に達しています",
+  "classroom.teaching_class_not_found": "授業クラスが見つかりません",
+  "classroom.class_not_ready": "クラスの機器がすべて準備完了してから授業監視を利用できます",
+  "classroom.machine_not_in_class": "この機器は当該授業クラスに属していません",
+  "classroom.watch_vm_only": "現在、授業監視は VM のみ対応しています",
+  "classroom.resource_not_found": "リソース {vmid} が見つかりません",
+  "classroom.broadcast_own_vm_only": "自分自身の VM のみ配信できます",
+  "classroom.session_not_found": "教室セッションが見つかりません",
+  "classroom.stop_forbidden": "セッションの開始者または管理者のみ停止できます",
+  "classroom.control_monitor_only": "制御は監視セッションでのみ利用できます",
+  "classroom.control_forbidden": "セッションの開始者または管理者のみ制御を引き継げます",
+  "ai_gateway.credential_not_found": "AI API 認証情報が見つかりません",
+  "ai_gateway.request_not_found": "AI API 申請が見つかりません",
+  "ai_gateway.request_already_reviewed": "この AI API 申請はすでに審査済みです",
+  "ai_gateway.connection_incomplete": "AI API 接続設定が不完全です",
+  "ai_gateway.credential_already_revoked": "この AI API 認証情報はすでに失効しています",
+  "monitoring.invalid_timeframe": "timeframe は {allowed} のいずれかである必要があります",
+  "monitoring.resource_not_found": "リソース {vmid} が見つかりません"
+}

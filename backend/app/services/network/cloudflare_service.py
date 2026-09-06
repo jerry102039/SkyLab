@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from sqlmodel import Session
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError, UpstreamServiceError
 from app.infrastructure.cloudflare import CloudflareAPIClient
 from app.models.cloudflare_config import CloudflareConfig
@@ -136,7 +137,7 @@ def create_zone(
         config.account_id
     )
     if not account_id:
-        raise BadRequestError("建立 Zone 前請先提供 Cloudflare account_id")
+        raise BadRequestError(t("cloudflare.zoneRequiresAccountId"))
 
     zone = client.create_zone(
         name=data.name.strip(),
@@ -310,7 +311,7 @@ def _resolve_api_token(
         return token
     if existing is not None and existing.encrypted_api_token:
         return config_repo.get_decrypted_api_token(existing)
-    raise BadRequestError("初次設定必須提供 Cloudflare API Token")
+    raise BadRequestError(t("cloudflare.initialSetupRequiresApiToken"))
 
 
 def _resolve_default_dns_target(
@@ -335,27 +336,27 @@ def _resolve_default_dns_target(
     if not target_type and not target_value:
         return None, None
     if not target_type or not target_value:
-        raise BadRequestError("預設 DNS 指向必須同時提供類型與內容")
+        raise BadRequestError(t("cloudflare.defaultDnsTargetRequiresTypeAndContent"))
 
     if target_type not in _DEFAULT_REVERSE_PROXY_TARGET_TYPES:
-        raise BadRequestError("預設 DNS 指向類型僅支援 A 或 CNAME")
+        raise BadRequestError(t("cloudflare.defaultDnsTargetTypeUnsupported"))
 
     if target_type == "A":
         try:
             return target_type, str(ipaddress.IPv4Address(target_value))
         except ipaddress.AddressValueError as exc:
-            raise BadRequestError("預設 DNS 指向 A record 必須是有效 IPv4 位址") from exc
+            raise BadRequestError(t("cloudflare.defaultDnsTargetInvalidIpv4")) from exc
 
     normalized_target_value = target_value.rstrip(".").lower()
     if not _is_valid_hostname(normalized_target_value):
-        raise BadRequestError("預設 DNS 指向 CNAME 必須是有效網域")
+        raise BadRequestError(t("cloudflare.defaultDnsTargetInvalidDomain"))
     return target_type, normalized_target_value
 
 
 def _build_client_from_session(session: Session) -> tuple[CloudflareAPIClient, CloudflareConfig]:
     config = config_repo.get_cloudflare_config(session)
     if config is None or not config.encrypted_api_token:
-        raise BadRequestError("請先完成 Cloudflare 供應商設定")
+        raise BadRequestError(t("cloudflare.providerNotConfigured"))
     return CloudflareAPIClient(api_token=config_repo.get_decrypted_api_token(config)), config
 
 
@@ -363,14 +364,14 @@ def _get_default_dns_target(config: CloudflareConfig) -> tuple[str, str]:
     target_type = _normalize_record_type(config.default_dns_target_type)
     target_value = _normalize_optional_text(config.default_dns_target_value)
     if not target_type or not target_value:
-        raise BadRequestError("請先在 admin/domains 設定預設 DNS 指向")
+        raise BadRequestError(t("cloudflare.defaultDnsTargetNotConfigured"))
     return target_type, target_value
 
 
 def _extract_result_list(payload: dict[str, Any]) -> list[dict[str, Any]]:
     result = payload.get("result")
     if not isinstance(result, list):
-        raise UpstreamServiceError("Cloudflare API 回傳列表格式不正確")
+        raise UpstreamServiceError(t("cloudflare.apiListFormatInvalid"))
     return [cast(dict[str, Any], item) for item in result if isinstance(item, dict)]
 
 
@@ -438,14 +439,14 @@ def _build_record_payload(
 ) -> dict[str, object]:
     record_type = _normalize_record_type(data.type)
     if not record_type:
-        raise BadRequestError("DNS record type 不可為空")
+        raise BadRequestError(t("cloudflare.dnsRecordTypeRequired"))
 
     name = data.name.strip()
     content = data.content.strip()
     if not name:
-        raise BadRequestError("DNS record name 不可為空")
+        raise BadRequestError(t("cloudflare.dnsRecordNameRequired"))
     if not content:
-        raise BadRequestError("DNS record content 不可為空")
+        raise BadRequestError(t("cloudflare.dnsRecordContentRequired"))
 
     payload: dict[str, object] = {
         "type": record_type,
@@ -489,7 +490,7 @@ def _is_valid_hostname(value: str) -> bool:
 def _require_identifier(value: str, field_name: str) -> str:
     identifier = value.strip()
     if not identifier:
-        raise BadRequestError(f"{field_name} 不可為空")
+        raise BadRequestError(t("cloudflare.identifierRequired", field=field_name))
     return identifier
 
 

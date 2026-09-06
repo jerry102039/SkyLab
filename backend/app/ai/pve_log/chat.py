@@ -35,6 +35,7 @@ from app.ai.pve_log.collector import collect_snapshot
 from app.ai.pve_log.config import settings
 from app.ai.pve_log.schemas import ChatResponse, SystemSnapshot, ToolCallRecord
 from app.ai.pve_template.command_policy import is_known_read_command
+from app.core.i18n import t
 from app.infrastructure.ai.pve_log import client as vllm_client
 
 logger = logging.getLogger(__name__)
@@ -266,10 +267,10 @@ def _execute_tool_sync(
     elif name == "get_resource_detail":
         vmid = int(args["vmid"])
         if allowed_vmids is not None and vmid not in allowed_vmids:
-            return {"error": "目前只允許存取指定範圍內的 VM/LXC"}
+            return {"error": t("pveLog.scopeRestricted")}
         summary = next((r for r in snapshot.resources if r.vmid == vmid), None)
         if summary is None:
-            return {"error": f"找不到 vmid={vmid}"}
+            return {"error": t("pveLog.vmidNotFound", vmid=vmid)}
         status_detail = next(
             (s for s in snapshot.resource_statuses if s.vmid == vmid), None
         )
@@ -289,7 +290,7 @@ def _execute_tool_sync(
         return snapshot.cluster.model_dump(mode="json")
 
     else:
-        return {"error": f"未知工具：{name}"}
+        return {"error": t("pveLog.unknownTool", name=name)}
 
 
 async def _execute_ssh_tool(
@@ -316,7 +317,7 @@ async def _execute_ssh_tool(
         vmid = int(args["vmid"])
         command = str(args["command"])
     except (KeyError, ValueError, TypeError) as e:
-        return {"error": f"缺少或無效的必填參數: {e}", "pending": False}
+        return {"error": t("pveLog.missingRequiredParams", error=e), "pending": False}
 
     if allowed_vmids is not None and vmid not in allowed_vmids:
         return {
@@ -325,7 +326,7 @@ async def _execute_ssh_tool(
             "ssh_user": str(args.get("ssh_user", "root")),
             "command": command,
             "blocked": True,
-            "block_reason": "目前只允許存取指定範圍內的 VM/LXC",
+            "block_reason": t("pveLog.scopeRestricted"),
             "pending": False,
         }
 
@@ -355,7 +356,7 @@ async def _execute_ssh_tool(
     )
     data = result.model_dump(mode="json")
     # 補充 reason 給前端顯示（AI 提供的說明）
-    data["reason"] = str(args.get("reason", "未提供原因"))
+    data["reason"] = str(args.get("reason", t("pveLog.reasonNotProvided")))
     return data
 
 
@@ -387,14 +388,14 @@ def _deferred_ssh_result(args: dict[str, Any]) -> dict[str, Any]:
         return {
             "pending": False,
             "deferred": True,
-            "error": "前一筆 SSH 指令仍在等待確認，這筆指令已延後。",
+            "error": t("pveLog.deferredSshPending"),
         }
     return {
         "vmid": vmid,
         "command": command,
         "pending": False,
         "deferred": True,
-        "error": "前一筆 SSH 指令仍在等待確認，這筆指令已延後。",
+        "error": t("pveLog.deferredSshPending"),
     }
 
 
@@ -587,7 +588,7 @@ def _promote_confirmation_prose_to_tool_call(
     reason = (
         reason_match.group(1).strip().strip("*")
         if reason_match
-        else "依 AI 診斷判斷執行此指令以取得 VM 內部狀態"
+        else t("pveLog.defaultPromotedReason")
     )
     vmid = next(iter(allowed_vmids))
     logger.info(
@@ -642,7 +643,7 @@ async def chat(
     if not settings.VLLM_BASE_URL or not settings.VLLM_MODEL_NAME:
         return ChatResponse(
             reply="",
-            error="vLLM 設定不完整，請確認 .env 中的 VLLM_* 設定",
+            error=t("pveLog.vllmNotConfigured"),
         )
 
     effective_system_prompt = system_prompt or _SYSTEM_PROMPT
@@ -717,10 +718,7 @@ async def chat(
             )
             if result_dict.get("pending"):
                 return ChatResponse(
-                    reply=(
-                        "有指令需要您的確認；這是下一筆個別審核，同意或拒絕後，AI 會繼續"
-                        "處理其餘指令。"
-                    ),
+                    reply=t("pveLog.confirmationNextPending"),
                     tools_called=tools_called,
                     needs_confirmation=True,
                     messages=messages,
@@ -749,7 +747,7 @@ async def chat(
                 reply="",
                 tools_called=tools_called,
                 messages=messages,
-                error=f"LLM 服務回傳錯誤 {exc.response.status_code}",
+                error=t("pveLog.llmHttpError", status=exc.response.status_code),
             )
         except Exception as exc:
             logger.error("vLLM 連線失敗：%s", exc)
@@ -757,7 +755,7 @@ async def chat(
                 reply="",
                 tools_called=tools_called,
                 messages=messages,
-                error=f"無法連線至 LLM 服務：{exc}",
+                error=t("pveLog.llmConnectionFailed", error=exc),
             )
 
         choices = data.get("choices") or []
@@ -767,7 +765,7 @@ async def chat(
                 reply="",
                 tools_called=tools_called,
                 messages=messages,
-                error="LLM 回傳空回應（choices 為空）",
+                error=t("pveLog.llmEmptyResponse"),
             )
 
         assistant_msg = _normalize_assistant_message(
@@ -801,7 +799,7 @@ async def chat(
                 reply="",
                 tools_called=tools_called,
                 messages=messages,
-                error="AI 連續呼叫工具次數過多，已停止以避免無限迴圈。",
+                error=t("pveLog.tooManyToolRounds"),
             )
 
         needs_snapshot = any(
@@ -816,7 +814,7 @@ async def chat(
                     reply="",
                     tools_called=tools_called,
                     messages=messages,
-                    error=f"收集 PVE 資料失敗：{exc}",
+                    error=t("pveLog.snapshotCollectFailed", error=exc),
                 )
 
         parsed_calls = [
@@ -942,10 +940,7 @@ async def chat(
 
         if needs_confirmation:
             return ChatResponse(
-                reply=(
-                    "有指令需要您的確認；若還有其他待審核指令，會在本次決定後"
-                    "分開詢問。"
-                ),
+                reply=t("pveLog.confirmationPending"),
                 tools_called=tools_called,
                 needs_confirmation=True,
                 messages=messages,

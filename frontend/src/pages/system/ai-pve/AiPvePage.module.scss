@@ -1,9 +1,0 @@
-.page {
-  @include flex-column;
-  gap: $spacing-24;
-  padding: $spacing-8 $spacing-16;
-  flex: 1;
-  min-height: 0;
-
-  @media (min-width: $breakpoint-sidebar) { padding: 0; }
-}

@@ -29,6 +29,7 @@ from app.ai.pve_template.schemas import (
     AIPVETemplateTargetRead,
 )
 from app.core.authorizers import require_resource_access
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError
 from app.models import AIPVETemplate
 from app.repositories import resource as resource_repo
@@ -59,11 +60,11 @@ def _cleanup_pending_context() -> None:
 def _authorize_vmid(*, session: Session, current_user: Any, vmid: int) -> Any:
     resource = resource_repo.get_resource_by_vmid(session=session, vmid=vmid)
     if resource is None:
-        raise NotFoundError(f"VMID={vmid} 未在測試後端登記")
+        raise NotFoundError(t("pveTemplate.vmidNotRegistered", vmid=vmid))
     require_resource_access(
         current_user,
         resource.user_id,
-        detail="目前使用者沒有此測試 VMID 的存取權限",
+        detail=t("pveTemplate.noAccessPermission"),
     )
     return resource
 
@@ -83,7 +84,7 @@ def _resolve_targets(
         template = get_by_key(session=session, template_key=target.template_key)
         if template is None or not template.enabled:
             raise NotFoundError(
-                f"找不到可用的 AI PVE template：{target.template_key}"
+                t("pveTemplate.templateNotFound", key=target.template_key)
             )
         resolved.append((target.vmid, template))
     return tuple(resolved)
@@ -233,12 +234,12 @@ async def confirm_ssh(
         or context is None
         or context.scope_id != scope_id
     ):
-        raise BadRequestError("確認 token 無效、已過期或不是 AI PVE template 請求")
+        raise BadRequestError(t("pveTemplate.confirmTokenInvalidOrNotTemplate"))
 
     targets = _resolve_targets_from_context(context=context, session=session)
     _authorize_targets(session=session, current_user=current_user, targets=targets)
     if pending_request.vmid not in context.allowed_vmids:
-        raise BadRequestError("確認 token 的 VMID 不在目前 AI PVE template scope")
+        raise BadRequestError(t("pveTemplate.vmidNotInScope"))
     effective_scope_type = scope_type or "template_batch"
 
     result = await confirm_exec(
@@ -255,7 +256,7 @@ async def confirm_ssh(
     if peek_pending_request(token) is not None:
         return AIPVETemplateChatResponse(
             targets=_target_reads(targets),
-            reply="確認未生效，原指令仍在等待有效的使用者決策。",
+            reply=t("pveTemplate.confirmationNotEffective"),
             error=result.error or result.block_reason,
             confirmation_result=result,
         )
@@ -264,8 +265,10 @@ async def confirm_ssh(
     if context is None or result.pending:
         return AIPVETemplateChatResponse(
             targets=_target_reads(targets),
-            reply="找不到可恢復的 AI 對話內容，請重新發起任務。",
-            error=result.error or result.block_reason or "AI 對話接續內容已過期",
+            reply=t("pveTemplate.conversationExpired"),
+            error=result.error
+            or result.block_reason
+            or t("pveTemplate.conversationExpiredShort"),
             confirmation_result=result,
         )
 
@@ -309,7 +312,7 @@ def _resolve_targets_from_context(
             or current.template_key != template.template_key
         ):
             raise NotFoundError(
-                f"找不到可用的 AI PVE template：{template.template_key}"
+                t("pveTemplate.templateNotFound", key=template.template_key)
             )
         resolved.append((vmid, current))
     return tuple(resolved)

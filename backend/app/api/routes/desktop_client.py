@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from app.api.deps import CurrentUser, SessionDep
 from app.api.deps.rate_limit import rate_limit_by_ip
 from app.core.config import settings
+from app.core.i18n import t
 from app.schemas.wireguard import (
     WireGuardConnectRequest,
     WireGuardConnectResponse,
@@ -91,7 +92,7 @@ def create_device_code() -> DeviceCodeResponse:
     _cleanup_expired()
     if len(_device_codes) >= _DEVICE_CODE_MAX_PENDING:
         raise HTTPException(
-            status_code=429, detail="Too many pending device codes, try again later"
+            status_code=429, detail=t("desktop.device_code_too_many")
         )
     code = secrets.token_urlsafe(32)
     _device_codes[code] = {"token": None, "created_at": time.time()}
@@ -121,15 +122,19 @@ def approve_device_code(
     _cleanup_expired()
     entry = _device_codes.get(body.device_code)
     if entry is None:
-        raise HTTPException(status_code=404, detail="Device code not found or expired")
+        raise HTTPException(
+            status_code=404, detail=t("desktop.device_code_not_found")
+        )
 
     if time.time() - entry["created_at"] > _DEVICE_CODE_TTL:
         del _device_codes[body.device_code]
-        raise HTTPException(status_code=410, detail="Device code expired")
+        raise HTTPException(status_code=410, detail=t("desktop.device_code_expired"))
 
     if entry["token"] is not None:
         # 一組 code 只能被核准一次，避免第二個人（或釣魚頁）覆寫成自己的身份
-        raise HTTPException(status_code=409, detail="Device code already approved")
+        raise HTTPException(
+            status_code=409, detail=t("desktop.device_code_already_approved")
+        )
 
     # Generate a long-lived access token for the desktop client (8 hours).
     # token_version 必須帶入，否則改過密碼的使用者拿到的 token 會立刻被拒，
@@ -149,7 +154,9 @@ def poll_device_code(code: str) -> DevicePollResponse:
     _cleanup_expired()
     entry = _device_codes.get(code)
     if entry is None:
-        raise HTTPException(status_code=404, detail="Device code not found or expired")
+        raise HTTPException(
+            status_code=404, detail=t("desktop.device_code_not_found")
+        )
 
     if entry["token"] is not None:
         token = entry["token"]
@@ -258,8 +265,11 @@ def _find_local_download_asset() -> Path | None:
 
 
 @router.get("/download")
-def download_desktop_client(session: SessionDep, current_user: CurrentUser):
+def download_desktop_client():
     """Return the desktop client installer or archive.
+
+    The installer is intentionally public so a normal browser download can
+    follow the redirect without exposing an API access token.
 
     If DESKTOP_CLIENT_DOWNLOAD_URL is set, redirects to that URL (e.g. a
     GitHub Releases asset). Otherwise serves a local file from static/downloads/
@@ -277,10 +287,7 @@ def download_desktop_client(session: SessionDep, current_user: CurrentUser):
         )
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Desktop client installer not found. Build desktop-client or set "
-                "DESKTOP_CLIENT_DOWNLOAD_URL."
-            ),
+            detail=t("desktop.installer_not_found"),
         )
 
     media_type = (

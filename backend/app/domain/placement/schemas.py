@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
@@ -44,6 +45,9 @@ class PlacementRequest(BaseModel):
     # placement 據此把候選節點限制在「拿得到模板」的節點上。
     ostemplate: str | None = Field(default=None, max_length=512)
     template_vmid: int | None = Field(default=None, ge=1)
+    # 群組約束：同一組機器（快速練習 Session／班級／課程部署）共用此鍵。
+    # placement 據此把整組釘在同一節點（同時也就同一叢集）。
+    placement_group_id: uuid.UUID | None = Field(default=None)
 
     @model_validator(mode="before")
     @classmethod
@@ -89,6 +93,10 @@ class NodeCapacity(BaseModel):
     node: str
     status: str
     gpu_count: int = Field(default=0, ge=0)
+    # 扣掉同時段已預約的 GPU 之後，這個節點還剩幾個可指派的槽。
+    # gpu_count 是節點上所有 mapping 的總槽數，因此這個計數也是總量：
+    # 同節點不同卡之間會互相排擠，屬保守誤差（寧可拒絕也不超賣）。
+    allocatable_gpu_slots: int = Field(default=0, ge=0)
     running_resources: int = Field(default=0, ge=0)
     guest_soft_limit: int = Field(default=0, ge=0)
     guest_pressure_ratio: float = Field(default=0.0, ge=0.0)
@@ -105,6 +113,16 @@ class NodeCapacity(BaseModel):
     allocatable_disk_bytes: int = Field(default=0, ge=0)
     current_loadavg_1: float | None = Field(default=None, ge=0.0)
     average_loadavg_1: float | None = Field(default=None, ge=0.0)
+
+    @model_validator(mode="after")
+    def default_gpu_slots_to_capacity(self) -> NodeCapacity:
+        """未明確指定可用槽數時，視為「整個節點的 GPU 都還沒被預約」。
+
+        避免呼叫端只設 gpu_count 就意外得到 0 個可用槽而被擋下。
+        """
+        if "allocatable_gpu_slots" not in self.model_fields_set:
+            self.allocatable_gpu_slots = self.gpu_count
+        return self
 
 
 class PlacementDecision(BaseModel):

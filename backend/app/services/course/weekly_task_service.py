@@ -7,6 +7,7 @@ from pathlib import Path
 
 from sqlmodel import Session, select
 
+from app.core.i18n import t
 from app.exceptions import NotFoundError
 from app.models import TeachingClassTaskFile, TeachingClassWeek
 from app.models.teacher_judge_file import TeacherJudgeFile
@@ -163,7 +164,7 @@ def list_student_weekly_tasks(
             ),
         )
         for week in weeks
-        if checkpoints_by_week.get(week.id)
+        if files_by_week.get(week.id) or checkpoints_by_week.get(week.id)
     ]
 
 
@@ -192,12 +193,12 @@ def get_student_weekly_task_pdf(
         or not task_file.storage_key
         or not task_file.filename.lower().endswith(".pdf")
     ):
-        raise NotFoundError("Task PDF not found")
+        raise NotFoundError(t("weekly_task.pdf_not_found"))
 
     root = TASK_FILE_ROOT.resolve()
     stored_path = (root / task_file.storage_key).resolve()
     if not stored_path.is_relative_to(root) or not stored_path.is_file():
-        raise NotFoundError("Task PDF not found")
+        raise NotFoundError(t("weekly_task.pdf_not_found"))
     return stored_path, task_file.filename
 
 

@@ -1,12 +1,16 @@
+import { useTranslation } from "react-i18next";
 import styles from "./TemplatesPage.module.scss";
 
-export const TEMPLATE_STATUS_LABEL = {
-  creating: "建立中",
-  ready: "就緒",
-  updating: "更新循環中",
-  failed: "失敗",
-  deleted: "已刪除",
-};
+export function useTemplateStatusLabel() {
+  const { t } = useTranslation("resource");
+  return {
+    creating: t("TemplateBadges.statusCreating"),
+    ready: t("TemplateBadges.statusReady"),
+    updating: t("TemplateBadges.statusUpdating"),
+    failed: t("TemplateBadges.statusFailed"),
+    deleted: t("TemplateBadges.statusDeleted"),
+  };
+}
 
 const TEMPLATE_STATUS_CLASS = {
   creating: "badge_info",
@@ -17,9 +21,10 @@ const TEMPLATE_STATUS_CLASS = {
 };
 
 export function TemplateStatusBadge({ status }) {
+  const templateStatusLabel = useTemplateStatusLabel();
   return (
     <span className={`${styles.badge} ${styles[TEMPLATE_STATUS_CLASS[status] ?? "badge_muted"]}`}>
-      {TEMPLATE_STATUS_LABEL[status] ?? status}
+      {templateStatusLabel[status] ?? status}
     </span>
   );
 }

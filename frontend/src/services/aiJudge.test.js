@@ -3,6 +3,7 @@ import {
   AiJudgeService,
   RUBRIC_POLISH_PROMPT,
   RUBRIC_REASSESS_PROMPT,
+  TEACHER_JUDGE_REQUEST_TIMEOUT_MS,
   TEMPLATE_OPTIONS,
   getTemplateLabel,
   shouldDisplayChatMessage,
@@ -32,6 +33,14 @@ beforeEach(() => {
 });
 
 describe("AiJudgeService persistent sessions", () => {
+  test("session 清單不再傳送進行中或已封存的狀態分類", async () => {
+    await AiJudgeService.listSessions("class-1");
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toContain("/api/v1/teaching-classes/class-1/judge/sessions/");
+    expect(url).not.toContain("status=");
+  });
+
   test("評分環境提供 PostgreSQL 模板", () => {
     expect(TEMPLATE_OPTIONS.map((option) => option.key)).toContain("postgresql");
     expect(getTemplateLabel("postgresql")).toBe("PostgreSQL");
@@ -161,6 +170,36 @@ describe("AiJudgeService persistent sessions", () => {
     expect(JSON.parse(init.body)).toEqual({ content: "檢查 nginx" });
   });
 
+  test("聊天室訊息可攜帶已解析附件 ID", async () => {
+    await AiJudgeService.sendSessionMessage(
+      "class-1",
+      "session-1",
+      "請依文件補充項目",
+      4,
+      { attachmentIds: ["attachment-1"] },
+    );
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual({
+      content: "請依文件補充項目",
+      analysis_revision: 4,
+      attachment_ids: ["attachment-1"],
+    });
+  });
+
+  test("聊天室附件上傳使用 session-scoped multipart endpoint", async () => {
+    const file = new File(["# requirements"], "requirements.md", { type: "text/markdown" });
+    await AiJudgeService.uploadSessionAttachment("class-1", "session-1", file);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain(
+      "/api/v1/teaching-classes/class-1/judge/sessions/session-1/attachments",
+    );
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(init.body.get("file").name).toBe("requirements.md");
+  });
+
   test("AI 提案請求可攜帶目前評分表 revision", async () => {
     await AiJudgeService.sendSessionMessage("class-1", "check-1", "補充檢查步驟", 4);
 
@@ -188,6 +227,31 @@ describe("AiJudgeService persistent sessions", () => {
     });
   });
 
+  test("Teacher Judge session AI request 以後端 60 秒 timeout 為準", async () => {
+    vi.useFakeTimers();
+    let settled = false;
+    try {
+      fetchMock.mockImplementationOnce((_url, init) => new Promise((_resolve, reject) => {
+        init.signal.addEventListener(
+          "abort",
+          () => reject(new DOMException("aborted", "AbortError")),
+          { once: true },
+        );
+      }));
+
+      const pending = AiJudgeService.sendSessionMessage("class-1", "check-1", "補充檢查");
+      pending.catch(() => { settled = true; });
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(TEACHER_JUDGE_REQUEST_TIMEOUT_MS - 15_000);
+      await expect(pending).rejects.toMatchObject({ status: 408, timeout: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("重新評估提示會要求 AI 更新可偵測分類與評分計劃", () => {
     expect(RUBRIC_REASSESS_PROMPT).toContain("可自動偵測程度");
     expect(RUBRIC_REASSESS_PROMPT).toContain("評分計劃書");
@@ -199,7 +263,11 @@ describe("AiJudgeService persistent sessions", () => {
 
   test("潤飾提示會保留老師目標並要求補足下一層 AI 的執行資訊", () => {
     expect(RUBRIC_POLISH_PROMPT).toContain("下一層檢查 AI");
+    expect(RUBRIC_POLISH_PROMPT).toContain("auto、partial 或 manual");
     expect(RUBRIC_POLISH_PROMPT).toContain("成功條件");
+    expect(RUBRIC_POLISH_PROMPT).toContain("fallback");
+    expect(RUBRIC_POLISH_PROMPT).toContain("check_steps");
+    expect(RUBRIC_POLISH_PROMPT).toContain("完整評分項目列表");
     expect(RUBRIC_POLISH_PROMPT).toContain("不要改成較容易但不同的檢查目標");
     expect(RUBRIC_POLISH_PROMPT).toContain("非硬性範圍");
   });

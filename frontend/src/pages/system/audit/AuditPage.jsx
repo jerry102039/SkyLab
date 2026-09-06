@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./AuditPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -29,15 +30,17 @@ function toIso(dateStr, endOfDay = false) {
 }
 
 function EmptyState({ hasFilter }) {
+  const { t } = useTranslation("system");
   return (
     <SharedEmptyState
       icon={hasFilter ? "search_off" : "receipt_long"}
-      title={hasFilter ? "找不到符合的紀錄" : "尚無操作紀錄"}
+      title={hasFilter ? t("AuditPage.emptyNoResult") : t("AuditPage.emptyNone")}
     />
   );
 }
 
 export default function AuditPage() {
+  const { t } = useTranslation("system");
   const toast = useToast();
   const [logs, setLogs] = useState([]);
   const [count, setCount] = useState(0);
@@ -75,11 +78,11 @@ export default function AuditPage() {
       setLogs(res?.data ?? []);
       setCount(res?.count ?? 0);
     } catch (err) {
-      toast.error(err?.message ?? "載入稽核日誌失敗");
+      toast.error(err?.message ?? t("AuditPage.toastLoadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [queryParams, toast]);
+  }, [queryParams, toast, t]);
 
   useEffect(() => {
     fetchLogs();
@@ -126,9 +129,9 @@ export default function AuditPage() {
     try {
       const blob = await AuditLogsService.exportCsv({ ...queryParams, skip: 0, limit: 10000 });
       downloadBlob(blob, `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`);
-      toast.success("已匯出 CSV");
+      toast.success(t("AuditPage.toastExported"));
     } catch (err) {
-      toast.error(err?.message ?? "匯出失敗");
+      toast.error(err?.message ?? t("AuditPage.toastExportFailed"));
     } finally {
       setExporting(false);
     }
@@ -136,7 +139,7 @@ export default function AuditPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="稽核日誌" subtitle="查看所有系統操作記錄">
+      <PageHeader title={t("AuditPage.pageTitle")} subtitle={t("AuditPage.pageSubtitle")}>
         <button
           type="button"
           className={styles.btnSecondary}
@@ -144,26 +147,26 @@ export default function AuditPage() {
           disabled={exporting}
         >
           <MIcon name="download" size={16} />
-          {exporting ? "匯出中..." : "匯出 CSV"}
+          {exporting ? t("AuditPage.exporting") : t("AuditPage.exportCsv")}
         </button>
       </PageHeader>
 
       {stats && (
         <div className={styles.summaryGrid}>
           <div className={styles.summaryItem}>
-            <span>總紀錄數</span>
+            <span>{t("AuditPage.statTotal")}</span>
             <strong>{stats.total}</strong>
           </div>
           <div className={styles.summaryItem}>
-            <span>危險操作</span>
+            <span>{t("AuditPage.statDanger")}</span>
             <strong className={styles.summaryDanger}>{stats.danger}</strong>
           </div>
           <div className={styles.summaryItem}>
-            <span>登入失敗</span>
+            <span>{t("AuditPage.statLoginFailed")}</span>
             <strong className={styles.summaryDanger}>{stats.login_failed}</strong>
           </div>
           <div className={styles.summaryItem}>
-            <span>活躍使用者</span>
+            <span>{t("AuditPage.statActiveUsers")}</span>
             <strong>{stats.active_users}</strong>
           </div>
         </div>
@@ -175,7 +178,7 @@ export default function AuditPage() {
           <input
             value={filters.search}
             onChange={(e) => setField("search", e.target.value)}
-            placeholder="搜尋操作內容、IP..."
+            placeholder={t("AuditPage.searchPlaceholder")}
           />
         </div>
 
@@ -184,7 +187,7 @@ export default function AuditPage() {
           value={filters.action}
           onChange={(e) => setField("action", e.target.value)}
         >
-          <option value="">全部操作</option>
+          <option value="">{t("AuditPage.allActions")}</option>
           {actionOptions.map((a) => (
             <option key={a.value} value={a.value}>
               {a.category ? `[${a.category}] ` : ""}{a.value}
@@ -197,7 +200,7 @@ export default function AuditPage() {
           value={filters.userId}
           onChange={(e) => setField("userId", e.target.value)}
         >
-          <option value="">全部使用者</option>
+          <option value="">{t("AuditPage.allUsers")}</option>
           {userOptions.map((u) => (
             <option key={u.id} value={u.id}>
               {u.full_name ? `${u.full_name}（${u.email}）` : u.email}
@@ -220,19 +223,19 @@ export default function AuditPage() {
 
         <button type="submit" className={styles.btnSecondary}>
           <MIcon name="filter_alt" size={16} />
-          查詢
+          {t("AuditPage.query")}
         </button>
         {hasFilter && (
           <button type="button" className={styles.btnSecondary} onClick={resetFilters}>
             <MIcon name="filter_alt_off" size={16} />
-            清除
+            {t("AuditPage.clear")}
           </button>
         )}
       </form>
 
       <div className={styles.content}>
         {loading ? (
-          <LoadingState fullPage text="載入稽核日誌..." />
+          <LoadingState fullPage text={t("AuditPage.loading")} />
         ) : logs.length === 0 ? (
           <EmptyState hasFilter={hasFilter} />
         ) : (
@@ -241,7 +244,7 @@ export default function AuditPage() {
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    {["時間", "使用者", "操作", "內容", "VMID", "IP"].map((col) => (
+                    {[t("AuditPage.colTime"), t("AuditPage.colUser"), t("AuditPage.colAction"), t("AuditPage.colContent"), "VMID", "IP"].map((col) => (
                       <th key={col} className={styles.th}>{col}</th>
                     ))}
                   </tr>
@@ -252,7 +255,7 @@ export default function AuditPage() {
                       <td className={`${styles.td} ${styles.tdNowrap}`}>{formatTime(log.created_at)}</td>
                       <td className={styles.td}>
                         <div className={styles.userCell}>
-                          <span>{log.user_full_name ?? (log.user_email ? "—" : "系統")}</span>
+                          <span>{log.user_full_name ?? (log.user_email ? "—" : t("AuditPage.systemUser"))}</span>
                           <span className={styles.userEmail}>{log.user_email ?? ""}</span>
                         </div>
                       </td>
@@ -272,7 +275,7 @@ export default function AuditPage() {
 
             <div className={styles.pagination}>
               <span className={styles.paginationInfo}>
-                共 {count} 筆 · 第 {page + 1} / {totalPages} 頁
+                {t("AuditPage.paginationInfo", { count, page: page + 1, totalPages })}
               </span>
               <div className={styles.paginationBtns}>
                 <button
@@ -282,7 +285,7 @@ export default function AuditPage() {
                   onClick={() => setPage((p) => Math.max(p - 1, 0))}
                 >
                   <MIcon name="chevron_left" size={16} />
-                  上一頁
+                  {t("AuditPage.prevPage")}
                 </button>
                 <button
                   type="button"
@@ -290,7 +293,7 @@ export default function AuditPage() {
                   disabled={page + 1 >= totalPages}
                   onClick={() => setPage((p) => p + 1)}
                 >
-                  下一頁
+                  {t("AuditPage.nextPage")}
                   <MIcon name="chevron_right" size={16} />
                 </button>
               </div>

@@ -2,15 +2,11 @@
 
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from sqlmodel import select
 
-from app.ai.teacher_judge.script_executor_service import execute_script_run
-from app.ai.teacher_judge.script_run_service import create_script_run
 from app.api.deps import CurrentUser, SessionDep
-from app.infrastructure.worker import submit
-from app.models.teacher_judge_script_run import TeacherJudgeScriptRunTargetScope
 from app.models.teaching_class import (
     TeachingClass,
     TeachingClassMachineNode,
@@ -20,7 +16,8 @@ from app.models.teaching_class import (
 from app.schemas.course import (
     CourseAIAssignmentStudent,
     CourseAICheckStudent,
-    CourseAICheckSubmit,
+    CourseAICompletionStudent,
+    CourseAICompletionUpdate,
     CourseAnswerResult,
     CourseAnswerSubmit,
     CourseDeploymentPublic,
@@ -226,100 +223,26 @@ def get_ai_assignment_source_document(
     )
 
 
-@router.post(
-    "/paths/{path_id}/ai-assignments/{assignment_id}/checks",
-    response_model=CourseAICheckStudent,
+@router.put(
+    "/paths/{path_id}/ai-assignments/{assignment_id}/completion",
+    response_model=CourseAICompletionStudent,
 )
-def start_ai_check(
+def update_ai_assignment_completion(
     session: SessionDep,
     current_user: CurrentUser,
     path_id: uuid.UUID,
     assignment_id: uuid.UUID,
-    body: CourseAICheckSubmit | None = None,
-) -> CourseAICheckStudent:
-    """Run one approved assignment against the current student's own machine."""
+    body: CourseAICompletionUpdate,
+) -> CourseAICompletionStudent:
+    """Record completion only; teachers decide when to run the final check."""
 
-    assignment = ai_assignment_service.get_student_ai_assignment(
+    return ai_assignment_service.update_student_completion(
         session,
         user_id=current_user.id,
         path_id=path_id,
         assignment_id=assignment_id,
-    )
-    requested_item_id = body.item_id if body else None
-    if requested_item_id and requested_item_id not in {
-        item.id for item in assignment.items
-    }:
-        raise HTTPException(status_code=404, detail="Checkpoint not found")
-    latest_check = (
-        assignment.checkpoint_checks.get(requested_item_id)
-        if requested_item_id
-        else assignment.latest_check
-    )
-    if latest_check and latest_check.status in {
-        "pending",
-        "running",
-    }:
-        return latest_check
-
-    enrollment = session.exec(
-        select(TeachingClassStudent).where(
-            TeachingClassStudent.class_id == assignment.teaching_class_id,
-            TeachingClassStudent.user_id == current_user.id,
-            TeachingClassStudent.status == "active",
-        )
-    ).first()
-    if enrollment is None:
-        raise HTTPException(status_code=404, detail="Class enrollment not found")
-
-    candidates = list(
-        session.exec(
-            select(TeachingClassStudentMachine, TeachingClassMachineNode)
-            .join(
-                TeachingClassMachineNode,
-                TeachingClassStudentMachine.machine_node_id
-                == TeachingClassMachineNode.id,
-            )
-            .where(
-                TeachingClassStudentMachine.class_student_id == enrollment.id,
-                TeachingClassStudentMachine.vmid.is_not(None),
-            )
-        ).all()
-    )
-    if not candidates:
-        raise HTTPException(
-            status_code=400,
-            detail="你的課堂機器尚未建立完成，請先確認環境已就緒。",
-        )
-
-    template_key = assignment.template_key.strip().lower()
-
-    def candidate_rank(candidate) -> tuple[int, int]:
-        _, node = candidate
-        searchable = f"{node.node_key} {node.name} {node.role}".lower()
-        return (0 if template_key and template_key in searchable else 1, node.sort_order)
-
-    machine, _ = sorted(candidates, key=candidate_rank)[0]
-    run = create_script_run(
-        session=session,
-        teaching_class_id=assignment.teaching_class_id,
-        artifact_id=assignment.id,
-        target_scope=TeacherJudgeScriptRunTargetScope.manual,
-        target_vmids=[int(machine.vmid)],
-        started_by=current_user.id,
-        requested_item_id=requested_item_id,
-    )
-    run_id = uuid.UUID(run.id)
-    submit(
-        execute_script_run(run_id),
-        name=f"student_ai_check:{run.id}",
-        task_id=f"teacher_judge_script_run:{run.id}",
-    )
-    return ai_assignment_service.get_student_ai_check(
-        session,
-        user_id=current_user.id,
-        path_id=path_id,
-        assignment_id=assignment_id,
-        run_id=run_id,
+        item_id=body.item_id,
+        completed=body.completed,
     )
 
 

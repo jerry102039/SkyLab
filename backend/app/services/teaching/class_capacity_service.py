@@ -7,8 +7,12 @@ from collections import defaultdict
 
 from sqlmodel import Session, select
 
+from app.core.i18n import t
 from app.domain.placement import advisor as placement_advisor
 from app.exceptions import BadRequestError
+from app.infrastructure.proxmox import (
+    get_connection_id_for_node,
+)
 from app.models import (
     ClassCapacityReservation,
     TeachingClassMachineNode,
@@ -16,7 +20,7 @@ from app.models import (
     VMTemplate,
 )
 from app.services.network import ip_management_service
-from app.services.proxmox import provisioning_service
+from app.services.proxmox import provisioning_service, proxmox_service
 from app.services.vm import placement_service
 
 GIB = 1024**3
@@ -66,10 +70,10 @@ def preview(
     )
     placement_plan: dict[str, dict[str, int]] = {}
     if check_cluster and nodes and students:
-        placement_plan, cluster_issues = _evaluate_cluster_capacity(
+        placement_plan, _placements, cluster_issues = _evaluate_cluster_capacity(
             session,
             nodes=nodes,
-            student_count=len(students),
+            student_ids=[student.user_id for student in students],
         )
         issues.extend(cluster_issues)
     return {
@@ -97,7 +101,7 @@ def reserve(
     ).first()
     if existing:
         if existing.course_version_id != course_version_id:
-            raise BadRequestError("班級已使用其他課程版本完成容量預留")
+            raise BadRequestError(t("class_capacity.version_mismatch"))
         if existing.status != "released":
             return existing
         session.delete(existing)
@@ -105,11 +109,11 @@ def reserve(
 
     totals = calculate(nodes=nodes, students=students)
     if not nodes or not students:
-        raise BadRequestError("學生名單與課程環境必須完成")
-    placement_plan = _check_cluster_capacity(
+        raise BadRequestError(t("class_capacity.missing_students_or_nodes"))
+    placement_plan, student_placements = _check_cluster_capacity(
         session,
         nodes=nodes,
-        student_count=len(students),
+        student_ids=[student.user_id for student in students],
     )
     reservation_keys = [
         f"{class_id}:{node.node_key}:{student.user_id}"
@@ -132,6 +136,15 @@ def reserve(
         ip_count=totals["ip_count"],
         network_count=totals["network_count"],
         placement_plan=json.dumps(placement_plan, sort_keys=True),
+        student_placements=json.dumps(
+            {
+                str(machine_node_id): {
+                    str(user_id): node for user_id, node in per_student.items()
+                }
+                for machine_node_id, per_student in student_placements.items()
+            },
+            sort_keys=True,
+        ),
     )
     session.add(reservation)
     session.flush()
@@ -163,44 +176,406 @@ def release(
     return released_ips
 
 
+def eligible_nodes_for_machine(
+    session: Session,
+    *,
+    machine_node: TeachingClassMachineNode,
+) -> set[str]:
+    """這台課程機器實際上能被建立在哪些節點。
+
+    刻意不重用 placement 的 allowed_template_nodes_for_request：那個函式對
+    「LXC + 範本克隆」回傳不受限（節點由 provisioning 稍後以範本節點覆寫），
+    容量計畫若照它算，就會出現「檢查說可行、建機卻落在別處」的落差。
+
+    這裡只列出**建機端今天真的做得到**的節點，不是理論上可行的節點。多列一個
+    就會讓容量計畫規劃出建機不會遵守的落點（檢查說可行、機器卻建在別處）。
+
+    - LXC 範本克隆：linked clone 必須與範本同節點同 storage（PVE 限制），
+      只有範本節點一個選擇。
+    - VM（範本與自訂）：批次建機的 create_vm 與 clone_service 一律在範本節點
+      上 clone，不接受指定節點。要放寬成整個連線，得先讓那兩條路徑支援跨節點
+      full clone 與失敗退回。
+    - 自訂 LXC：只有 iso_storage 看得到該 vztmpl 的節點；create_lxc 接受指定
+      節點，所以這是目前唯一能在叢集內分散的來源。
+    """
+    if machine_node.source_type == "template":
+        template = session.get(VMTemplate, machine_node.source_template_id)
+        if template is None:
+            raise LookupError("template not found")
+        return {template.node}
+
+    if machine_node.resource_type == "lxc":
+        node_map = proxmox_service.get_lxc_template_node_map()
+        # 整張映射為空多半是查詢失敗，沿用舊的單一節點行為而非誤判為全叢集可用
+        if not node_map:
+            return {provisioning_service._get_lxc_target_node()}
+        return set(node_map.get(str(machine_node.custom_image_ref or ""), set()))
+
+    return {
+        provisioning_service._get_vm_target_node(
+            int(machine_node.custom_image_ref or "0")
+        )
+    }
+
+
+def class_eligibility(
+    session: Session,
+    *,
+    nodes: list[TeachingClassMachineNode],
+) -> tuple[dict[uuid.UUID, set[str]], set[int | None], list[str]]:
+    """整堂課的可建節點與可用叢集。
+
+    回傳 (每台機器的可建節點, 全班共用的叢集集合, issues)。共用叢集是各機器
+    「可落腳連線」的交集 —— 一位學生的機器必須彼此互通，所以只能落在所有
+    機器類型都建得起來的叢集裡。
+    """
+    if not nodes:
+        return {}, set(), []
+
+    eligibility: dict[uuid.UUID, set[str]] = {}
+    for machine_node in nodes:
+        try:
+            eligibility[machine_node.id] = eligible_nodes_for_machine(
+                session, machine_node=machine_node
+            )
+        except LookupError:
+            return {}, set(), [
+                t("class_capacity.template_not_found", name=machine_node.name)
+            ]
+        except Exception:
+            logger.exception(
+                "Failed to resolve placement for class machine node_id=%s",
+                machine_node.id,
+            )
+            return {}, set(), [
+                t("class_capacity.node_resolution_failed", name=machine_node.name)
+            ]
+
+    options: dict[uuid.UUID, set[int | None]] = {
+        node_id: {get_connection_id_for_node(name) for name in names}
+        for node_id, names in eligibility.items()
+    }
+    shared: set[int | None] = set.intersection(*options.values())
+    if not shared:
+        detail = "；".join(
+            f"{machine_node.name}: "
+            f"{', '.join(sorted(eligibility[machine_node.id])) or '無可用節點'}"
+            for machine_node in nodes
+        )
+        return {}, set(), [t("class_capacity.cross_cluster", detail=detail)]
+    return eligibility, shared, []
+
+
+def _preferred_node() -> str | None:
+    """沿用各連線 default_node 的既有偏好；取不到時回 None。"""
+    try:
+        return provisioning_service._get_lxc_target_node()
+    except Exception:
+        return None
+
+
+def targets_in_cluster(
+    *,
+    nodes: list[TeachingClassMachineNode],
+    eligibility: dict[uuid.UUID, set[str]],
+    connection_id: int | None,
+    preferred: str | None = None,
+) -> dict[uuid.UUID, str]:
+    """指定叢集內每台課程機器的建機節點；有機器落不了時回空 dict。"""
+    targets: dict[uuid.UUID, str] = {}
+    for machine_node in nodes:
+        in_cluster = sorted(
+            name
+            for name in eligibility.get(machine_node.id, set())
+            if get_connection_id_for_node(name) == connection_id
+        )
+        if not in_cluster:
+            return {}
+        targets[machine_node.id] = (
+            preferred if preferred in in_cluster else in_cluster[0]
+        )
+    return targets
+
+
+def _student_footprint(
+    nodes: list[TeachingClassMachineNode],
+) -> tuple[float, int, int]:
+    """一位學生整套環境的資源用量。"""
+    return (
+        float(sum(node.cpu for node in nodes)),
+        sum(node.memory_mb * 1024**2 for node in nodes),
+        sum(node.disk_gb * GIB for node in nodes),
+    )
+
+
+def _ratio(used: float, total: float) -> float:
+    if total <= 0:
+        return float("inf")
+    return used / total
+
+
+def _cluster_headroom(
+    *,
+    connection_id: int | None,
+    eligibility: dict[uuid.UUID, set[str]],
+    capacities: dict[str, object],
+) -> dict[str, float]:
+    """該叢集內、這堂課用得到的節點加總後的可用量。"""
+    rows = [
+        capacities[name]
+        for name in {
+            name
+            for names in eligibility.values()
+            for name in names
+            if get_connection_id_for_node(name) == connection_id
+        }
+        if capacities.get(name) is not None
+        and getattr(capacities[name], "status", "") == "online"
+    ]
+    return {
+        "cpu": sum(float(getattr(r, "allocatable_cpu_cores", 0.0)) for r in rows),
+        "mem": sum(float(getattr(r, "allocatable_memory_bytes", 0)) for r in rows),
+        "disk": sum(float(getattr(r, "allocatable_disk_bytes", 0)) for r in rows),
+    }
+
+
+def choose_class_cluster(
+    *,
+    nodes: list[TeachingClassMachineNode],
+    student_count: int,
+    clusters: set[int | None],
+    eligibility: dict[uuid.UUID, set[str]],
+    capacities: dict[str, object],
+) -> int | None:
+    """整堂課要用哪一個叢集。
+
+    一堂課的所有學生固定在同一個叢集：跨叢集時 L2 不通、同名 bridge 指向
+    不同的實體網路、firewall 規則逐台下在各自節點上 —— 教室功能、監控與
+    故障範圍也都會被切開。
+
+    在放得下全班的叢集之中挑最寬鬆的；都放不下時挑最寬鬆的那個，交由後續
+    的節點容量檢查明確回報不足，而不是在這裡無聲失敗。
+    """
+    usable = [
+        cid
+        for cid in clusters
+        if targets_in_cluster(
+            nodes=nodes, eligibility=eligibility, connection_id=cid
+        )
+    ]
+    if not usable:
+        return None
+
+    cpu_need, mem_need, disk_need = _student_footprint(nodes)
+
+    def _capacity_in_students(cid: int | None) -> float:
+        room = _cluster_headroom(
+            connection_id=cid, eligibility=eligibility, capacities=capacities
+        )
+        return min(
+            room["cpu"] / cpu_need if cpu_need > 0 else float("inf"),
+            room["mem"] / mem_need if mem_need > 0 else float("inf"),
+            room["disk"] / disk_need if disk_need > 0 else float("inf"),
+        )
+
+    ranked = sorted(
+        usable,
+        key=lambda cid: (-_capacity_in_students(cid), cid is None, cid),
+    )
+    fits = [cid for cid in ranked if _capacity_in_students(cid) >= student_count]
+    return fits[0] if fits else ranked[0]
+
+
+def allocate_class_placements(
+    *,
+    nodes: list[TeachingClassMachineNode],
+    student_ids: list[uuid.UUID],
+    connection_id: int | None,
+    eligibility: dict[uuid.UUID, set[str]],
+    capacities: dict[str, object],
+) -> dict[uuid.UUID, dict[uuid.UUID, str]]:
+    """叢集內把學生分散到不同節點。
+
+    同一個叢集不代表同一台 server：叢集內跨節點靠同一個 bridge 加 PVE
+    firewall 是通的，所以一位學生的機器不必擠在同一台，可以依容量攤開。
+
+    每種機器類型各自分配 —— 它們的可建節點不同（LXC 範本克隆只能待在範本
+    節點，自訂 LXC 則是所有看得到該 vztmpl 的節點）。逐位學生放置，每次挑
+    「放上去之後占用比例最低」的節點，讓同型機器平均攤在該叢集的各台
+    server 上。
+
+    回傳 {machine_node_id: {student_id: 節點名}}。
+    """
+    placements: dict[uuid.UUID, dict[uuid.UUID, str]] = {}
+    # 同一份 taken 跨機器類型累加：一台 server 已經接了很多 attacker 時，
+    # 後面的 target 就會傾向落到別台，而不是每種類型各自從零開始攤。
+    taken: dict[str, dict[str, float]] = defaultdict(
+        lambda: {"cpu": 0.0, "mem": 0.0, "disk": 0.0}
+    )
+
+    for machine_node in nodes:
+        candidates = sorted(
+            name
+            for name in eligibility.get(machine_node.id, set())
+            if get_connection_id_for_node(name) == connection_id
+            and capacities.get(name) is not None
+            and getattr(capacities[name], "status", "") == "online"
+        )
+        if not candidates:
+            return {}
+
+        cpu_need = float(machine_node.cpu)
+        mem_need = float(machine_node.memory_mb * 1024**2)
+        disk_need = float(machine_node.disk_gb * GIB)
+
+        def _projected(
+            name: str,
+            *,
+            cpu: float = cpu_need,
+            mem: float = mem_need,
+            disk: float = disk_need,
+        ) -> float:
+            # 需求量以預設參數綁在定義當下，避免閉包抓到下一輪的機器規格
+            capacity = capacities[name]
+            return max(
+                _ratio(
+                    taken[name]["cpu"] + cpu,
+                    float(getattr(capacity, "allocatable_cpu_cores", 0.0)),
+                ),
+                _ratio(
+                    taken[name]["mem"] + mem,
+                    float(getattr(capacity, "allocatable_memory_bytes", 0)),
+                ),
+                _ratio(
+                    taken[name]["disk"] + disk,
+                    float(getattr(capacity, "allocatable_disk_bytes", 0)),
+                ),
+            )
+
+        per_student: dict[uuid.UUID, str] = {}
+        for student_id in student_ids:
+            chosen = min(candidates, key=_projected)
+            per_student[student_id] = chosen
+            taken[chosen]["cpu"] += cpu_need
+            taken[chosen]["mem"] += mem_need
+            taken[chosen]["disk"] += disk_need
+        placements[machine_node.id] = per_student
+
+    return placements
+
+
+def resolve_class_targets(
+    session: Session,
+    *,
+    nodes: list[TeachingClassMachineNode],
+    connection_id: int | None = None,
+) -> tuple[dict[uuid.UUID, str], list[str]]:
+    """指定叢集（未指定時取全班共用叢集）內每台課程機器的建機節點。
+
+    這是「不分散」的退路：預留階段沒留下落點時（舊資料、或預覽情境）用它得到
+    一個確定的節點。整班仍固定在同一個叢集。
+    """
+    eligibility, shared, issues = class_eligibility(session, nodes=nodes)
+    if issues or not nodes:
+        return {}, issues
+
+    if connection_id is None:
+        connection_id = sorted(shared, key=lambda item: (item is None, item))[0]
+    elif connection_id not in shared:
+        return {}, [t("class_capacity.no_node_in_cluster", name=nodes[0].name)]
+
+    targets = targets_in_cluster(
+        nodes=nodes,
+        eligibility=eligibility,
+        connection_id=connection_id,
+        preferred=_preferred_node(),
+    )
+    if not targets:
+        return {}, [t("class_capacity.no_node_in_cluster", name=nodes[0].name)]
+    return targets, []
+
+
+def _reserved_placement(
+    session: Session,
+    *,
+    class_id: uuid.UUID,
+    machine_node_id: uuid.UUID,
+    user_id: uuid.UUID | None,
+) -> str | None:
+    """預留時定案的建機節點；查不到時回 None（沿用單一節點行為）。"""
+    if user_id is None:
+        return None
+    reservation = session.exec(
+        select(ClassCapacityReservation).where(
+            ClassCapacityReservation.class_id == class_id
+        )
+    ).first()
+    if reservation is None:
+        return None
+    try:
+        mapping = json.loads(reservation.student_placements or "{}")
+    except (TypeError, ValueError):
+        return None
+    node = mapping.get(str(machine_node_id), {}).get(str(user_id))
+    return str(node) if node else None
+
+
+def target_node_for_machine(
+    session: Session,
+    *,
+    machine_node: TeachingClassMachineNode,
+    user_id: uuid.UUID | None = None,
+) -> str | None:
+    """建機時取這位學生這台機器的節點，與容量預留使用同一份分配。
+
+    優先查預留階段存下的落點 —— 整班在同一個叢集內，但學生被分散到不同的
+    server，重算得不到同樣的結果。查不到時退回全班共用叢集的單一節點。
+    """
+    placed = _reserved_placement(
+        session,
+        class_id=machine_node.class_id,
+        machine_node_id=machine_node.id,
+        user_id=user_id,
+    )
+    if placed:
+        return placed
+
+    siblings = list(
+        session.exec(
+            select(TeachingClassMachineNode).where(
+                TeachingClassMachineNode.class_id == machine_node.class_id
+            )
+        ).all()
+    )
+    targets, issues = resolve_class_targets(
+        session, nodes=siblings or [machine_node]
+    )
+    if issues:
+        return None
+    return targets.get(machine_node.id)
+
+
 def _evaluate_cluster_capacity(
     session: Session,
     *,
     nodes: list[TeachingClassMachineNode],
-    student_count: int,
-) -> tuple[dict[str, dict[str, int]], list[str]]:
-    """Return a placement plan and safe, user-facing capacity issues."""
+    student_ids: list[uuid.UUID],
+) -> tuple[
+    dict[str, dict[str, int]],
+    dict[uuid.UUID, dict[uuid.UUID, str]],
+    list[str],
+]:
+    """Return the per-node demand plan, the student placements and issues.
+
+    整班固定在同一個叢集（跨叢集 L2 不通），但叢集內依容量把學生分散到不同
+    的 server —— 同一個叢集不代表同一台 server。
+    """
     demand: dict[str, dict[str, int]] = defaultdict(
         lambda: {"cpu_cores": 0, "memory_bytes": 0, "disk_bytes": 0, "machines": 0}
     )
-    for node in nodes:
-        if node.source_type == "template":
-            template = session.get(VMTemplate, node.source_template_id)
-            if template is None:
-                return {}, [f"課程機器「{node.name}」的來源範本不存在"]
-            target_node = template.node
-        else:
-            try:
-                target_node = (
-                    provisioning_service._get_lxc_target_node()
-                    if node.resource_type == "lxc"
-                    else provisioning_service._get_vm_target_node(
-                        int(node.custom_image_ref or "0")
-                    )
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to resolve placement for custom class machine node_id=%s",
-                    node.id,
-                )
-                return {}, [
-                    f"無法確認自訂機器「{node.name}」的建機節點，請稍後再試"
-                ]
-        target = demand[target_node]
-        target["cpu_cores"] += node.cpu * student_count
-        target["memory_bytes"] += node.memory_mb * 1024**2 * student_count
-        target["disk_bytes"] += node.disk_gb * GIB * student_count
-        target["machines"] += student_count
+    eligibility, clusters, issues = class_eligibility(session, nodes=nodes)
+    if issues:
+        return {}, {}, issues
 
     try:
         cluster_nodes, resources = placement_advisor._load_cluster_state()
@@ -216,7 +591,7 @@ def _evaluate_cluster_capacity(
         }
     except Exception:
         logger.exception("Failed to fetch Proxmox capacity for class reservation")
-        return {}, ["Unable to verify class capacity. Review capacity or retry later."]
+        return {}, {}, [t("class_capacity.capacity_check_failed")]
 
     # Pending reviewed classes are not necessarily visible as PVE guests yet.
     for reservation in session.exec(
@@ -246,44 +621,80 @@ def _evaluate_cluster_capacity(
                 capacity.allocatable_disk_bytes - int(values.get("disk_bytes") or 0),
             )
 
-    issues: list[str] = []
+    # 整班鎖定一個叢集，再於叢集內把學生分散到不同 server。
+    connection_id = choose_class_cluster(
+        nodes=nodes,
+        student_count=len(student_ids),
+        clusters=clusters,
+        eligibility=eligibility,
+        capacities=capacities,
+    )
+    placements = allocate_class_placements(
+        nodes=nodes,
+        student_ids=student_ids,
+        connection_id=connection_id,
+        eligibility=eligibility,
+        capacities=capacities,
+    )
+    if not placements:
+        return {}, {}, [t("class_capacity.no_node_in_cluster", name=nodes[0].name)]
+
+    for node in nodes:
+        for target_node in placements[node.id].values():
+            target = demand[target_node]
+            target["cpu_cores"] += node.cpu
+            target["memory_bytes"] += node.memory_mb * 1024**2
+            target["disk_bytes"] += node.disk_gb * GIB
+            target["machines"] += 1
+
+    issues = []
     for node_name, values in demand.items():
         capacity = capacities.get(node_name)
         if capacity is None or capacity.status != "online":
-            issues.append(f"PVE 節點 {node_name} 不存在或不在線")
+            issues.append(t("class_capacity.node_offline", node=node_name))
             continue
         if capacity.allocatable_cpu_cores < values["cpu_cores"]:
             issues.append(
-                f"{node_name} CPU 不足：需要 {values['cpu_cores']}，"
-                f"可用 {capacity.allocatable_cpu_cores:.1f}"
+                t(
+                    "class_capacity.cpu_insufficient",
+                    node=node_name,
+                    required=values["cpu_cores"],
+                    available=f"{capacity.allocatable_cpu_cores:.1f}",
+                )
             )
         if capacity.allocatable_memory_bytes < values["memory_bytes"]:
             issues.append(
-                f"{node_name} RAM 不足：需要 "
-                f"{values['memory_bytes'] // GIB} GB，可用 "
-                f"{capacity.allocatable_memory_bytes // GIB} GB"
+                t(
+                    "class_capacity.ram_insufficient",
+                    node=node_name,
+                    required=values["memory_bytes"] // GIB,
+                    available=capacity.allocatable_memory_bytes // GIB,
+                )
             )
         if capacity.allocatable_disk_bytes < values["disk_bytes"]:
             issues.append(
-                f"{node_name} Disk 不足：需要 "
-                f"{values['disk_bytes'] // GIB} GB，可用 "
-                f"{capacity.allocatable_disk_bytes // GIB} GB"
+                t(
+                    "class_capacity.disk_insufficient",
+                    node=node_name,
+                    required=values["disk_bytes"] // GIB,
+                    available=capacity.allocatable_disk_bytes // GIB,
+                )
             )
-    return dict(demand), issues
+    return dict(demand), placements, issues
 
 
 def _check_cluster_capacity(
     session: Session,
     *,
     nodes: list[TeachingClassMachineNode],
-    student_count: int,
-) -> dict[str, dict[str, int]]:
+    student_ids: list[uuid.UUID],
+) -> tuple[dict[str, dict[str, int]], dict[uuid.UUID, dict[uuid.UUID, str]]]:
     """Validate capacity for reservation while preview uses structured issues."""
-    placement_plan, issues = _evaluate_cluster_capacity(
+    placement_plan, placements, issues = _evaluate_cluster_capacity(
         session,
         nodes=nodes,
-        student_count=student_count,
+        student_ids=student_ids,
     )
     if issues:
         raise BadRequestError("；".join(issues))
-    return placement_plan
+    return placement_plan, placements

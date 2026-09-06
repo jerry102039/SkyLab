@@ -44,8 +44,6 @@ class PlacementTuning:
     disk_contention_warn_share: float
     disk_contention_high_share: float
     disk_penalty_weight: float
-    search_max_reassignments: int
-    search_depth: int
     cpu_peak_warn_share: float = DEFAULT_CPU_PEAK_WARN_SHARE
     cpu_peak_high_share: float = DEFAULT_CPU_PEAK_HIGH_SHARE
     memory_peak_warn_share: float = DEFAULT_RAM_PEAK_WARN_SHARE
@@ -55,18 +53,6 @@ class PlacementTuning:
     resource_weight_disk: float = 1.0
     cpu_contention_weight: float = 2.0
     memory_overflow_weight: float = 5.0
-
-
-@dataclass(frozen=True)
-class AssignmentEvaluation:
-    feasible: bool
-    objective: tuple[float, ...]
-    max_node_score: float = float("inf")
-    total_score: float = float("inf")
-    priority_total: float = float("inf")
-    reassignment_count: int = 10**9
-    node_scores: dict[str, float] | None = None
-    storage_penalties: dict[str, float] | None = None
 
 
 @dataclass

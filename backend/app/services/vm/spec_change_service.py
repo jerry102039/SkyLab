@@ -6,12 +6,14 @@ from sqlmodel import Session
 from app.core.authorizers import (
     can_bypass_resource_ownership,
 )
+from app.core.i18n import t
 from app.exceptions import (
     BadRequestError,
     NotFoundError,
     ProxmoxError,
 )
 from app.models import SpecChangeRequestStatus, SpecChangeType
+from app.repositories import resource as resource_repo
 from app.repositories import spec_change_request as spec_request_repo
 from app.schemas import (
     SpecChangeRequestCreate,
@@ -20,7 +22,7 @@ from app.schemas import (
     SpecChangeRequestsPublic,
 )
 from app.services.proxmox import proxmox_service
-from app.services.resource import quota_service
+from app.services.resource import quota_service, resource_service
 from app.services.resource.access import require_resource_management
 from app.services.user import audit_service
 
@@ -61,6 +63,21 @@ def _check_ownership_and_get_info(
     return proxmox_service.find_resource(vmid)
 
 
+def _reject_fixed_spec_resource(*, session: Session, vmid: int) -> None:
+    """課堂與快速練習的機器照課程環境版本建立，規格不接受個別調整。
+
+    ``ResourcePublic.can_request_spec_change`` 一直有算這件事，但沒有任何地方
+    讀它——所以旗標說不行、API 還是收單。守衛放在這裡才算數。
+    """
+    resource = resource_repo.get_resource_by_vmid(session=session, vmid=vmid)
+    if resource is None:
+        return
+    if resource.allocation_scope == "teaching_class":
+        raise BadRequestError(t("spec_change.class_machine_spec_fixed"))
+    if resource_service._is_practice_resource(session, resource, None):
+        raise BadRequestError(t("spec_change.practice_machine_spec_fixed"))
+
+
 def _get_current_specs(
     node: str, vmid: int, resource_type: str
 ) -> dict:
@@ -74,6 +91,7 @@ def create(
     resource_info = _check_ownership_and_get_info(
         session=session, user=user, vmid=vmid
     )
+    _reject_fixed_spec_resource(session=session, vmid=vmid)
 
     node = resource_info["node"]
     resource_type = resource_info["type"]
@@ -84,20 +102,20 @@ def create(
         request_in.change_type == SpecChangeType.cpu
         and request_in.requested_cpu is None
     ):
-        raise BadRequestError("requested_cpu is required for CPU change")
+        raise BadRequestError(t("spec_change.cpu_value_required"))
     if (
         request_in.change_type == SpecChangeType.memory
         and request_in.requested_memory is None
     ):
-        raise BadRequestError("requested_memory is required for memory change")
+        raise BadRequestError(t("spec_change.memory_value_required"))
     if request_in.change_type == SpecChangeType.disk:
         if request_in.requested_disk is None:
             raise BadRequestError(
-                "requested_disk is required for disk change"
+                t("spec_change.disk_value_required")
             )
         if specs["disk"] and request_in.requested_disk <= specs["disk"]:
             raise BadRequestError(
-                f"Disk size can only be increased. Current: {specs['disk']}GB"
+                t("spec_change.disk_increase_only", current=specs["disk"])
             )
     if request_in.change_type == SpecChangeType.combined:
         if not any(
@@ -108,7 +126,7 @@ def create(
             ]
         ):
             raise BadRequestError(
-                "At least one specification must be requested for combined change"
+                t("spec_change.combined_requires_one")
             )
 
     db_request = spec_request_repo.create_spec_change_request(
@@ -186,10 +204,10 @@ def review(
         session=session, request_id=request_id, for_update=True
     )
     if not db_request:
-        raise NotFoundError("Request not found")
+        raise NotFoundError(t("spec_change.not_found"))
     if db_request.status != SpecChangeRequestStatus.pending:
         raise BadRequestError(
-            f"Request already {db_request.status.value}"
+            t("spec_change.already_reviewed", status=db_request.status.value)
         )
 
     try:
@@ -307,15 +325,16 @@ def _apply_spec_changes(*, db_request) -> list[str]:
             # 也必須擋下。
             if db_request.current_disk is None:
                 raise ProxmoxError(
-                    f"Cannot apply disk change for VMID {db_request.vmid}: "
-                    "current disk size is unknown"
+                    t("spec_change.disk_current_unknown", vmid=db_request.vmid)
                 )
             disk_increase = db_request.requested_disk - db_request.current_disk
             if disk_increase <= 0:
                 raise ProxmoxError(
-                    f"Disk size can only be increased "
-                    f"(current={db_request.current_disk}GB, "
-                    f"requested={db_request.requested_disk}GB)"
+                    t(
+                        "spec_change.disk_increase_only_detail",
+                        current=db_request.current_disk,
+                        requested=db_request.requested_disk,
+                    )
                 )
             size_param = f"+{disk_increase}G"
             disk_name = "scsi0" if resource_type == "qemu" else "rootfs"
@@ -332,5 +351,5 @@ def _apply_spec_changes(*, db_request) -> list[str]:
     except Exception as e:
         logger.error(f"Failed to apply spec changes: {e}")
         raise ProxmoxError(
-            f"Failed to apply requested changes before approval persistence: {e}"
+            t("spec_change.apply_failed", error=e)
         )

@@ -17,6 +17,7 @@ import ipaddress
 import logging
 from collections.abc import Iterable
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ def validate_publish_target_ip(
     """純函式：目標 IP 不可對外發布時 raise BadRequestError，否則回傳位址。"""
     addr = _parse_ipv4(ip)
     if addr is None:
-        raise BadRequestError(f"目標 IP 格式不合法，無法建立外部存取: {ip!r}")
+        raise BadRequestError(t("publish.targetIpInvalid", ip=repr(ip)))
 
     if (
         addr.is_loopback
@@ -67,27 +68,25 @@ def validate_publish_target_ip(
         or addr.is_reserved
         or addr == ipaddress.IPv4Address("255.255.255.255")
     ):
-        raise BadRequestError(f"目標 IP {addr} 不是可對外發布的位址")
+        raise BadRequestError(t("publish.targetIpNotPublishable", ip=str(addr)))
 
     for blocked in blocked_ips:
         blocked_addr = _parse_ipv4(blocked)
         if blocked_addr is not None and addr == blocked_addr:
             raise BadRequestError(
-                f"目標 IP {addr} 屬於平台基礎設施（Gateway / PVE 節點），"
-                "不可對外發布"
+                t("publish.targetIpInfrastructure", ip=str(addr))
             )
 
     for network in _parse_networks(blocked_cidrs):
         if addr in network:
             raise BadRequestError(
-                f"目標 IP {addr} 落在管理員封鎖的網段 {network}，不可對外發布"
+                t("publish.targetIpBlocked", ip=str(addr), network=str(network))
             )
 
     allowed_networks = _parse_networks(allowed_cidrs)
     if allowed_networks and not any(addr in n for n in allowed_networks):
         raise BadRequestError(
-            f"目標 IP {addr} 不在平台配發的 VM 網段內，無法建立外部存取；"
-            "請確認 VM 使用平台配發的 IP"
+            t("publish.targetIpOutsideVmSubnet", ip=str(addr))
         )
     return addr
 

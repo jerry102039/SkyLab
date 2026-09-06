@@ -15,6 +15,7 @@ from typing import Any
 
 from sqlmodel import Session, select
 
+from app.core.i18n import t
 from app.exceptions import AppError, ConflictError
 from app.models import QuotaConfig, Resource, ResourceQuota
 from app.models.base import get_datetime_utc
@@ -149,7 +150,7 @@ def check_quota(
         delta_instances=delta_instances,
     )
     if violations:
-        raise ConflictError("配額不足：" + "；".join(violations))
+        raise ConflictError(t("quota.exceeded", violations="；".join(violations)))
 
 
 __all__ = [

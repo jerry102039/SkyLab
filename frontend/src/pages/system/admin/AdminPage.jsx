@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./AdminPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -10,16 +11,10 @@ import useDialogPresence from "../../../hooks/useDialogPresence";
 import { UsersService } from "../../../services/users";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-const ROLE_OPTIONS = [
-  { value: "student", label: "學生" },
-  { value: "teacher", label: "教師" },
-  { value: "admin", label: "管理者" },
-];
-
-const ROLE_META = {
-  student: { label: "學生", icon: "school" },
-  teacher: { label: "教師", icon: "co_present" },
-  admin: { label: "管理者", icon: "admin_panel_settings" },
+const ROLE_ICONS = {
+  student: "school",
+  teacher: "co_present",
+  admin: "admin_panel_settings",
 };
 
 function initialForm(user = null) {
@@ -46,17 +41,24 @@ function formatDate(value) {
 }
 
 function EmptyState({ hasQuery }) {
+  const { t } = useTranslation("system");
   return (
     <SharedEmptyState
       icon={hasQuery ? "search_off" : "manage_accounts"}
-      title={hasQuery ? "找不到使用者" : "尚無使用者"}
+      title={hasQuery ? t("AdminPage.emptyNoResult") : t("AdminPage.emptyNone")}
     />
   );
 }
 
 function UserModal({ mode, user, loading, closing = false, onClose, onSubmit }) {
+  const { t } = useTranslation("system");
   const [form, setForm] = useState(() => initialForm(user));
   const isEdit = mode === "edit";
+  const ROLE_OPTIONS = [
+    { value: "student", label: t("AdminPage.roleStudent") },
+    { value: "teacher", label: t("AdminPage.roleTeacher") },
+    { value: "admin", label: t("AdminPage.roleAdmin") },
+  ];
 
   function setField(name, value) {
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -82,10 +84,10 @@ function UserModal({ mode, user, loading, closing = false, onClose, onSubmit }) 
       <form className={styles.modal} onSubmit={submit} onMouseDown={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <div>
-            <h2>{isEdit ? "編輯使用者" : "新增使用者"}</h2>
-            <p>{isEdit ? "調整帳戶狀態與角色。" : "建立可登入 SkyLab 的帳戶。"}</p>
+            <h2>{isEdit ? t("AdminPage.modalEditTitle") : t("AdminPage.modalCreateTitle")}</h2>
+            <p>{isEdit ? t("AdminPage.modalEditSubtitle") : t("AdminPage.modalCreateSubtitle")}</p>
           </div>
-          <button type="button" className={styles.iconBtn} onClick={onClose} aria-label="關閉">
+          <button type="button" className={styles.iconBtn} onClick={onClose} aria-label={t("AdminPage.close")}>
             <MIcon name="close" size={18} />
           </button>
         </div>
@@ -103,17 +105,17 @@ function UserModal({ mode, user, loading, closing = false, onClose, onSubmit }) 
           </label>
 
           <label className={styles.field}>
-            <span>姓名</span>
+            <span>{t("AdminPage.fieldName")}</span>
             <input
               value={form.full_name}
               onChange={(e) => setField("full_name", e.target.value)}
               maxLength={255}
-              placeholder="可留空"
+              placeholder={t("AdminPage.fieldNameOptional")}
             />
           </label>
 
           <label className={styles.field}>
-            <span>{isEdit ? "新密碼" : "密碼"}</span>
+            <span>{isEdit ? t("AdminPage.fieldNewPassword") : t("AdminPage.fieldPassword")}</span>
             <input
               type="password"
               value={form.password}
@@ -121,12 +123,12 @@ function UserModal({ mode, user, loading, closing = false, onClose, onSubmit }) 
               minLength={8}
               maxLength={128}
               required={!isEdit}
-              placeholder={isEdit ? "留空表示不變更" : "至少 8 個字元"}
+              placeholder={isEdit ? t("AdminPage.passwordUnchangedHint") : t("AdminPage.passwordMinHint")}
             />
           </label>
 
           <label className={styles.field}>
-            <span>角色</span>
+            <span>{t("AdminPage.fieldRole")}</span>
             <select value={form.role} onChange={(e) => setField("role", e.target.value)}>
               {ROLE_OPTIONS.map((role) => (
                 <option key={role.value} value={role.value}>{role.label}</option>
@@ -142,16 +144,16 @@ function UserModal({ mode, user, loading, closing = false, onClose, onSubmit }) 
               checked={form.is_active}
               onChange={(e) => setField("is_active", e.target.checked)}
             />
-            <span>啟用帳戶</span>
+            <span>{t("AdminPage.fieldActive")}</span>
           </label>
         </div>
 
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnSecondary} onClick={onClose}>
-            取消
+            {t("AdminPage.cancel")}
           </button>
           <button type="submit" className={styles.btnPrimary} disabled={loading}>
-            {loading ? "儲存中..." : "儲存"}
+            {loading ? t("AdminPage.saving") : t("AdminPage.save")}
           </button>
         </div>
       </form>
@@ -160,6 +162,7 @@ function UserModal({ mode, user, loading, closing = false, onClose, onSubmit }) 
 }
 
 function ConfirmDelete({ user, loading, closing = false, onClose, onConfirm }) {
+  const { t } = useTranslation("system");
   return (
     <div
       className={`${styles.modalOverlay} ${closing ? styles.modalOverlayOut : ""}`}
@@ -169,16 +172,16 @@ function ConfirmDelete({ user, loading, closing = false, onClose, onConfirm }) {
         <div className={styles.confirmIcon}>
           <MIcon name="warning" size={24} />
         </div>
-        <h2>刪除使用者</h2>
+        <h2>{t("AdminPage.deleteUserTitle")}</h2>
         <p>
-          確定要刪除 <strong>{userDisplayName(user)}</strong> 嗎？此操作會一併清理該使用者的申請紀錄；若仍持有已開通資源，後端會拒絕刪除。
+          {t("AdminPage.deleteUserConfirm", { name: userDisplayName(user) })}
         </p>
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnSecondary} onClick={onClose}>
-            取消
+            {t("AdminPage.cancel")}
           </button>
           <button type="button" className={styles.btnDanger} disabled={loading} onClick={onConfirm}>
-            {loading ? "刪除中..." : "刪除"}
+            {loading ? t("AdminPage.deleting") : t("AdminPage.delete")}
           </button>
         </div>
       </div>
@@ -187,6 +190,12 @@ function ConfirmDelete({ user, loading, closing = false, onClose, onConfirm }) {
 }
 
 function UserRow({ user, currentUserId, onEdit, onDelete }) {
+  const { t } = useTranslation("system");
+  const ROLE_META = {
+    student: { label: t("AdminPage.roleStudent"), icon: ROLE_ICONS.student },
+    teacher: { label: t("AdminPage.roleTeacher"), icon: ROLE_ICONS.teacher },
+    admin: { label: t("AdminPage.roleAdmin"), icon: ROLE_ICONS.admin },
+  };
   const role = ROLE_META[user.role] ?? ROLE_META.student;
   const isSelf = user.id === currentUserId;
 
@@ -202,17 +211,17 @@ function UserRow({ user, currentUserId, onEdit, onDelete }) {
         {role.label}
       </span>
       <span className={`${styles.statusBadge} ${user.is_active ? styles.statusActive : styles.statusInactive}`}>
-        {user.is_active ? "啟用" : "停用"}
+        {user.is_active ? t("AdminPage.statusActive") : t("AdminPage.statusInactive")}
       </span>
       <span className={styles.createdAt}>{formatDate(user.created_at)}</span>
       <div className={styles.rowActions}>
-        <button type="button" className={styles.actionBtn} title="編輯" onClick={() => onEdit(user)}>
+        <button type="button" className={styles.actionBtn} title={t("AdminPage.editTitle")} onClick={() => onEdit(user)}>
           <MIcon name="edit" size={16} />
         </button>
         <button
           type="button"
           className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-          title={isSelf ? "不能刪除自己" : "刪除"}
+          title={isSelf ? t("AdminPage.deleteSelfTitle") : t("AdminPage.deleteTitle")}
           disabled={isSelf}
           onClick={() => onDelete(user)}
         >
@@ -224,6 +233,7 @@ function UserRow({ user, currentUserId, onEdit, onDelete }) {
 }
 
 export default function AdminPage() {
+  const { t } = useTranslation("system");
   const { user: currentUser } = useAuth();
   const toast = useToast();
   const [users, setUsers] = useState([]);
@@ -245,11 +255,11 @@ export default function AdminPage() {
       setUsers(res?.data ?? []);
       setCount(res?.count ?? 0);
     } catch (err) {
-      if (!silent) toast.error(err?.message ?? "載入使用者失敗");
+      if (!silent) toast.error(err?.message ?? t("AdminPage.toastLoadFailed"));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     fetchUsers();
@@ -280,16 +290,16 @@ export default function AdminPage() {
         if (!body.password) delete body.password;
         const updated = await UsersService.update(modal.user.id, body);
         setUsers((prev) => prev.map((item) => item.id === updated.id ? updated : item));
-        toast.success("使用者已更新");
+        toast.success(t("AdminPage.toastUpdated"));
       } else {
         const created = await UsersService.create(payload);
         setUsers((prev) => [created, ...prev]);
         setCount((prev) => prev + 1);
-        toast.success("使用者已建立");
+        toast.success(t("AdminPage.toastCreated"));
       }
       setModal(null);
     } catch (err) {
-      toast.error(err?.message ?? "儲存失敗");
+      toast.error(err?.message ?? t("AdminPage.toastSaveFailed"));
     } finally {
       setSaving(false);
     }
@@ -302,10 +312,10 @@ export default function AdminPage() {
       await UsersService.delete(deleteTarget.id);
       setUsers((prev) => prev.filter((item) => item.id !== deleteTarget.id));
       setCount((prev) => Math.max(prev - 1, 0));
-      toast.success("使用者已刪除");
+      toast.success(t("AdminPage.toastDeleted"));
       setDeleteTarget(null);
     } catch (err) {
-      toast.error(err?.message ?? "刪除失敗");
+      toast.error(err?.message ?? t("AdminPage.toastDeleteFailed"));
     } finally {
       setDeleting(false);
     }
@@ -313,28 +323,28 @@ export default function AdminPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="使用者管理" subtitle="管理使用者帳戶、角色與登入狀態">
+      <PageHeader title={t("AdminPage.pageTitle")} subtitle={t("AdminPage.pageSubtitle")}>
         <button type="button" className={styles.btnPrimary} onClick={() => setModal({ mode: "create" })}>
           <MIcon name="person_add" size={16} />
-          新增使用者
+          {t("AdminPage.addUser")}
         </button>
       </PageHeader>
 
       <div className={styles.summaryGrid}>
         <div className={styles.summaryItem}>
-          <span>總使用者</span>
+          <span>{t("AdminPage.statTotal")}</span>
           <strong>{count}</strong>
         </div>
         <div className={styles.summaryItem}>
-          <span>啟用中</span>
+          <span>{t("AdminPage.statActive")}</span>
           <strong>{stats.active}</strong>
         </div>
         <div className={styles.summaryItem}>
-          <span>教師</span>
+          <span>{t("AdminPage.statTeachers")}</span>
           <strong>{stats.teachers}</strong>
         </div>
         <div className={styles.summaryItem}>
-          <span>管理者</span>
+          <span>{t("AdminPage.statAdmins")}</span>
           <strong>{stats.admins}</strong>
         </div>
       </div>
@@ -345,14 +355,14 @@ export default function AdminPage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜尋姓名、Email 或角色"
+            placeholder={t("AdminPage.searchPlaceholder")}
           />
         </div>
       </div>
 
       <div className={styles.content}>
         {loading ? (
-          <LoadingState fullPage text="載入使用者..." />
+          <LoadingState fullPage text={t("AdminPage.loading")} />
         ) : visibleUsers.length === 0 ? (
           <EmptyState hasQuery={Boolean(query.trim())} />
         ) : (

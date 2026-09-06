@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import AdminUser, CurrentUser, ResourceInfoDep, SessionDep
+from app.core.i18n import t
 from app.exceptions import BadRequestError
 from app.models import AuditAction
 from app.schemas import (
@@ -24,7 +25,7 @@ def _parse_user_id(user_id: str | None) -> uuid.UUID | None:
     try:
         return uuid.UUID(user_id)
     except ValueError:
-        raise BadRequestError("Invalid user_id format")
+        raise BadRequestError(t("auditLogs.invalidUserIdFormat"))
 
 
 @router.get("/", response_model=AuditLogsPublic)

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./IpManagementPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -11,27 +12,18 @@ import { useToast } from "../../../hooks/useToast";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-const COLUMNS = ["IP 位址", "用途", "VMID", "備註", "分配時間"];
-
-const PURPOSE_LABELS = {
-  vm: "VM",
-  lxc: "LXC",
-  gateway_vm: "Gateway VM",
-  subnet_gateway: "閘道",
-  reserved: "保留",
-};
-
 function EmptyState({ variant, canConfigure, onConfigure }) {
+  const { t } = useTranslation("system");
   if (variant === "unconfigured") {
     return (
       <SharedEmptyState
         icon="lan"
-        title="尚未設定子網"
+        title={t("IpManagementPage.emptyUnconfigured")}
         action={
           canConfigure ? (
             <button type="button" className={styles.btnPrimary} onClick={onConfigure}>
               <MIcon name="add" size={18} />
-              建立子網設定
+              {t("IpManagementPage.createSubnetConfig")}
             </button>
           ) : null
         }
@@ -43,12 +35,20 @@ function EmptyState({ variant, canConfigure, onConfigure }) {
   return (
     <SharedEmptyState
       icon={isNoMatch ? "search_off" : "inbox"}
-      title={isNoMatch ? "沒有符合條件的 IP" : "尚無 IP 分配記錄"}
+      title={isNoMatch ? t("IpManagementPage.emptyNoMatch") : t("IpManagementPage.emptyNoData")}
     />
   );
 }
 
 function PurposeBadge({ purpose }) {
+  const { t } = useTranslation("system");
+  const PURPOSE_LABELS = {
+    vm: "VM",
+    lxc: "LXC",
+    gateway_vm: "Gateway VM",
+    subnet_gateway: t("IpManagementPage.purposeGateway"),
+    reserved: t("IpManagementPage.purposeReserved"),
+  };
   const label = PURPOSE_LABELS[purpose] ?? purpose ?? "—";
   return (
     <span className={`${styles.badge} ${styles[`badge_${purpose ?? "unknown"}`]}`}>
@@ -58,6 +58,7 @@ function PurposeBadge({ purpose }) {
 }
 
 export default function IpManagementPage() {
+  const { t } = useTranslation("system");
   const toast = useToast();
   const confirm = useConfirm();
   const { user } = useAuth();
@@ -85,11 +86,11 @@ export default function IpManagementPage() {
       setSubnet(subnetRes ?? null);
       setStatus(statusRes ?? null);
     } catch (e) {
-      if (!silent) toast.error(e?.message ?? "載入 IP 分配失敗");
+      if (!silent) toast.error(e?.message ?? t("IpManagementPage.toastLoadFailed"));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => { load(); }, [load]);
   /* 編輯中不背景刷新，避免表單被重新掛載而清空輸入 */
@@ -132,11 +133,11 @@ export default function IpManagementPage() {
     setSaving(true);
     try {
       await IpManagementService.upsertSubnet(payload);
-      toast.success("子網設定已儲存");
+      toast.success(t("IpManagementPage.toastSubnetSaved"));
       setEditing(false);
       await load();
     } catch (e) {
-      toast.error(e?.message ?? "儲存子網設定失敗");
+      toast.error(e?.message ?? t("IpManagementPage.toastSaveSubnetFailed"));
     } finally {
       setSaving(false);
     }
@@ -144,20 +145,20 @@ export default function IpManagementPage() {
 
   async function handleDelete() {
     const ok = await confirm({
-      title: "刪除子網設定",
-      message: "確定刪除子網設定？刪除後全站 VM / LXC 建立功能將被停用，且需無任何 VM / LXC 仍佔用 IP 才能刪除。",
-      confirmText: "刪除",
+      title: t("IpManagementPage.deleteSubnetTitle"),
+      message: t("IpManagementPage.deleteSubnetMessage"),
+      confirmText: t("IpManagementPage.delete"),
       danger: true,
     });
     if (!ok) return;
     setDeleting(true);
     try {
       await IpManagementService.deleteSubnet();
-      toast.success("子網設定已刪除");
+      toast.success(t("IpManagementPage.toastSubnetDeleted"));
       setEditing(false);
       await load();
     } catch (e) {
-      toast.error(e?.message ?? "刪除子網設定失敗");
+      toast.error(e?.message ?? t("IpManagementPage.toastDeleteSubnetFailed"));
     } finally {
       setDeleting(false);
     }
@@ -165,7 +166,7 @@ export default function IpManagementPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="IP 管理" subtitle="管理子網設定與所有 IP 位址分配">
+      <PageHeader title={t("IpManagementPage.pageTitle")} subtitle={t("IpManagementPage.pageSubtitle")}>
         {isAdmin && !editing && (
           <div className={styles.pageActions}>
             <button
@@ -174,7 +175,7 @@ export default function IpManagementPage() {
               onClick={() => setEditing(true)}
             >
               <MIcon name={configured ? "edit" : "add"} size={18} />
-              {configured ? "編輯子網設定" : "建立子網設定"}
+              {configured ? t("IpManagementPage.editSubnetConfig") : t("IpManagementPage.createSubnetConfig")}
             </button>
           </div>
         )}
@@ -186,7 +187,7 @@ export default function IpManagementPage() {
             <MIcon name="public" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>子網總 IP</span>
+            <span className={styles.statLabel}>{t("IpManagementPage.statTotal")}</span>
             <span className={styles.statValue}>{stats.total}</span>
           </div>
         </div>
@@ -195,7 +196,7 @@ export default function IpManagementPage() {
             <MIcon name="check_circle" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>可用</span>
+            <span className={styles.statLabel}>{t("IpManagementPage.statAvailable")}</span>
             <span className={styles.statValue}>{stats.free}</span>
           </div>
         </div>
@@ -204,7 +205,7 @@ export default function IpManagementPage() {
             <MIcon name="lan" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>已分配</span>
+            <span className={styles.statLabel}>{t("IpManagementPage.statAllocated")}</span>
             <span className={styles.statValue}>{stats.used}</span>
           </div>
         </div>
@@ -229,21 +230,21 @@ export default function IpManagementPage() {
           <input
             type="text"
             className={styles.searchInput}
-            placeholder="搜尋 IP、VMID 或備註"
+            placeholder={t("IpManagementPage.searchPlaceholder")}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
         </div>
         {subnet && (
           <span className={styles.muted}>
-            子網: <code className={styles.code}>{subnet.cidr}</code> · Bridge: <code className={styles.code}>{subnet.bridge_name}</code>
+            {t("IpManagementPage.subnetLabel")} <code className={styles.code}>{subnet.cidr}</code> · Bridge: <code className={styles.code}>{subnet.bridge_name}</code>
           </span>
         )}
       </div>
 
       <div className={styles.content}>
         {loading ? (
-          <LoadingState fullPage text="載入 IP 分配..." />
+          <LoadingState fullPage text={t("IpManagementPage.loading")} />
         ) : visible.length === 0 ? (
           <EmptyState
             variant={emptyVariant}
@@ -255,7 +256,7 @@ export default function IpManagementPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  {COLUMNS.map((col) => (
+                  {[t("IpManagementPage.colIpAddress"), t("IpManagementPage.colPurpose"), "VMID", t("IpManagementPage.colDescription"), t("IpManagementPage.colAllocatedAt")].map((col) => (
                     <th key={col} className={styles.th}>{col}</th>
                   ))}
                 </tr>
@@ -265,6 +266,9 @@ export default function IpManagementPage() {
                   <tr key={a.ip_address} className={styles.tr}>
                     <td className={styles.td}>
                       <div className={styles.nameCell}>
+                        <div className={styles.nameIcon}>
+                          <MIcon name="device_hub" size={18} />
+                        </div>
                         <div>
                           <div className={styles.namePrimary}>{a.ip_address}</div>
                         </div>

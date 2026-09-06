@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import styles from "./AiApiReviewPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -10,29 +11,18 @@ import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-const TABS = [
-  { key: "pending",  label: "待審核" },
-  { key: "approved", label: "已通過" },
-  { key: "rejected", label: "已拒絕" },
-  { key: "all",      label: "全部"   },
-];
-
-const STATUS_LABELS = {
-  pending:  "待審核",
-  approved: "已通過",
-  rejected: "已拒絕",
-};
-
-function fmtTime(iso) {
-  return iso ? new Date(iso).toLocaleString("zh-TW") : "尚未審核";
+function fmtTime(iso, notReviewedLabel) {
+  return iso ? new Date(iso).toLocaleString("zh-TW") : notReviewedLabel;
 }
 
 function EmptyState() {
-  return <SharedEmptyState icon="assignment_turned_in" title="尚無資料" />;
+  const { t } = useTranslation("ai");
+  return <SharedEmptyState icon="assignment_turned_in" title={t("AiApiReviewPage.emptyTitle")} />;
 }
 
 /* ── Review Dialog ── */
 function ReviewDialog({ open, onClose, request, action, onDone }) {
+  const { t } = useTranslation("ai");
   const toast = useToast();
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -50,12 +40,12 @@ function ReviewDialog({ open, onClose, request, action, onDone }) {
         status: action,
         review_comment: comment || null,
       });
-      toast.success(isApprove ? "AI API 申請已通過" : "AI API 申請已拒絕");
+      toast.success(isApprove ? t("AiApiReviewPage.approveSuccess") : t("AiApiReviewPage.rejectSuccess"));
       setComment("");
       onClose();
       onDone();
     } catch (e) {
-      toast.error(e?.message ?? "操作失敗");
+      toast.error(e?.message ?? t("AiApiReviewPage.actionError"));
     } finally {
       setSubmitting(false);
     }
@@ -71,34 +61,34 @@ function ReviewDialog({ open, onClose, request, action, onDone }) {
       <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
         <div className={styles.dialogHeader}>
           <h3 className={styles.dialogTitle}>
-            {isApprove ? "通過 AI API 申請" : "拒絕 AI API 申請"}
+            {isApprove ? t("AiApiReviewPage.approveDialogTitle") : t("AiApiReviewPage.rejectDialogTitle")}
           </h3>
           <p className={styles.dialogDesc}>
             {isApprove
-              ? "通過後，系統會直接核發可用的 base_url 與 api_key。"
-              : "你可以留下拒絕原因，讓申請者知道下一步。"}
+              ? t("AiApiReviewPage.approveDialogDesc")
+              : t("AiApiReviewPage.rejectDialogDesc")}
           </p>
         </div>
 
         <div className={styles.dialogBody}>
           <div className={styles.dialogInfo}>
-            <div>申請者：{request.user_full_name || request.user_email}</div>
-            <div>金鑰名稱：{request.api_key_name}</div>
-            <div>申請時間：{fmtTime(request.created_at)}</div>
-            <div className={styles.dialogPurpose}>用途：{request.purpose}</div>
+            <div>{t("AiApiReviewPage.dialogApplicant", { value: request.user_full_name || request.user_email })}</div>
+            <div>{t("AiApiReviewPage.dialogKeyName", { value: request.api_key_name })}</div>
+            <div>{t("AiApiReviewPage.dialogAppliedAt", { value: fmtTime(request.created_at, t("AiApiReviewPage.notReviewed")) })}</div>
+            <div className={styles.dialogPurpose}>{t("AiApiReviewPage.dialogPurpose", { value: request.purpose })}</div>
           </div>
           <textarea
             className={styles.dialogTextarea}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="審核備註（可留空）"
+            placeholder={t("AiApiReviewPage.commentPlaceholder")}
             rows={4}
           />
         </div>
 
         <div className={styles.dialogFooter}>
           <button type="button" className={styles.btnOutline} onClick={onClose} disabled={submitting}>
-            取消
+            {t("AiApiReviewPage.cancel")}
           </button>
           <button
             type="button"
@@ -106,7 +96,7 @@ function ReviewDialog({ open, onClose, request, action, onDone }) {
             onClick={handleSubmit}
             disabled={submitting}
           >
-            {submitting ? "處理中…" : isApprove ? "確認通過" : "確認拒絕"}
+            {submitting ? t("AiApiReviewPage.processing") : isApprove ? t("AiApiReviewPage.confirmApprove") : t("AiApiReviewPage.confirmReject")}
           </button>
         </div>
       </div>
@@ -117,6 +107,7 @@ function ReviewDialog({ open, onClose, request, action, onDone }) {
 
 /* ── ReviewActions in table row ── */
 function ReviewActions({ item, onDone }) {
+  const { t } = useTranslation("ai");
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
 
@@ -134,20 +125,20 @@ function ReviewActions({ item, onDone }) {
         <button
           type="button"
           className={`${styles.actionBtn} ${styles.actionBtnOk}`}
-          title="通過"
+          title={t("AiApiReviewPage.actionApprove")}
           onClick={() => setApproveOpen(true)}
         >
           <MIcon name="check" size={16} />
-          通過
+          {t("AiApiReviewPage.actionApprove")}
         </button>
         <button
           type="button"
           className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-          title="拒絕"
+          title={t("AiApiReviewPage.actionReject")}
           onClick={() => setRejectOpen(true)}
         >
           <MIcon name="close" size={16} />
-          拒絕
+          {t("AiApiReviewPage.actionReject")}
         </button>
       </div>
       <ReviewDialog
@@ -170,10 +161,24 @@ function ReviewActions({ item, onDone }) {
 
 /* ── Main ── */
 export default function AiApiReviewPage() {
+  const { t } = useTranslation("ai");
   const toast = useToast();
   const [activeTab, setActiveTab] = useState("pending");
   const [allRequests, setAllRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const TABS = [
+    { key: "pending",  label: t("AiApiReviewPage.tabPending") },
+    { key: "approved", label: t("AiApiReviewPage.tabApproved") },
+    { key: "rejected", label: t("AiApiReviewPage.tabRejected") },
+    { key: "all",      label: t("AiApiReviewPage.tabAll") },
+  ];
+
+  const STATUS_LABELS = {
+    pending:  t("AiApiReviewPage.statusPending"),
+    approved: t("AiApiReviewPage.statusApproved"),
+    rejected: t("AiApiReviewPage.statusRejected"),
+  };
 
   /** silent = true 時不觸發 loading 與錯誤提示，供背景自動刷新使用 */
   const load = useCallback(async (silent = false) => {
@@ -182,11 +187,11 @@ export default function AiApiReviewPage() {
       const res = await AiApiService.listAllRequests();
       setAllRequests(res?.data ?? []);
     } catch (e) {
-      if (!silent) toast.error(e?.message ?? "載入 AI API 審核資料失敗");
+      if (!silent) toast.error(e?.message ?? t("AiApiReviewPage.loadError"));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(() => load(true));
@@ -196,11 +201,19 @@ export default function AiApiReviewPage() {
     return allRequests.filter((r) => r.status === activeTab);
   }, [allRequests, activeTab]);
 
-  const COLS = ["申請者", "金鑰名稱", "用途", "狀態", "申請時間", "審核時間", "操作"];
+  const COLS = [
+    t("AiApiReviewPage.colApplicant"),
+    t("AiApiReviewPage.colKeyName"),
+    t("AiApiReviewPage.colPurpose"),
+    t("AiApiReviewPage.colStatus"),
+    t("AiApiReviewPage.colAppliedAt"),
+    t("AiApiReviewPage.colReviewedAt"),
+    t("AiApiReviewPage.colActions"),
+  ];
 
   return (
     <div className={styles.page}>
-      <PageHeader title="申請審核" subtitle="審核申請並核發 API 存取參數。" />
+      <PageHeader title={t("AiApiReviewPage.pageTitle")} subtitle={t("AiApiReviewPage.pageSubtitle")} />
 
       <div className={styles.tabs}>
         {TABS.map((tab) => (
@@ -253,8 +266,8 @@ export default function AiApiReviewPage() {
                         {STATUS_LABELS[r.status] ?? r.status}
                       </span>
                     </td>
-                    <td className={styles.td}>{fmtTime(r.created_at)}</td>
-                    <td className={styles.td}>{fmtTime(r.reviewed_at)}</td>
+                    <td className={styles.td}>{fmtTime(r.created_at, t("AiApiReviewPage.notReviewed"))}</td>
+                    <td className={styles.td}>{fmtTime(r.reviewed_at, t("AiApiReviewPage.notReviewed"))}</td>
                     <td className={styles.td}>
                       <ReviewActions item={r} onDone={load} />
                     </td>

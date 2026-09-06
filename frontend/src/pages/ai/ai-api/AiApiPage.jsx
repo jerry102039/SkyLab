@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./AiApiPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -6,34 +7,10 @@ import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import { AiApiService } from "../../../services/aiApi";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { useToast } from "../../../hooks/useToast";
+import { focusInvalidField } from "../../../utils/focusField";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
 /* ── helpers ── */
-const DURATION_OPTIONS = [
-  { value: "1h", label: "1 小時" },
-  { value: "1d", label: "1 天" },
-  { value: "7d", label: "1 週" },
-  { value: "30d", label: "1 個月" },
-  { value: "never", label: "永不過期" },
-];
-
-const TABS = [
-  { key: "apply",   label: "申請",      icon: "send" },
-  { key: "keys",    label: "API Keys",  icon: "vpn_key" },
-  { key: "records", label: "申請紀錄",  icon: "history" },
-  { key: "usage",   label: "我的用量",  icon: "trending_up" },
-];
-
-function fmtTime(iso) {
-  return iso ? new Date(iso).toLocaleString("zh-TW") : "—";
-}
-
-function fmtExpiry(value) {
-  if (!value) return "永不過期";
-  const d = new Date(value);
-  return d < new Date() ? `已過期（${d.toLocaleString()}）` : d.toLocaleString();
-}
-
 function isExpired(value) {
   if (!value) return false;
   return new Date(value) < new Date();
@@ -55,18 +32,6 @@ function statusStyle(status) {
   if (status === "approved") return "approved";
   if (status === "rejected") return "rejected";
   return "pending";
-}
-
-function statusLabel(status) {
-  if (status === "approved") return "已通過";
-  if (status === "rejected") return "已拒絕";
-  return "待審核";
-}
-
-function credStatusInfo(item) {
-  if (item.revoked_at) return { label: "已替換", cls: "inactive" };
-  if (isExpired(item.expires_at)) return { label: "已過期", cls: "expired" };
-  return { label: "使用中", cls: "active" };
 }
 
 /* ── Empty ── */
@@ -95,12 +60,30 @@ function StatCard({ label, value, icon, iconCls }) {
 
 /* ── Credential card ── */
 function CredentialCard({ item, onRefresh }) {
+  const { t } = useTranslation("ai");
   const toast = useToast();
   const confirm = useConfirm();
   const [showKey, setShowKey] = useState(false);
   const [editing, setEditing] = useState(false);
   const [nameInput, setNameInput] = useState(item.api_key_name);
   const [busy, setBusy] = useState(false);
+
+  function fmtTime(iso) {
+    return iso ? new Date(iso).toLocaleString("zh-TW") : "—";
+  }
+
+  function fmtExpiry(value) {
+    if (!value) return t("AiApiPage.durationOptionNever");
+    const d = new Date(value);
+    return d < new Date() ? t("AiApiPage.expiredFormat", { date: d.toLocaleString() }) : d.toLocaleString();
+  }
+
+  function credStatusInfo(it) {
+    if (it.revoked_at) return { label: t("AiApiPage.credStatusReplaced"), cls: "inactive" };
+    if (isExpired(it.expires_at)) return { label: t("AiApiPage.credStatusExpired"), cls: "expired" };
+    return { label: t("AiApiPage.credStatusActive"), cls: "active" };
+  }
+
   const info = credStatusInfo(item);
   const inactive = Boolean(item.revoked_at);
   const expired = isExpired(item.expires_at);
@@ -108,27 +91,27 @@ function CredentialCard({ item, onRefresh }) {
   const copy = async (label, value) => {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success(`${label} 已複製`);
+      toast.success(t("AiApiPage.copiedSuccess", { label }));
     } catch {
-      toast.error(`${label} 複製失敗`);
+      toast.error(t("AiApiPage.copiedError", { label }));
     }
   };
 
   const doRotate = async () => {
     const ok = await confirm({
-      title: "刷新 API Key",
-      message: "刷新後舊金鑰會失效，確定繼續？",
-      confirmText: "刷新",
+      title: t("AiApiPage.rotateDialogTitle"),
+      message: t("AiApiPage.rotateDialogMessage"),
+      confirmText: t("AiApiPage.rotateDialogConfirm"),
       danger: true,
     });
     if (!ok) return;
     setBusy(true);
     try {
       await AiApiService.rotateCredential(item.id);
-      toast.success("API Key 已刷新");
+      toast.success(t("AiApiPage.rotateSuccess"));
       onRefresh();
     } catch (e) {
-      toast.error(e?.message ?? "刷新失敗");
+      toast.error(e?.message ?? t("AiApiPage.rotateError"));
     } finally {
       setBusy(false);
     }
@@ -136,19 +119,19 @@ function CredentialCard({ item, onRefresh }) {
 
   const doDelete = async () => {
     const ok = await confirm({
-      title: "刪除 API Key",
-      message: "確定刪除此金鑰？此操作無法復原。",
-      confirmText: "刪除",
+      title: t("AiApiPage.deleteDialogTitle"),
+      message: t("AiApiPage.deleteDialogMessage"),
+      confirmText: t("AiApiPage.deleteDialogConfirm"),
       danger: true,
     });
     if (!ok) return;
     setBusy(true);
     try {
       await AiApiService.revokeCredential(item.id);
-      toast.success("API Key 已刪除");
+      toast.success(t("AiApiPage.deleteSuccess"));
       onRefresh();
     } catch (e) {
-      toast.error(e?.message ?? "刪除失敗");
+      toast.error(e?.message ?? t("AiApiPage.deleteError"));
     } finally {
       setBusy(false);
     }
@@ -159,11 +142,11 @@ function CredentialCard({ item, onRefresh }) {
     setBusy(true);
     try {
       await AiApiService.updateCredential(item.id, { api_key_name: nameInput.trim() });
-      toast.success("名稱已更新");
+      toast.success(t("AiApiPage.renameSuccess"));
       setEditing(false);
       onRefresh();
     } catch (e) {
-      toast.error(e?.message ?? "更新失敗");
+      toast.error(e?.message ?? t("AiApiPage.renameError"));
     } finally {
       setBusy(false);
     }
@@ -209,10 +192,10 @@ function CredentialCard({ item, onRefresh }) {
           </span>
         </div>
         <div className={styles.credMeta}>
-          <span>Prefix：{item.api_key_prefix}</span>
-          <span>建立：{fmtTime(item.created_at)}</span>
-          <span className={expired ? styles.textDanger : ""}>到期：{fmtExpiry(item.expires_at)}</span>
-          {item.revoked_at && <span>失效：{fmtTime(item.revoked_at)}</span>}
+          <span>{t("AiApiPage.metaPrefix", { value: item.api_key_prefix })}</span>
+          <span>{t("AiApiPage.metaCreated", { value: fmtTime(item.created_at) })}</span>
+          <span className={expired ? styles.textDanger : ""}>{t("AiApiPage.metaExpiry", { value: fmtExpiry(item.expires_at) })}</span>
+          {item.revoked_at && <span>{t("AiApiPage.metaRevoked", { value: fmtTime(item.revoked_at) })}</span>}
         </div>
       </div>
 
@@ -238,7 +221,7 @@ function CredentialCard({ item, onRefresh }) {
       <div className={styles.credActions} data-guide="ai-key-actions">
         <button type="button" className={styles.btnOutline} onClick={() => setShowKey((v) => !v)}>
           <MIcon name={showKey ? "visibility_off" : "visibility"} size={16} />
-          {showKey ? "隱藏" : "顯示"}
+          {showKey ? t("AiApiPage.actionHide") : t("AiApiPage.actionShow")}
         </button>
         <button type="button" className={styles.btnOutline} onClick={() => copy("Base URL", item.base_url)}>
           <MIcon name="content_copy" size={16} /> Base URL
@@ -247,10 +230,10 @@ function CredentialCard({ item, onRefresh }) {
           <MIcon name="content_copy" size={16} /> API Key
         </button>
         <button type="button" className={styles.btnOutline} onClick={doRotate} disabled={inactive || busy}>
-          <MIcon name="refresh" size={16} /> 刷新
+          <MIcon name="refresh" size={16} /> {t("AiApiPage.actionRefresh")}
         </button>
         <button type="button" className={`${styles.btnOutline} ${styles.btnDanger}`} onClick={doDelete} disabled={busy}>
-          <MIcon name="delete" size={16} /> 刪除
+          <MIcon name="delete" size={16} /> {t("AiApiPage.actionDelete")}
         </button>
       </div>
     </div>
@@ -259,6 +242,18 @@ function CredentialCard({ item, onRefresh }) {
 
 /* ── Request row ── */
 function RequestRow({ item }) {
+  const { t } = useTranslation("ai");
+
+  function fmtTime(iso) {
+    return iso ? new Date(iso).toLocaleString("zh-TW") : "—";
+  }
+
+  function statusLabel(status) {
+    if (status === "approved") return t("AiApiPage.statusApproved");
+    if (status === "rejected") return t("AiApiPage.statusRejected");
+    return t("AiApiPage.statusPending");
+  }
+
   const st = statusStyle(item.status);
   return (
     <div className={styles.requestRow} data-guide="ai-records-content">
@@ -271,9 +266,9 @@ function RequestRow({ item }) {
       </div>
       <p className={styles.requestPurpose}>{item.purpose}</p>
       <div className={styles.requestMeta}>
-        <span>申請：{fmtTime(item.created_at)}</span>
-        <span>審核：{item.reviewed_at ? fmtTime(item.reviewed_at) : "尚未處理"}</span>
-        {item.review_comment && <span>備註：{item.review_comment}</span>}
+        <span>{t("AiApiPage.requestMetaApply", { value: fmtTime(item.created_at) })}</span>
+        <span>{t("AiApiPage.requestMetaReview", { value: item.reviewed_at ? fmtTime(item.reviewed_at) : t("AiApiPage.requestNotReviewed") })}</span>
+        {item.review_comment && <span>{t("AiApiPage.requestMetaComment", { value: item.review_comment })}</span>}
       </div>
     </div>
   );
@@ -291,6 +286,7 @@ function UsageStatCard({ label, value }) {
 
 /* ── Usage: by-model / by-call-type breakdown ── */
 function UsageBreakdown({ icon, title, entries, formatter }) {
+  const { t } = useTranslation("ai");
   if (!entries || Object.keys(entries).length === 0) return null;
   return (
     <div className={styles.usageBreakdown}>
@@ -301,7 +297,7 @@ function UsageBreakdown({ icon, title, entries, formatter }) {
         {Object.entries(entries).map(([key, stats]) => (
           <div key={key} className={styles.usageBreakdownRow}>
             <span className={styles.usageBreakdownKey}>{formatter ? formatter(key) : key}</span>
-            <span>{stats.requests ?? stats.calls ?? 0} 次</span>
+            <span>{t("AiApiPage.callCount", { count: stats.requests ?? stats.calls ?? 0 })}</span>
             <span>↑ {formatTokens(stats.input_tokens)}</span>
             <span>↓ {formatTokens(stats.output_tokens)}</span>
           </div>
@@ -322,6 +318,7 @@ function formatModelDisplay(modelName) {
 
 /* ── My Usage Tab ── */
 function MyUsageTab() {
+  const { t } = useTranslation("ai");
   const [preset, setPreset] = useState("30d");
   const [proxyData, setProxyData] = useState(null);
   const [templateData, setTemplateData] = useState(null);
@@ -357,9 +354,9 @@ function MyUsageTab() {
   useEffect(() => { load(); }, [load]);
 
   const PRESETS = [
-    { value: "7d", label: "7 天" },
-    { value: "30d", label: "30 天" },
-    { value: "90d", label: "90 天" },
+    { value: "7d", label: t("AiApiPage.preset7d") },
+    { value: "30d", label: t("AiApiPage.preset30d") },
+    { value: "90d", label: t("AiApiPage.preset90d") },
   ];
 
   return (
@@ -385,53 +382,53 @@ function MyUsageTab() {
           {/* Proxy usage */}
           <div className={styles.usagePanel} data-guide="ai-proxy-usage">
             <div className={styles.usagePanelHeader}>
-              <h3 className={styles.usagePanelTitle}>Proxy 用量</h3>
-              <p className={styles.usagePanelDesc}>直接呼叫 AI API 的 Token 用量。</p>
+              <h3 className={styles.usagePanelTitle}>{t("AiApiPage.usageProxyTitle")}</h3>
+              <p className={styles.usagePanelDesc}>{t("AiApiPage.usageProxyDesc")}</p>
             </div>
             {proxyError ? (
-              <p className={styles.textDanger}>無法取得 Proxy 用量資料。</p>
+              <p className={styles.textDanger}>{t("AiApiPage.usageProxyError")}</p>
             ) : proxyData ? (
               <>
                 <div className={styles.usageStatsGrid}>
-                  <UsageStatCard label="總呼叫次數" value={proxyData.total_requests} />
-                  <UsageStatCard label="輸入 Tokens" value={formatTokens(proxyData.total_input_tokens)} />
-                  <UsageStatCard label="輸出 Tokens" value={formatTokens(proxyData.total_output_tokens)} />
+                  <UsageStatCard label={t("AiApiPage.usageStatTotalCalls")} value={proxyData.total_requests} />
+                  <UsageStatCard label={t("AiApiPage.usageStatInputTokens")} value={formatTokens(proxyData.total_input_tokens)} />
+                  <UsageStatCard label={t("AiApiPage.usageStatOutputTokens")} value={formatTokens(proxyData.total_output_tokens)} />
                 </div>
                 <UsageBreakdown
                   icon="bar_chart"
-                  title="按模型"
+                  title={t("AiApiPage.usageBreakdownByModel")}
                   entries={proxyData.by_model}
                   formatter={formatModelDisplay}
                 />
               </>
             ) : (
-              <p className={styles.noData}>此時段無 Proxy 呼叫紀錄。</p>
+              <p className={styles.noData}>{t("AiApiPage.usageProxyEmpty")}</p>
             )}
           </div>
 
           {/* Template usage */}
           <div className={styles.usagePanel} data-guide="ai-template-usage">
             <div className={styles.usagePanelHeader}>
-              <h3 className={styles.usagePanelTitle}>Template 用量</h3>
-              <p className={styles.usagePanelDesc}>使用 AI Template API 的 Token 用量。</p>
+              <h3 className={styles.usagePanelTitle}>{t("AiApiPage.usageTemplateTitle")}</h3>
+              <p className={styles.usagePanelDesc}>{t("AiApiPage.usageTemplateDesc")}</p>
             </div>
             {templateError ? (
-              <p className={styles.textDanger}>無法取得 Template 用量資料。</p>
+              <p className={styles.textDanger}>{t("AiApiPage.usageTemplateError")}</p>
             ) : templateData ? (
               <>
                 <div className={styles.usageStatsGrid}>
-                  <UsageStatCard label="總呼叫次數" value={templateData.total_calls} />
-                  <UsageStatCard label="輸入 Tokens" value={formatTokens(templateData.total_input_tokens)} />
-                  <UsageStatCard label="輸出 Tokens" value={formatTokens(templateData.total_output_tokens)} />
+                  <UsageStatCard label={t("AiApiPage.usageStatTotalCalls")} value={templateData.total_calls} />
+                  <UsageStatCard label={t("AiApiPage.usageStatInputTokens")} value={formatTokens(templateData.total_input_tokens)} />
+                  <UsageStatCard label={t("AiApiPage.usageStatOutputTokens")} value={formatTokens(templateData.total_output_tokens)} />
                 </div>
                 <UsageBreakdown
                   icon="auto_awesome"
-                  title="按呼叫類型"
+                  title={t("AiApiPage.usageBreakdownByCallType")}
                   entries={templateData.by_call_type}
                 />
               </>
             ) : (
-              <p className={styles.noData}>此時段無 Template 呼叫紀錄。</p>
+              <p className={styles.noData}>{t("AiApiPage.usageTemplateEmpty")}</p>
             )}
           </div>
         </>
@@ -443,14 +440,32 @@ function MyUsageTab() {
 /* ───────────────────────────── Main ───────────────────────────── */
 
 export default function AiApiPage() {
+  const { t } = useTranslation("ai");
   const toast = useToast();
   const [activeTab, setActiveTab] = useState("records");
+
+  const DURATION_OPTIONS = [
+    { value: "1h", label: t("AiApiPage.durationOption1h") },
+    { value: "1d", label: t("AiApiPage.durationOption1d") },
+    { value: "7d", label: t("AiApiPage.durationOption7d") },
+    { value: "30d", label: t("AiApiPage.durationOption30d") },
+    { value: "never", label: t("AiApiPage.durationOptionNever") },
+  ];
+
+  const TABS = [
+    { key: "apply",   label: t("AiApiPage.tabApply"),   icon: "send" },
+    { key: "keys",    label: "API Keys",                icon: "vpn_key" },
+    { key: "records", label: t("AiApiPage.tabRecords"), icon: "history" },
+    { key: "usage",   label: t("AiApiPage.tabUsage"),   icon: "trending_up" },
+  ];
 
   /* ── Form state ── */
   const [apiKeyName, setApiKeyName] = useState("test");
   const [purpose, setPurpose] = useState("");
   const [duration, setDuration] = useState("never");
   const [submitting, setSubmitting] = useState(false);
+  const [purposeInvalid, setPurposeInvalid] = useState(false);
+  const purposeInputRef = useRef(null);
 
   /* ── Data ── */
   const [credentials, setCredentials] = useState([]);
@@ -467,11 +482,11 @@ export default function AiApiPage() {
       setCredentials(credRes?.data ?? []);
       setRequests(reqRes?.data ?? []);
     } catch (e) {
-      toast.error(e?.message ?? "載入 AI API 資料失敗");
+      toast.error(e?.message ?? t("AiApiPage.loadError"));
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -481,6 +496,11 @@ export default function AiApiPage() {
 
   /* ── Submit request ── */
   const handleSubmit = async () => {
+    if (purpose.trim().length < 10) {
+      setPurposeInvalid(true);
+      focusInvalidField(purposeInputRef.current);
+      return;
+    }
     setSubmitting(true);
     try {
       await AiApiService.createRequest({
@@ -491,10 +511,10 @@ export default function AiApiPage() {
       setPurpose("");
       setApiKeyName("test");
       setDuration("never");
-      toast.success("AI API 申請已送出");
+      toast.success(t("AiApiPage.submitSuccess"));
       load();
     } catch (e) {
-      toast.error(e?.message ?? "申請失敗");
+      toast.error(e?.message ?? t("AiApiPage.submitError"));
     } finally {
       setSubmitting(false);
     }
@@ -505,19 +525,19 @@ export default function AiApiPage() {
       {/* ── Header ── */}
       <PageHeader
         title="AI API"
-        subtitle="申請、管理與查詢 AI API 金鑰。"
+        subtitle={t("AiApiPage.pageSubtitle")}
       />
 
       {/* ── Stat cards ── */}
       <div className={styles.statRow} data-guide="ai-stats">
-        <StatCard label="申請紀錄" value={requests.length} icon="history" />
-        <StatCard label="使用中金鑰" value={activeCredentials.length} icon="key" iconCls="statIconOk" />
-        <StatCard label="過期金鑰" value={expiredCredentials.length} icon="cancel" iconCls="statIconErr" />
-        <StatCard label="已通過申請" value={approvedRequests.length} icon="check_circle" iconCls="statIconOk" />
+        <StatCard label={t("AiApiPage.statLabelRequests")} value={requests.length} icon="history" />
+        <StatCard label={t("AiApiPage.statLabelActiveKeys")} value={activeCredentials.length} icon="key" iconCls="statIconOk" />
+        <StatCard label={t("AiApiPage.statLabelExpiredKeys")} value={expiredCredentials.length} icon="cancel" iconCls="statIconErr" />
+        <StatCard label={t("AiApiPage.statLabelApprovedRequests")} value={approvedRequests.length} icon="check_circle" iconCls="statIconOk" />
       </div>
 
       {/* ── Tabs ── */}
-      <div className={styles.tabs} data-guide="ai-tabs" role="tablist" aria-label="AI API 功能分頁">
+      <div className={styles.tabs} data-guide="ai-tabs" role="tablist" aria-label={t("AiApiPage.tabsAriaLabel")}>
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -541,39 +561,40 @@ export default function AiApiPage() {
         {activeTab === "apply" && (
           <div className={styles.panel}>
             <div className={styles.panelHeader}>
-              <h2 className={styles.panelTitle} data-guide="ai-form">送出新申請</h2>
-              <p className={styles.panelDesc}>填寫用途後送審。</p>
+              <h2 className={styles.panelTitle} data-guide="ai-form">{t("AiApiPage.applyPanelTitle")}</h2>
+              <p className={styles.panelDesc}>{t("AiApiPage.applyPanelDesc")}</p>
             </div>
 
             <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="ai-key-name">金鑰名稱</label>
+              <label className={styles.formLabel} htmlFor="ai-key-name">{t("AiApiPage.formLabelKeyName")}</label>
               <input
                 id="ai-key-name"
                 type="text"
                 className={styles.formInput}
                 value={apiKeyName}
                 onChange={(e) => setApiKeyName(e.target.value)}
-                placeholder="例如：課程專案用、測試用、我的 App"
+                placeholder={t("AiApiPage.formPlaceholderKeyName")}
                 maxLength={20}
                 data-guide="ai-apply-name"
               />
             </div>
 
             <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="ai-purpose">申請目的</label>
+              <label className={styles.formLabel} htmlFor="ai-purpose">{t("AiApiPage.formLabelPurpose")}</label>
               <textarea
                 id="ai-purpose"
-                className={styles.formTextarea}
+                ref={purposeInputRef}
+                className={`${styles.formTextarea} ${purposeInvalid ? styles.fieldInvalid : ""}`}
                 value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                placeholder="例如：課程專題串接聊天模型、工具原型開發、知識庫問答測試或自動化腳本整合。"
+                onChange={(e) => { setPurpose(e.target.value); setPurposeInvalid(false); }}
+                placeholder={t("AiApiPage.formPlaceholderPurpose")}
                 rows={5}
                 data-guide="ai-apply-purpose"
               />
             </div>
 
             <div className={styles.formGroup}>
-              <label className={styles.formLabel} htmlFor="ai-duration">金鑰有效期限</label>
+              <label className={styles.formLabel} htmlFor="ai-duration">{t("AiApiPage.formLabelDuration")}</label>
               <select
                 id="ai-duration"
                 className={styles.formSelect}
@@ -588,16 +609,16 @@ export default function AiApiPage() {
             </div>
 
             <div className={styles.formFooter}>
-              <span className={styles.formHint}>用途需至少 10 字。</span>
+              <span className={styles.formHint}>{t("AiApiPage.formHintPurpose")}</span>
               <button
                 type="button"
                 className={styles.btnPrimary}
                 onClick={handleSubmit}
-                disabled={purpose.trim().length < 10 || submitting}
+                disabled={submitting}
                 data-guide="ai-submit"
               >
                 <MIcon name="send" size={16} />
-                {submitting ? "送出中…" : "送出申請"}
+                {submitting ? t("AiApiPage.submitButtonSubmitting") : t("AiApiPage.submitButton")}
               </button>
             </div>
           </div>
@@ -607,15 +628,15 @@ export default function AiApiPage() {
         {activeTab === "keys" && (
           <div className={styles.panel}>
             <div className={styles.panelHeader}>
-              <h2 className={styles.panelTitle} data-guide="ai-keys-panel">我的 API Keys</h2>
-              <p className={styles.panelDesc}>查看、複製、刷新或刪除金鑰。</p>
+              <h2 className={styles.panelTitle} data-guide="ai-keys-panel">{t("AiApiPage.keysPanelTitle")}</h2>
+              <p className={styles.panelDesc}>{t("AiApiPage.keysPanelDesc")}</p>
             </div>
             {loading ? (
               <LoadingState />
             ) : credentials.length === 0 ? (
               <EmptyState
                 icon="vpn_key"
-                title="尚無金鑰"
+                title={t("AiApiPage.keysEmptyTitle")}
                 guideId="ai-keys-content"
               />
             ) : (
@@ -632,15 +653,15 @@ export default function AiApiPage() {
         {activeTab === "records" && (
           <div className={styles.panel}>
             <div className={styles.panelHeader}>
-              <h2 className={styles.panelTitle} data-guide="ai-records-panel">申請紀錄</h2>
-              <p className={styles.panelDesc}>近期申請狀態。</p>
+              <h2 className={styles.panelTitle} data-guide="ai-records-panel">{t("AiApiPage.recordsPanelTitle")}</h2>
+              <p className={styles.panelDesc}>{t("AiApiPage.recordsPanelDesc")}</p>
             </div>
             {loading ? (
               <LoadingState />
             ) : requests.length === 0 ? (
               <EmptyState
                 icon="history"
-                title="尚無紀錄"
+                title={t("AiApiPage.recordsEmptyTitle")}
                 guideId="ai-records-content"
               />
             ) : (

@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app.ai.teacher_judge import file_service, session_service
+from app.ai.teacher_judge import attachment_service, file_service, session_service
 from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionCreateRequest,
@@ -380,6 +380,55 @@ async def test_message_without_rubric_is_saved_and_uses_general_chat(
 
 
 @pytest.mark.asyncio
+async def test_message_can_send_parsed_attachment_without_text(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    db = _session()
+    class_id = uuid.uuid4()
+    item = TeacherJudgeSession(teaching_class_id=class_id, title="Attachment chat")
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
+    monkeypatch.setattr(attachment_service, "ATTACHMENT_ROOT", tmp_path)
+    attachment = attachment_service.create_attachment(
+        db,
+        session_id=item.id,
+        uploaded_by=None,
+        filename="requirements.md",
+        media_type="text/markdown",
+        file_bytes=b"# Requirements\nExpose port 8080.",
+    )
+
+    async def fake_chat(messages, rubric_context, **kwargs):
+        assert messages[-1].content == ""
+        assert "requirements.md" in kwargs["attachment_context"]
+        assert "port 8080" in kwargs["attachment_context"]
+        return "已讀取附件。", None, {}
+
+    monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
+    monkeypatch.setattr(
+        teacher_judge_sessions, "get_enabled_template_commands", lambda *args, **kwargs: []
+    )
+
+    result = await teacher_judge_sessions.create_message(
+        class_id,
+        item.id,
+        TeacherJudgeSessionMessageCreateRequest(attachment_ids=[attachment.id]),
+        db,
+        SimpleNamespace(id=uuid.uuid4()),
+    )
+
+    assert result.user_message.content == ""
+    assert [row.original_filename for row in result.user_message.attachments] == [
+        "requirements.md"
+    ]
+    db.refresh(attachment)
+    assert attachment.message_id == uuid.UUID(result.user_message.id)
+
+
+@pytest.mark.asyncio
 async def test_refine_message_uses_the_rubric_polish_prompt_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -501,6 +550,61 @@ def test_bounded_history_keeps_latest_messages_in_stable_order() -> None:
     assert len(history) == session_service.HISTORY_MESSAGE_LIMIT
     assert history[0].content == "message-05"
     assert history[-1].content == "message-24"
+
+
+def test_session_public_many_matches_single_session_contract() -> None:
+    db = _session()
+    class_id = uuid.uuid4()
+    rubric_file = _file(db, class_id)
+    first = TeacherJudgeSession(
+        teaching_class_id=class_id,
+        title="第一個檢查",
+        selected_file_id=rubric_file.id,
+    )
+    second = TeacherJudgeSession(teaching_class_id=class_id, title="第二個檢查")
+    db.add_all([first, second])
+    db.commit()
+    db.refresh(first)
+    db.refresh(second)
+    db.add_all(
+        [
+            TeacherJudgeSessionMessage(
+                session_id=first.id,
+                role=TeacherJudgeMessageRole.user,
+                content="請檢查",
+            ),
+            TeacherJudgeSessionMessage(
+                session_id=first.id,
+                role=TeacherJudgeMessageRole.assistant,
+                content="已完成",
+            ),
+        ]
+    )
+    db.commit()
+    artifact = TeacherJudgeScriptArtifact(
+        teaching_class_id=class_id,
+        session_id=first.id,
+        name="檢查腳本",
+        template_key="linux",
+        script_content="echo ok",
+    )
+    db.add(artifact)
+    db.commit()
+    db.refresh(artifact)
+    db.add(TeacherJudgeScriptRun(teaching_class_id=class_id, artifact_id=artifact.id))
+    db.commit()
+
+    batch = session_service.session_public_many(db, [first, second])
+    singles = [session_service.session_public(db, item) for item in [first, second]]
+
+    assert [row.model_dump() for row in batch] == [
+        row.model_dump() for row in singles
+    ]
+    assert batch[0].selected_file_name == singles[0].selected_file_name
+    assert batch[0].message_count == 2
+    assert batch[0].script_count == 1
+    assert batch[0].run_count == 1
+    assert batch[1].message_count == 0
 
 
 @pytest.mark.asyncio

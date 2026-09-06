@@ -5,12 +5,13 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlmodel import select
 
 from app.api.deps import AdminUser, InstructorUser, SessionDep
 from app.core.authorizers import require_teaching_access
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError
 from app.models import (
     BatchProvisionJobStatus,
@@ -190,10 +191,10 @@ def get_batch_status(
 ) -> BatchProvisionJobPublic:
     job = bp_repo.get_job(session=session, job_id=job_id)
     if not job:
-        raise NotFoundError("Batch provision job not found")
+        raise NotFoundError(t("batchProvision.jobNotFound"))
     teaching_class = session.get(TeachingClass, job.teaching_class_id)
     if not teaching_class:
-        raise NotFoundError("Teaching class not found")
+        raise NotFoundError(t("batchProvision.classNotFound"))
     require_teaching_access(current_user, teaching_class.owner_id)
     return _build_job_public(session, job)
 
@@ -208,6 +209,19 @@ def list_pending_review(
 ) -> list[BatchProvisionJobPublic]:
     _ = current_user  # admin guard via dependency
     jobs = bp_repo.list_pending_review_jobs(session=session)
+    return [_build_job_public(session, job) for job in jobs]
+
+
+@router.get("/", response_model=list[BatchProvisionJobPublic])
+def list_review_jobs(
+    session: SessionDep,
+    current_user: AdminUser,
+    status: BatchProvisionJobStatus | None = None,
+    limit: int = Query(default=100, ge=1, le=200),
+) -> list[BatchProvisionJobPublic]:
+    """審核頁的完整列表：待審核之外也要看得到已核准 / 已駁回的批次。"""
+    _ = current_user  # admin guard via dependency
+    jobs = bp_repo.list_review_jobs(session=session, status=status, limit=limit)
     return [_build_job_public(session, job) for job in jobs]
 
 
@@ -228,7 +242,7 @@ def get_recurrence_preview(
     _ = current_user
     job = bp_repo.get_job(session=session, job_id=job_id)
     if not job:
-        raise NotFoundError("Batch provision job not found")
+        raise NotFoundError(t("batchProvision.jobNotFound"))
     if not job.recurrence_rule or not job.recurrence_duration_minutes:
         return RecurrencePreview(windows=[])
 
@@ -277,7 +291,7 @@ def review_batch_job(
 
     job = bp_repo.get_job(session=session, job_id=job_id)
     if not job:
-        raise NotFoundError("Batch provision job not found")
+        raise NotFoundError(t("batchProvision.jobNotFound"))
     return _build_job_public(session, job)
 
 
@@ -293,7 +307,7 @@ def review_teaching_class_jobs(
 ) -> list[BatchProvisionJobPublic]:
     teaching_class = session.get(TeachingClass, class_id)
     if teaching_class is None:
-        raise NotFoundError("Teaching class not found")
+        raise NotFoundError(t("batchProvision.classNotFound"))
     nodes = list(
         session.exec(
             select(TeachingClassMachineNode).where(
@@ -313,7 +327,7 @@ def review_teaching_class_jobs(
         if job.status == BatchProvisionJobStatus.pending_review
     ]
     if not pending_ids:
-        raise BadRequestError("Teaching class has no pending jobs to review")
+        raise BadRequestError(t("batchProvision.noPendingJobs"))
     decision = BatchProvisionJobStatus(body.decision)
     reviewed = batch_provision_service.review_batch_jobs(
         session=session,

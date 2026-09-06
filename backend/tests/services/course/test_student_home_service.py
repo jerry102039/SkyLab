@@ -282,6 +282,46 @@ def test_weekly_tasks_show_ai_extracted_items_before_script_is_approved() -> Non
     assert rows[0].checkpoints[0].assignment_id is None
 
 
+def test_weekly_tasks_show_published_pdf_without_ai_check() -> None:
+    session = _session()
+    teacher = _user("teacher@example.edu", UserRole.teacher)
+    student = _user("student@example.edu", UserRole.student)
+    teaching_class, path = _linked_class(
+        session,
+        teacher=teacher,
+        student=student,
+        session_date=date(2026, 8, 25),
+    )
+    week = TeachingClassWeek(
+        class_id=teaching_class.id,
+        week_number=1,
+        session_date=date(2026, 8, 25),
+        title="Week one reading",
+        status="published",
+    )
+    session.add(week)
+    session.commit()
+    session.add(
+        TeachingClassTaskFile(
+            week_id=week.id,
+            filename="week-one.pdf",
+            storage_key="week-one.task",
+        )
+    )
+    session.commit()
+
+    rows = weekly_task_service.list_student_weekly_tasks(
+        session,
+        user_id=student.id,
+        path_id=path.id,
+    )
+
+    assert len(rows) == 1
+    assert rows[0].title == "Week one reading"
+    assert [task_file.filename for task_file in rows[0].files] == ["week-one.pdf"]
+    assert rows[0].checkpoints == []
+
+
 def test_class_course_shell_exists_without_tasks_and_publishes_with_class() -> None:
     session = _session()
     teacher = _user("teacher@example.edu", UserRole.teacher)

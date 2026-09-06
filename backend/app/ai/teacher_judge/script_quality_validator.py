@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -11,7 +10,6 @@ if TYPE_CHECKING:
 
 REQUIRED_HELPERS = {
     "truncate_output",
-    "redact_sensitive_text",
     "command_available",
     "run_command",
     "record_check",
@@ -23,16 +21,6 @@ UNKNOWN_ONLY_EXCEPTIONS = {
     "FileNotFoundError",
     "PermissionError",
 }
-
-_DIRECT_RAW_PATTERN = re.compile(
-    r"""["']raw["']\s*:\s*[^\n]*(stdout|stderr)""",
-    re.IGNORECASE,
-)
-_STDOUT_PASS_TERNARY_PATTERN = re.compile(
-    r"""["']pass["']\s+if\s+[^\n]*(stdout|stderr)|if\s+[^\n]*(stdout|stderr)[^\n]*else\s+["']pass["']""",
-    re.IGNORECASE,
-)
-
 
 def _literal_str(node: ast.AST | None) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -71,15 +59,6 @@ def _call_name(node: ast.AST, aliases: dict[str, str] | None = None) -> str | No
     if isinstance(node, ast.Call):
         return _call_name(node.func, aliases)
     return None
-
-
-def _node_mentions_stream(node: ast.AST) -> bool:
-    for child in ast.walk(node):
-        if isinstance(child, ast.Name) and child.id in {"stdout", "stderr"}:
-            return True
-        if isinstance(child, ast.Attribute) and child.attr in {"stdout", "stderr"}:
-            return True
-    return False
 
 
 def _call_status_literal(node: ast.Call) -> str | None:
@@ -166,6 +145,47 @@ def _calls_named_helper(
     return False
 
 
+def _scan_calls_once(
+    tree: ast.AST,
+    aliases: dict[str, str],
+) -> tuple[list[ast.Call], set[str], set[str], set[str]]:
+    """Collect call-derived facts in a single AST walk.
+
+    Pure optimization: merges the five separate full-tree walks previously done
+    for json.dumps collection, _collect_commands_needing_which,
+    _collect_which_commands and _calls_named_helper (record_check / run_command
+    / command_available) into one pass. Name resolution reuses one _call_name
+    per Call node with the same aliases logic. The historical skip_functions
+    behaviour is preserved as-is (all calls are inspected, including those
+    inside helper definitions), so gate verdicts are unchanged.
+    """
+    json_dumps_calls: list[ast.Call] = []
+    subprocess_commands: set[str] = set()
+    which_commands: set[str] = set()
+    helper_calls: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = _call_name(node.func, aliases)
+        if name == "json.dumps":
+            json_dumps_calls.append(node)
+        elif name == "subprocess.run":
+            if node.args:
+                first_arg = node.args[0]
+                if isinstance(first_arg, (ast.List, ast.Tuple)) and first_arg.elts:
+                    command = _literal_str(first_arg.elts[0])
+                    if command:
+                        subprocess_commands.add(command)
+        elif name == "shutil.which":
+            if node.args:
+                command = _literal_str(node.args[0])
+                if command:
+                    which_commands.add(command)
+        if name in ("record_check", "run_command", "command_available"):
+            helper_calls.add(name)
+    return json_dumps_calls, subprocess_commands, which_commands, helper_calls
+
+
 def _function_definitions(
     tree: ast.AST,
 ) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
@@ -198,37 +218,11 @@ def _function_mentions_returncode(
     return False
 
 
-def _redaction_uses_bare_key(
-    function_def: ast.FunctionDef | ast.AsyncFunctionDef,
-) -> bool:
-    for node in ast.walk(function_def):
-        literal = _literal_str(node)
-        if not literal:
-            continue
-        lowered = literal.lower()
-        for match in re.finditer(r"key", lowered):
-            prefix = lowered[max(0, match.start() - 20) : match.start()]
-            if "api" not in prefix and "private" not in prefix:
-                return True
-    return False
-
-
-def _record_check_has_sanitized_raw(
+def _record_check_has_bounded_raw(
     function_def: ast.FunctionDef | ast.AsyncFunctionDef,
     aliases: dict[str, str],
 ) -> bool:
-    return _function_uses_helper(
-        function_def, "truncate_output", aliases
-    ) and _function_uses_helper(function_def, "redact_sensitive_text", aliases)
-
-
-def _record_check_raw_arg(call: ast.Call) -> ast.AST | None:
-    if len(call.args) >= 5:
-        return call.args[4]
-    for keyword in call.keywords:
-        if keyword.arg == "raw":
-            return keyword.value
-    return None
+    return _function_uses_helper(function_def, "truncate_output", aliases)
 
 
 def _body_record_check_statuses(
@@ -414,11 +408,11 @@ def check_script_quality(script_content: str) -> CheckResult:
             fix_hints.append({"type": "add_helper_function", "name": helper_name, "description": f"腳本缺少必要 helper：{helper_name}"})
 
     record_check_def = helper_defs.get("record_check")
-    if record_check_def and not _record_check_has_sanitized_raw(record_check_def, aliases):
+    if record_check_def and not _record_check_has_bounded_raw(record_check_def, aliases):
         issues.append(
-            "record_check 必須統一透過 redact_sensitive_text 與 truncate_output 處理 raw"
+            "record_check 必須統一透過 truncate_output 控制 raw 大小"
         )
-        fix_hints.append({"type": "add_sanitize_in_record_check", "description": "record_check 必須統一透過 redact_sensitive_text 與 truncate_output 處理 raw"})
+        fix_hints.append({"type": "add_truncate_in_record_check", "description": "record_check 必須統一透過 truncate_output 控制 raw 大小"})
 
     command_available_def = helper_defs.get("command_available")
     if command_available_def and not _function_uses_helper(
@@ -432,24 +426,23 @@ def check_script_quality(script_content: str) -> CheckResult:
         issues.append("run_command 必須回傳 returncode")
         fix_hints.append({"type": "add_returncode_to_run_command", "description": "run_command 必須回傳 returncode"})
 
-    redaction_def = helper_defs.get("redact_sensitive_text")
-    if redaction_def and _redaction_uses_bare_key(redaction_def):
-        issues.append("redact_sensitive_text 不可使用過度寬泛的裸 key 規則")
-        fix_hints.append({"type": "fix_redaction_pattern", "function": "redact_sensitive_text", "description": "redact_sensitive_text 不可使用過度寬泛的裸 key 規則"})
+    # Single-pass call scan (replaces five separate full-tree walks for
+    # json.dumps / subprocess commands / which commands / helper calls).
+    # Legacy collectors (_collect_commands_needing_which,
+    # _collect_which_commands, _calls_named_helper) are kept as compat
+    # wrappers and no longer used on this hot path.
+    json_dumps_calls, commands, which_commands, helper_calls = _scan_calls_once(
+        tree, aliases
+    )
 
-    if not _calls_named_helper(tree, "record_check", aliases, skip_functions={"record_check"}):
+    if "record_check" not in helper_calls:
         issues.append("腳本必須透過 record_check 建立檢查結果")
         fix_hints.append({"type": "add_record_check_calls", "description": "腳本必須透過 record_check 建立檢查結果"})
 
-    if not _calls_named_helper(tree, "run_command", aliases, skip_functions={"run_command"}):
+    if "run_command" not in helper_calls:
         issues.append("腳本必須透過 run_command 執行收集指令")
         fix_hints.append({"type": "add_run_command_calls", "description": "腳本必須透過 run_command 執行收集指令"})
 
-    json_dumps_calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and _call_name(node.func, aliases) == "json.dumps"
-    ]
     if not json_dumps_calls:
         issues.append("腳本必須使用 json.dumps 輸出 JSON")
         fix_hints.append({"type": "add_json_param", "function": "json.dumps", "param": "ensure_ascii", "value": False, "description": "腳本必須使用 json.dumps 輸出 JSON"})
@@ -468,29 +461,18 @@ def check_script_quality(script_content: str) -> CheckResult:
         issues.append("輸出 JSON metadata 必須包含 timestamp 與 platform")
         fix_hints.append({"type": "add_output_field", "field": "metadata", "description": "輸出 JSON metadata 必須包含 timestamp 與 platform"})
 
-    if _DIRECT_RAW_PATTERN.search(script_content):
-        issues.append("raw 不可直接保存 stdout/stderr，必須先脫敏並截斷")
-        fix_hints.append({"type": "sanitize_raw_field", "description": "raw 不可直接保存 stdout/stderr，必須先脫敏並截斷"})
-
-    if _STDOUT_PASS_TERNARY_PATTERN.search(script_content):
-        issues.append("不能用 stdout/stderr truthiness 直接判定 pass")
-        fix_hints.append({"type": "remove_stdout_truthiness_check", "description": "不能用 stdout/stderr truthiness 直接判定 pass"})
-
-    commands = _collect_commands_needing_which(tree, aliases)
-    which_commands = _collect_which_commands(tree, aliases)
     for command in sorted(commands - which_commands):
         issues.append(f"外部工具 `{command}` 缺少 shutil.which 可用性檢查")
         fix_hints.append({"type": "add_command_availability_check", "command": command, "description": f"外部工具 `{command}` 缺少 shutil.which 可用性檢查"})
 
-    if commands and not _calls_named_helper(
-        tree,
-        "command_available",
-        aliases,
-        skip_functions={"command_available"},
-    ):
+    if commands and "command_available" not in helper_calls:
         issues.append("腳本必須透過 command_available 檢查外部工具可用性")
         fix_hints.append({"type": "add_command_availability_check", "description": "腳本必須透過 command_available 檢查外部工具可用性"})
 
+    # Collect ExceptHandler nodes during the main walk below and reuse them for
+    # the errors-completeness check, instead of a second full-tree walk. Order
+    # matches `ast.walk` BFS in both cases, and the first-hit `break` is kept.
+    except_handlers: list[ast.ExceptHandler] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and _call_name(node.func, aliases) == "record_check":
             check_id = _record_check_literal_arg(node, 0, "check_id")
@@ -501,23 +483,14 @@ def check_script_quality(script_content: str) -> CheckResult:
             if title and "檢查" in title:
                 issues.append("record_check title 請使用收集語意，不要使用檢查")
                 fix_hints.append({"type": "rename_title", "current": title, "description": "record_check title 請使用收集語意，不要使用檢查"})
-            raw_arg = _record_check_raw_arg(node)
-            if raw_arg is not None and _node_mentions_stream(raw_arg):
-                issues.append(
-                    "record_check raw 不可直接餵 stdout/stderr，必須先整理為 snippet 再交給 helper"
-                )
-                fix_hints.append({"type": "sanitize_record_check_raw", "description": "record_check raw 不可直接餵 stdout/stderr，必須先整理為 snippet 再交給 helper"})
-
         if isinstance(node, ast.If):
-            if _node_mentions_stream(node.test) and _body_marks_pass(node.body, aliases):
-                issues.append("不能用 stdout/stderr 是否有內容直接判定 pass")
-                fix_hints.append({"type": "remove_stdout_truthiness_check", "description": "不能用 stdout/stderr 是否有內容直接判定 pass"})
             if _condition_checks_availability(node.test, aliases):
                 statuses = _body_record_check_statuses(node.body, aliases)
                 if "warning" in statuses:
                     issues.append("工具缺失時應回傳 unknown，不可使用 warning")
                     fix_hints.append({"type": "fix_status_semantics", "description": "工具缺失時應回傳 unknown，不可使用 warning"})
         elif isinstance(node, ast.ExceptHandler):
+            except_handlers.append(node)
             exception_name = _except_name(node, aliases)
             statuses = _body_record_check_statuses(node.body, aliases)
             if _body_marks_pass(node.body, aliases):
@@ -543,7 +516,8 @@ def check_script_quality(script_content: str) -> CheckResult:
     # ── errors 記錄完整性檢查 ──
     # 收集項目的 bare except / except Exception 必須有 errors.append。
     # run_command helper 可以把錯誤轉成結構化回傳值，再由呼叫點寫入 errors。
-    for handler in [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]:
+    # Reuses handlers collected in the main walk above (same BFS order).
+    for handler in except_handlers:
         except_name = _except_name(handler, aliases)
         if (
             except_name in {None, "Exception"}

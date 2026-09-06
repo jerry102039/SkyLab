@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlmodel import Session, func, select
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError
 from app.models import (
     CoursePath,
@@ -55,21 +56,21 @@ from app.services.course import flag_service, progress_service
 def get_path_or_404(session: Session, path_id: uuid.UUID) -> CoursePath:
     path = session.get(CoursePath, path_id)
     if path is None:
-        raise NotFoundError("Course path not found")
+        raise NotFoundError(t("course.path_not_found"))
     return path
 
 
 def get_room_or_404(session: Session, room_id: uuid.UUID) -> CourseRoom:
     room = session.get(CourseRoom, room_id)
     if room is None:
-        raise NotFoundError("Course room not found")
+        raise NotFoundError(t("course.room_not_found"))
     return room
 
 
 def get_task_or_404(session: Session, task_id: uuid.UUID) -> CourseTask:
     task = session.get(CourseTask, task_id)
     if task is None:
-        raise NotFoundError("Course task not found")
+        raise NotFoundError(t("course.task_not_found"))
     return task
 
 
@@ -78,7 +79,7 @@ def get_question_or_404(
 ) -> CourseQuestion:
     question = session.get(CourseQuestion, question_id)
     if question is None:
-        raise NotFoundError("Course question not found")
+        raise NotFoundError(t("course.question_not_found"))
     return question
 
 
@@ -92,10 +93,10 @@ def _touch_path(session: Session, path_id: uuid.UUID) -> None:
 def _require_ready_template(session: Session, template_id: uuid.UUID) -> VMTemplate:
     template = session.get(VMTemplate, template_id)
     if template is None:
-        raise BadRequestError("VM template not found")
+        raise BadRequestError(t("course.template_not_found"))
     if template.status != VMTemplateStatus.ready:
         raise BadRequestError(
-            f"VM template is not ready (now: {template.status.value})"
+            t("course.template_not_ready", status=template.status.value)
         )
     return template
 
@@ -257,7 +258,7 @@ def _ensure_class_available(
     if excluding_path_id is not None:
         statement = statement.where(CoursePath.id != excluding_path_id)
     if session.exec(statement).first() is not None:
-        raise BadRequestError("This teaching class is already linked to another path")
+        raise BadRequestError(t("course.class_already_linked"))
 
 
 # ── 房間 CRUD ──────────────────────────────────────────────────────────────
@@ -451,7 +452,7 @@ def create_question(
     flag_hash: str | None = None
     if data.question_type == CourseQuestionType.flag:
         if not data.flag or not data.flag.strip():
-            raise BadRequestError("Flag question requires a flag answer")
+            raise BadRequestError(t("course.flag_required"))
         flag_hash = flag_service.hash_flag(data.flag)
     question = CourseQuestion(
         task_id=data.task_id,
@@ -477,10 +478,10 @@ def update_question(
         question.question_type = data.question_type
     if data.flag is not None:
         if not data.flag.strip():
-            raise BadRequestError("Flag cannot be blank")
+            raise BadRequestError(t("course.flag_blank"))
         question.flag_hash = flag_service.hash_flag(data.flag)
     if question.question_type == CourseQuestionType.flag and not question.flag_hash:
-        raise BadRequestError("Flag question requires a flag answer")
+        raise BadRequestError(t("course.flag_required"))
     if question.question_type == CourseQuestionType.no_answer:
         question.flag_hash = None
     if data.points is not None:
@@ -655,7 +656,7 @@ def get_published_path_or_404(
 ) -> CoursePath:
     path = get_path_or_404(session, path_id)
     if path.status != CoursePathStatus.published:
-        raise NotFoundError("Course path not found")
+        raise NotFoundError(t("course.path_not_found"))
     return path
 
 

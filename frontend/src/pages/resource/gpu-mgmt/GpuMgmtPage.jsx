@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./GpuMgmtPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
@@ -9,7 +10,18 @@ import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-const COLUMNS = ["Mapping", "描述", "節點 / PCI", "可用 / 總數", "使用中 VM", "狀態", "動作"];
+function useColumns() {
+  const { t } = useTranslation("resource");
+  return [
+    t("GpuMgmtPage.columnMapping"),
+    t("GpuMgmtPage.columnDescription"),
+    t("GpuMgmtPage.columnNodePci"),
+    t("GpuMgmtPage.columnAvailableTotal"),
+    t("GpuMgmtPage.columnVmInUse"),
+    t("GpuMgmtPage.columnStatus"),
+    t("GpuMgmtPage.columnActions"),
+  ];
+}
 
 /* 超過此數量的 PCI 位址改以「範圍摘要 + 展開列」顯示，避免 SR-IOV 撐爆列高 */
 const PCI_COLLAPSE_THRESHOLD = 3;
@@ -116,36 +128,39 @@ function formatVram(mb) {
 }
 
 function EmptyState() {
-  return <SharedEmptyState icon="memory" title="尚未偵測到 GPU" />;
+  const { t } = useTranslation("resource");
+  return <SharedEmptyState icon="memory" title={t("GpuMgmtPage.emptyTitle")} />;
 }
 
 function StatusBadge({ used, total }) {
+  const { t } = useTranslation("resource");
   if (total === 0) {
-    return <span className={`${styles.badge} ${styles.badge_unknown}`}>未知</span>;
+    return <span className={`${styles.badge} ${styles.badge_unknown}`}>{t("GpuMgmtPage.statusUnknown")}</span>;
   }
   if (used === 0) {
-    return <span className={`${styles.badge} ${styles.badge_available}`}>可用</span>;
+    return <span className={`${styles.badge} ${styles.badge_available}`}>{t("GpuMgmtPage.statusAvailable")}</span>;
   }
   if (used >= total) {
-    return <span className={`${styles.badge} ${styles.badge_full}`}>已滿載</span>;
+    return <span className={`${styles.badge} ${styles.badge_full}`}>{t("GpuMgmtPage.statusFull")}</span>;
   }
   return (
     <span className={`${styles.badge} ${styles.badge_inuse}`}>
-      {used}/{total} 使用中
+      {t("GpuMgmtPage.statusInUse", { used, total })}
     </span>
   );
 }
 
 function VmChips({ vms }) {
+  const { t } = useTranslation("resource");
   if (!vms || vms.length === 0) {
     return <span className={styles.muted}>—</span>;
   }
   return (
     <div className={styles.vmChips}>
       {vms.map((vm) => (
-        <span key={vm.vmid} className={styles.vmChip} title={`VMID ${vm.vmid}`}>
+        <span key={vm.vmid} className={styles.vmChip} title={t("GpuMgmtPage.vmidTitle", { vmid: vm.vmid })}>
           <MIcon name="computer" size={14} />
-          <span>{vm.name || `VM ${vm.vmid}`}</span>
+          <span>{vm.name || t("GpuMgmtPage.vmFallbackName", { vmid: vm.vmid })}</span>
           <span
             className={`${styles.dot} ${vm.status === "running" ? styles.dotRunning : styles.dotStopped}`}
           />
@@ -156,8 +171,10 @@ function VmChips({ vms }) {
 }
 
 export default function GpuMgmtPage() {
+  const { t } = useTranslation("resource");
   const toast = useToast();
   const confirm = useConfirm();
+  const columns = useColumns();
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -179,29 +196,29 @@ export default function GpuMgmtPage() {
       const res = await GpuService.listMappings();
       setRows(flattenMappings(res?.data ?? []));
     } catch (e) {
-      if (!silent) toast.error(e?.message ?? "載入 GPU mappings 失敗");
+      if (!silent) toast.error(e?.message ?? t("GpuMgmtPage.loadFailed"));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(() => load(true));
 
   const handleDelete = async (id) => {
     const ok = await confirm({
-      title: "刪除 GPU mapping",
-      message: `確定要刪除 mapping "${id}"?`,
-      confirmText: "刪除",
+      title: t("GpuMgmtPage.deleteMappingTitle"),
+      message: t("GpuMgmtPage.deleteMappingMessage", { id }),
+      confirmText: t("GpuMgmtPage.deleteConfirm"),
       danger: true,
     });
     if (!ok) return;
     try {
       await GpuService.deleteMapping(id);
-      toast.success("已刪除");
+      toast.success(t("GpuMgmtPage.deletedToast"));
       load();
     } catch (e) {
-      toast.error(e?.message ?? "刪除失敗");
+      toast.error(e?.message ?? t("GpuMgmtPage.deleteFailed"));
     }
   };
 
@@ -231,7 +248,7 @@ export default function GpuMgmtPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="GPU 管理" subtitle="查看叢集中所有 PCI Passthrough GPU 的指派狀態" />
+      <PageHeader title={t("GpuMgmtPage.pageTitle")} subtitle={t("GpuMgmtPage.pageSubtitle")} />
 
       <div className={styles.statRow}>
         <div className={styles.statCard}>
@@ -239,7 +256,7 @@ export default function GpuMgmtPage() {
             <MIcon name="developer_board" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>GPU 總數</span>
+            <span className={styles.statLabel}>{t("GpuMgmtPage.statTotal")}</span>
             <span className={styles.statValue}>{stats.total}</span>
           </div>
         </div>
@@ -248,7 +265,7 @@ export default function GpuMgmtPage() {
             <MIcon name="check_circle" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>可用</span>
+            <span className={styles.statLabel}>{t("GpuMgmtPage.statAvailable")}</span>
             <span className={styles.statValue}>{stats.avail}</span>
           </div>
         </div>
@@ -257,7 +274,7 @@ export default function GpuMgmtPage() {
             <MIcon name="monitor_heart" size={20} />
           </div>
           <div className={styles.statInfo}>
-            <span className={styles.statLabel}>使用中</span>
+            <span className={styles.statLabel}>{t("GpuMgmtPage.statInUse")}</span>
             <span className={styles.statValue}>{stats.used}</span>
           </div>
         </div>
@@ -269,7 +286,7 @@ export default function GpuMgmtPage() {
           <input
             type="text"
             className={styles.searchInput}
-            placeholder="搜尋節點、型號或 PCI 位址"
+            placeholder={t("GpuMgmtPage.searchPlaceholder")}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
@@ -286,7 +303,7 @@ export default function GpuMgmtPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  {COLUMNS.map((col) => (
+                  {columns.map((col) => (
                     <th key={col} className={styles.th}>{col}</th>
                   ))}
                 </tr>
@@ -295,19 +312,22 @@ export default function GpuMgmtPage() {
                 {visible.map((n) => {
                   const collapsible = n.mapEntries.length > PCI_COLLAPSE_THRESHOLD;
                   const expanded = collapsible && expandedIds.has(n.id);
-                  const unitLabel = n.is_sriov ? "個 VF" : "個裝置";
+                  const unitLabel = n.is_sriov ? t("GpuMgmtPage.unitVf") : t("GpuMgmtPage.unitDevice");
                   return (
                     <Fragment key={n.id}>
                       <tr className={`${styles.tr} ${expanded ? styles.trExpanded : ""}`}>
                         <td className={styles.td}>
                           <div className={styles.nameCell}>
+                            <div className={styles.nameIcon}>
+                              <MIcon name="memory" size={18} />
+                            </div>
                             <div>
                               <div className={styles.namePrimary}>{n.mapping}</div>
                               <div className={styles.nameSub}>
-                                {n.is_sriov ? "SR-IOV" : "Passthrough"}
+                                {n.is_sriov ? t("GpuMgmtPage.typeSriov") : t("GpuMgmtPage.typePassthrough")}
                                 {n.mdev_profile ? ` · ${n.mdev_profile}` : ""}
                                 {n.per_instance_vram_mb > 0
-                                  ? ` (${formatVram(n.per_instance_vram_mb)}/顆)`
+                                  ? t("GpuMgmtPage.perInstanceVram", { vram: formatVram(n.per_instance_vram_mb) })
                                   : ""}
                               </div>
                             </div>
@@ -354,8 +374,8 @@ export default function GpuMgmtPage() {
                           {n.total_vram_mb > 0 && (
                             <div className={styles.cellSub}>
                               {n.used_vram_known
-                                ? `VRAM 使用中 ${formatVram(n.used_vram_mb) || "0"} / ${formatVram(n.total_vram_mb)}`
-                                : `VRAM 共 ${formatVram(n.total_vram_mb)} · 已用量未知`}
+                                ? t("GpuMgmtPage.vramInUse", { used: formatVram(n.used_vram_mb) || "0", total: formatVram(n.total_vram_mb) })
+                                : t("GpuMgmtPage.vramUnknown", { total: formatVram(n.total_vram_mb) })}
                             </div>
                           )}
                         </td>
@@ -370,7 +390,7 @@ export default function GpuMgmtPage() {
                             <button
                               type="button"
                               className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-                              title="移除映射"
+                              title={t("GpuMgmtPage.removeMappingTitle")}
                               onClick={() => handleDelete(n.id)}
                             >
                               <MIcon name="delete" size={16} />
@@ -381,7 +401,7 @@ export default function GpuMgmtPage() {
 
                       {expanded && (
                         <tr className={styles.detailTr}>
-                          <td className={styles.detailTd} colSpan={COLUMNS.length}>
+                          <td className={styles.detailTd} colSpan={columns.length}>
                             <div className={styles.detailBody}>
                               {groupByNode(n.mapEntries).map((group) => (
                                 <div key={group.node}>

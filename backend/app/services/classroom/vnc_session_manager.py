@@ -21,6 +21,7 @@ import websockets
 from websockets.typing import Subprotocol
 
 from app.core.config import settings
+from app.core.i18n import t
 from app.exceptions import AppError, ConflictError, NotFoundError
 from app.infrastructure.proxmox import (
     build_ws_ssl_context,
@@ -153,7 +154,7 @@ class VncSessionManager:
         started_by: uuid.UUID,
     ) -> ClassroomSession:
         if vmid in self._vmid_index:
-            raise ConflictError(f"VM {vmid} already has an active classroom session")
+            raise ConflictError(t("vnc_session.session_already_active", vmid=vmid))
         session_id = uuid.uuid4().hex
         # 先佔位，避免並發 start 對同一 vmid 建出兩條上游連線
         self._vmid_index[vmid] = session_id
@@ -209,7 +210,7 @@ class VncSessionManager:
     async def set_controller(self, session_id: str, user_id: uuid.UUID | None) -> None:
         state = self._sessions.get(session_id)
         if state is None:
-            raise NotFoundError("Classroom session not found")
+            raise NotFoundError(t("vnc_session.session_not_found"))
         state.controller_user_id = user_id
 
     def is_input_blocked(self, vmid: int) -> bool:
@@ -236,9 +237,9 @@ class VncSessionManager:
         """對訂閱者做下游握手後常駐轉發，直到斷線或 session 結束。"""
         state = self._sessions.get(session_id)
         if state is None or state.closed:
-            raise NotFoundError("Classroom session not found")
+            raise NotFoundError(t("vnc_session.session_not_found"))
         if len(state.subscribers) >= settings.CLASSROOM_MAX_SUBSCRIBERS:
-            raise AppError("Classroom subscriber limit reached", 429)
+            raise AppError(t("vnc_session.subscriber_limit_reached"), 429)
 
         await downstream_handshake(websocket, state.init)
 

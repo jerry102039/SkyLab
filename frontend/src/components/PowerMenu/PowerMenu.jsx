@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import MIcon from "../MIcon";
 import { computePosition, isAnchorOffscreen } from "./position";
 import styles from "./PowerMenu.module.scss";
@@ -9,11 +10,11 @@ import styles from "./PowerMenu.module.scss";
    absolute 選單會被裁掉、z-index 也出不了那層 stacking context。 */
 
 const ITEMS = [
-  { action: "start",    label: "啟動",     icon: "play_arrow",         needs: "stopped", tone: "ok"   },
-  { action: "stop",     label: "強制停止", icon: "stop",               needs: "running", tone: "warn" },
-  { action: "shutdown", label: "關機",     icon: "power_settings_new", needs: "running"               },
-  { action: "reset",    label: "強制重置", icon: "restart_alt",        needs: "running", tone: "warn" },
-  { action: "reboot",   label: "重新啟動", icon: "replay",             needs: "running"               },
+  { action: "start",    labelKey: "PowerMenu.start",    icon: "play_arrow",         needs: "stopped", tone: "ok"   },
+  { action: "stop",     labelKey: "PowerMenu.stop",     icon: "stop",               needs: "running", tone: "warn" },
+  { action: "shutdown", labelKey: "PowerMenu.shutdown", icon: "power_settings_new", needs: "running"               },
+  { action: "reset",    labelKey: "PowerMenu.reset",    icon: "restart_alt",        needs: "running", tone: "warn" },
+  { action: "reboot",   labelKey: "PowerMenu.reboot",   icon: "replay",             needs: "running"               },
 ];
 
 export default function PowerMenu({
@@ -25,6 +26,7 @@ export default function PowerMenu({
   anchorRef,
   closing,
 }) {
+  const { t } = useTranslation("components");
   const ref = useRef(null);
   const [pos, setPos] = useState(null);
 
@@ -94,9 +96,9 @@ export default function PowerMenu({
       className={className}
       style={pos ? { top: pos.top, left: pos.left } : { top: 0, left: 0, visibility: "hidden" }}
     >
-      <div className={styles.powerMenuTitle}>電源控制</div>
+      <div className={styles.powerMenuTitle}>{t("PowerMenu.title")}</div>
       <div className={styles.powerMenuGrid}>
-        {ITEMS.map(({ action, label, icon, needs, tone }) => (
+        {ITEMS.map(({ action, labelKey, icon, needs, tone }) => (
           <button
             key={action}
             type="button"
@@ -107,17 +109,18 @@ export default function PowerMenu({
             <span className={tone === "ok" ? styles.powerMenuIconOk : styles.powerMenuIcon}>
               <MIcon name={icon} size={15} />
             </span>
-            {label}
+            {t(labelKey)}
           </button>
         ))}
-        <button
+        {/* 環境內的機器不能單台刪除，整組回收由環境層級處理；沒有 onDeleteClick 就不顯示 */}
+        {onDeleteClick && <button
           type="button"
           className={`${styles.powerMenuItem} ${styles.powerMenuItemDanger}`}
           onClick={() => onDeleteClick()}
         >
           <span className={styles.powerMenuIcon}><MIcon name="delete_outline" size={15} /></span>
-          刪除
-        </button>
+          {t("PowerMenu.delete")}
+        </button>}
       </div>
     </div>,
     document.body,

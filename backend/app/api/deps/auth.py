@@ -17,6 +17,7 @@ from app.core.authorizers import (
 )
 from app.core.config import settings
 from app.core.db import engine
+from app.core.i18n import t
 from app.core.permissions import Permission, require_permission
 from app.exceptions import AuthenticationError
 from app.infrastructure.redis import get_redis, is_jti_revoked
@@ -45,26 +46,26 @@ async def get_current_user(session: SessionDep, token: TokenDep) -> User:
         )
         token_data = TokenPayload(**payload)
     except (InvalidTokenError, ValidationError):
-        raise AuthenticationError("Could not validate credentials")
+        raise AuthenticationError(t("auth.invalid_credentials"))
     # Only access tokens may call the API — this also rejects refresh tokens
     # and any other JWT signed with the same key (e.g. password-reset tokens).
     if token_data.type != "access":
-        raise AuthenticationError("Only access tokens can be used for API access")
+        raise AuthenticationError(t("auth.access_token_only"))
     # Per-token revocation via Redis blacklist (in addition to the
     # token_version global kill switch enforced below).
     if token_data.jti:
         redis = await get_redis()
         if await is_jti_revoked(redis, token_data.jti):
-            raise AuthenticationError("Token has been revoked")
+            raise AuthenticationError(t("auth.token_revoked"))
     # 同步 DB 查詢不可直接在 event loop 上執行：連線池耗盡時會凍結整個
     # loop，使已完成的請求無法歸還連線而形成死結（見 tests/performance）。
     user = await run_in_threadpool(session.get, User, token_data.sub)
     if not user:
-        raise AuthenticationError("User not found")
+        raise AuthenticationError(t("auth.user_not_found"))
     if not user.is_active:
-        raise AuthenticationError("Inactive user")
+        raise AuthenticationError(t("auth.user_inactive"))
     if user.token_version != token_data.ver:
-        raise AuthenticationError("Token has been revoked")
+        raise AuthenticationError(t("auth.token_revoked"))
     return user
 
 

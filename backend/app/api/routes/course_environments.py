@@ -11,6 +11,7 @@ from sqlmodel import col, delete, func, select
 
 from app.api.deps import InstructorUser, SessionDep
 from app.core.authorizers import require_teaching_access
+from app.core.i18n import t
 from app.core.permissions import is_admin
 from app.exceptions import BadRequestError, NotFoundError
 from app.models import (
@@ -52,18 +53,18 @@ class EnvironmentNodeIn(BaseModel):
     def validate_source(self) -> "EnvironmentNodeIn":
         if self.source_type == "template":
             if self.source_template_id is None:
-                raise ValueError("既有範本節點必須選擇來源範本")
+                raise ValueError(t("course_env.node_template_required"))
             self.custom_image_ref = None
         else:
             if not (self.custom_image_ref or "").strip():
-                raise ValueError("自訂 VM/LXC 節點必須選擇基礎映像")
+                raise ValueError(t("course_env.node_image_required"))
             self.source_template_id = None
             if self.resource_type == "qemu":
                 try:
                     if int(self.custom_image_ref or "0") <= 0:
                         raise ValueError
                 except ValueError as exc:
-                    raise ValueError("自訂 VM 的基礎映像必須是有效 VMID") from exc
+                    raise ValueError(t("course_env.node_invalid_vmid")) from exc
         return self
 
 
@@ -77,11 +78,11 @@ class EnvironmentEdgeIn(BaseModel):
     @model_validator(mode="after")
     def validate_edge(self) -> "EnvironmentEdgeIn":
         if self.source_node_key == self.target_node_key:
-            raise ValueError("連線的來源與目標不可相同")
+            raise ValueError(t("course_env.edge_same_node"))
         if self.protocol == "any":
             self.port = None
         elif self.port is None:
-            raise ValueError("防火牆連線必須指定 Port")
+            raise ValueError(t("course_env.edge_port_required"))
         return self
 
 
@@ -111,7 +112,7 @@ class EnvironmentCreate(BaseModel):
             "quick_practice",
             "both",
         }:
-            raise ValueError("開放快速練習時，必須選擇可以看到這個環境的班級")
+            raise ValueError(t("course_env.audience_class_required"))
         return self
 
 
@@ -124,7 +125,7 @@ def _get_environment(
 ) -> CourseEnvironment:
     item = session.get(CourseEnvironment, environment_id)
     if item is None:
-        raise NotFoundError("Course environment not found")
+        raise NotFoundError(t("course_env.not_found"))
     require_teaching_access(current_user, item.owner_id)
     return item
 
@@ -167,16 +168,18 @@ def _validate_configuration(
     edges: list[EnvironmentEdgeIn],
 ) -> None:
     if len({node.node_key for node in nodes}) != len(nodes):
-        raise BadRequestError("同一課程版本的機器代碼不可重複")
+        raise BadRequestError(t("course_env.duplicate_node_key"))
     for node in nodes:
         if node.source_type == "custom":
             continue
         template = session.get(VMTemplate, node.source_template_id)
         if template is None or template.status != VMTemplateStatus.ready:
-            raise BadRequestError(f"機器「{node.name}」綁定的 PVE 範本不存在或尚未就緒")
+            raise BadRequestError(
+                t("course_env.template_not_ready", name=node.name)
+            )
         expected = "lxc" if template.resource_type.lower() == "lxc" else "qemu"
         if node.resource_type != expected:
-            raise BadRequestError(f"機器「{node.name}」類型與 PVE 範本不一致")
+            raise BadRequestError(t("course_env.type_mismatch", name=node.name))
     node_keys = {node.node_key for node in nodes}
     signatures: set[tuple[object, ...]] = set()
     for edge in edges:
@@ -184,7 +187,7 @@ def _validate_configuration(
             edge.source_node_key not in node_keys
             or edge.target_node_key not in node_keys
         ):
-            raise BadRequestError("拓撲連線包含不存在的機器節點")
+            raise BadRequestError(t("course_env.edge_unknown_node"))
         signature = (
             edge.source_node_key,
             edge.target_node_key,
@@ -193,7 +196,7 @@ def _validate_configuration(
             edge.port,
         )
         if signature in signatures:
-            raise BadRequestError("同一條拓撲連線不可重複")
+            raise BadRequestError(t("course_env.duplicate_edge"))
         signatures.add(signature)
 
 
@@ -224,9 +227,11 @@ def _replace_audience(
     for class_id in class_ids:
         teaching_class = session.get(TeachingClass, class_id)
         if teaching_class is None:
-            raise BadRequestError("指定的班級不存在")
+            raise BadRequestError(t("course_env.class_not_found"))
         if owner_id is not None and teaching_class.owner_id != owner_id:
-            raise BadRequestError(f"班級「{teaching_class.name}」不屬於這位教師")
+            raise BadRequestError(
+                t("course_env.class_not_owned", name=teaching_class.name)
+            )
     session.exec(
         delete(CourseEnvironmentAudience).where(
             col(CourseEnvironmentAudience.environment_id) == environment.id
@@ -323,7 +328,7 @@ def _latest(
 ) -> CourseEnvironmentVersion:
     versions = _versions(session, environment.id)
     if not versions:
-        raise NotFoundError("Course environment version not found")
+        raise NotFoundError(t("course_env.version_not_found"))
     return versions[0]
 
 
@@ -418,7 +423,7 @@ def update_environment(
     environment = _get_environment(session, current_user, environment_id)
     version = _latest(session, environment)
     if version.status != CourseEnvironmentVersionStatus.draft:
-        raise BadRequestError("已發布的課程版本不可修改，請建立新版本")
+        raise BadRequestError(t("course_env.published_immutable"))
     environment.name = body.name.strip()
     environment.description = body.description
     environment.usage_scope = body.usage_scope
@@ -446,7 +451,7 @@ def publish_environment(
     environment = _get_environment(session, current_user, environment_id)
     version = _latest(session, environment)
     if version.status != CourseEnvironmentVersionStatus.draft:
-        raise BadRequestError("只有草稿版本可以發布")
+        raise BadRequestError(t("course_env.only_draft_publishable"))
     nodes = _nodes(session, version.id)
     edges = _edges(session, version.id)
     _validate_configuration(
@@ -493,7 +498,7 @@ def create_environment_version(
     environment = _get_environment(session, current_user, environment_id)
     latest = _latest(session, environment)
     if latest.status == CourseEnvironmentVersionStatus.draft:
-        raise BadRequestError("目前已有可編輯的草稿版本")
+        raise BadRequestError(t("course_env.draft_exists"))
     version = CourseEnvironmentVersion(
         environment_id=environment.id,
         version=latest.version + 1,
@@ -534,7 +539,7 @@ def retire_environment(
         if version.status == CourseEnvironmentVersionStatus.published
     ]
     if not published:
-        raise BadRequestError("這個環境沒有已發布的版本可以下架")
+        raise BadRequestError(t("course_env.no_published_version"))
     for version in published:
         version.status = CourseEnvironmentVersionStatus.retired
         session.add(version)
@@ -558,14 +563,18 @@ def _environment_references(
         )
     ).one()
     if int(class_count or 0):
-        reasons.append(f"{int(class_count)} 個班級正在使用")
+        reasons.append(
+            t("course_env.reason_classes_using", count=int(class_count))
+        )
     session_count = session.exec(
         select(func.count(col(QuickPracticeSession.id))).where(
             col(QuickPracticeSession.environment_version_id).in_(version_ids)
         )
     ).one()
     if int(session_count or 0):
-        reasons.append(f"{int(session_count)} 筆快速練習紀錄引用")
+        reasons.append(
+            t("course_env.reason_sessions_using", count=int(session_count))
+        )
     return reasons
 
 
@@ -580,7 +589,7 @@ def delete_environment(
     reasons = _environment_references(session, environment.id)
     if reasons:
         raise BadRequestError(
-            "無法刪除：" + "、".join(reasons) + "。請改用「下架」停止新的啟動。"
+            t("course_env.delete_blocked", reasons="、".join(reasons))
         )
     version_ids = [version.id for version in _versions(session, environment.id)]
     if version_ids:

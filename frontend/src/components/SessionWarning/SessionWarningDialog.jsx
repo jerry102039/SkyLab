@@ -8,12 +8,14 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import MIcon from "../MIcon";
 import { ResourcesService } from "../../services/resources";
 import useDialogPresence from "../../hooks/useDialogPresence";
 import styles from "./SessionWarningDialog.module.scss";
 
 export default function SessionWarningDialog({ status, onClose, onDismissPermanent }) {
+  const { t } = useTranslation("common");
   const [doNotShow, setDoNotShow] = useState(false);
   const [extending, setExtending] = useState(false);
   // 關閉時保留最後一筆狀態，先播放離場動畫再卸載
@@ -34,10 +36,10 @@ export default function SessionWarningDialog({ status, onClose, onDismissPermane
     setExtending(true);
     try {
       const result = await ResourcesService.extendSession(shown.vmid);
-      toast.success(`已延長 ${result.extended_minutes / 60} 小時`);
+      toast.success(t("SessionWarningDialog.extended", { hours: result.extended_minutes / 60 }));
       onClose();
     } catch (e) {
-      toast.error(e?.message ?? "延長失敗");
+      toast.error(e?.message ?? t("SessionWarningDialog.extendFailed"));
     } finally {
       setExtending(false);
     }
@@ -52,26 +54,28 @@ export default function SessionWarningDialog({ status, onClose, onDismissPermane
         className={styles.dialog}
         role="alertdialog"
         aria-modal="true"
-        aria-label={isExpiry ? "資源即將到期" : "VM 即將自動關機"}
+        aria-label={isExpiry ? t("SessionWarningDialog.expiryTitle") : t("SessionWarningDialog.autoStopTitle")}
         onClick={(e) => e.stopPropagation()}
       >
         <div className={styles.title}>
           <span className={isExpiry ? styles.iconExpiry : styles.iconAutoStop}>
             <MIcon name={isExpiry ? "event_busy" : "schedule"} size={20} />
           </span>
-          {isExpiry ? "資源即將到期" : "VM 即將自動關機"}
+          {isExpiry ? t("SessionWarningDialog.expiryTitle") : t("SessionWarningDialog.autoStopTitle")}
         </div>
 
         <p className={styles.desc}>
           {isExpiry ? (
             <>
-              VM #{shown.vmid} 將在約 <strong>{shown.hours_until_expiry ?? "?"} 小時</strong>{" "}
-              後到期並停用。請及早備份資料；如需延長使用期限，請向管理員申請。
+              {t("SessionWarningDialog.expiryPrefix", { vmid: shown.vmid })}
+              <strong>{t("SessionWarningDialog.expiryHours", { hours: shown.hours_until_expiry ?? "?" })}</strong>
+              {t("SessionWarningDialog.expirySuffix")}
             </>
           ) : (
             <>
-              VM #{shown.vmid} 將在約 <strong>{shown.minutes_until_stop ?? "?"} 分鐘</strong>{" "}
-              後自動關機。需要繼續使用嗎？
+              {t("SessionWarningDialog.autoStopPrefix", { vmid: shown.vmid })}
+              <strong>{t("SessionWarningDialog.autoStopMinutes", { minutes: shown.minutes_until_stop ?? "?" })}</strong>
+              {t("SessionWarningDialog.autoStopSuffix")}
             </>
           )}
         </p>
@@ -82,12 +86,12 @@ export default function SessionWarningDialog({ status, onClose, onDismissPermane
             checked={doNotShow}
             onChange={(e) => setDoNotShow(e.target.checked)}
           />
-          <span>不再顯示此提醒</span>
+          <span>{t("SessionWarningDialog.doNotShowAgain")}</span>
         </label>
 
         <div className={styles.actions}>
           <button type="button" className={styles.btnSecondary} onClick={handleClose}>
-            {isExpiry ? "知道了" : "稍後再說"}
+            {isExpiry ? t("SessionWarningDialog.gotIt") : t("SessionWarningDialog.later")}
           </button>
           {!isExpiry && (
             <button
@@ -99,7 +103,7 @@ export default function SessionWarningDialog({ status, onClose, onDismissPermane
               <span className={extending ? styles.spin : ""}>
                 <MIcon name="autorenew" size={16} />
               </span>
-              延長使用時間
+              {t("SessionWarningDialog.extendUsageTime")}
             </button>
           )}
         </div>

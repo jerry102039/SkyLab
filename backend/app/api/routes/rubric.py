@@ -31,6 +31,7 @@ from app.ai.teacher_judge.template_command_service import (
 )
 from app.api.deps import SessionDep
 from app.api.deps.auth import InstructorUser
+from app.core.i18n import t
 from app.services.rubric_parser import parse_document
 
 logger = logging.getLogger(__name__)
@@ -56,12 +57,16 @@ async def upload_rubric(
     if suffix not in allowed:
         raise HTTPException(
             status_code=415,
-            detail=f"不支援的格式 '{suffix}'，目前接受：{', '.join(allowed)}",
+            detail=t(
+                "rubric.unsupportedFormat",
+                suffix=suffix,
+                allowed=", ".join(allowed),
+            ),
         )
 
     template_key = template_key.strip().lower() or "linux"
     if template_key not in SUPPORTED_TEMPLATE_KEYS:
-        raise HTTPException(status_code=400, detail="未知的評分環境 template。")
+        raise HTTPException(status_code=400, detail=t("rubric.unknownTemplate"))
 
     file_bytes = await file.read()
 
@@ -71,11 +76,15 @@ async def upload_rubric(
     if len(file_bytes) > max_upload_size_bytes:
         raise HTTPException(
             status_code=413,
-            detail=f"檔案大小 {file_size_mb:.1f}MB 超過限制（最大 {settings.VLLM_MAX_UPLOAD_SIZE_MB}MB）",
+            detail=t(
+                "rubric.fileTooLarge",
+                file_size_mb=file_size_mb,
+                max_size_mb=settings.VLLM_MAX_UPLOAD_SIZE_MB,
+            ),
         )
 
     if not file_bytes:
-        raise HTTPException(status_code=400, detail="上傳的檔案是空的。")
+        raise HTTPException(status_code=400, detail=t("rubric.emptyFile"))
 
     try:
         raw_text = parse_document(filename, file_bytes)
@@ -85,7 +94,7 @@ async def upload_rubric(
     if not raw_text.strip():
         raise HTTPException(
             status_code=422,
-            detail="無法從文件中提取任何文字，請確認文件不是掃描版 PDF。",
+            detail=t("rubric.noTextExtracted"),
         )
 
     template_commands = get_enabled_template_commands(
@@ -140,7 +149,7 @@ async def chat(
     """
     template_key = chat_request.template_key.strip().lower() or "linux"
     if template_key not in SUPPORTED_TEMPLATE_KEYS:
-        raise HTTPException(status_code=400, detail="未知的評分環境 template。")
+        raise HTTPException(status_code=400, detail=t("rubric.unknownTemplate"))
     template_commands = get_enabled_template_commands(
         session, template_key, include_cross_template=True
     )
@@ -197,7 +206,7 @@ async def download_excel(
     summary = payload.summary
 
     if not items:
-        raise HTTPException(status_code=400, detail="沒有可匯出的評分項目。")
+        raise HTTPException(status_code=400, detail=t("rubric.noItemsToExport"))
 
     logger.info(
         f"User {current_user.email} downloaded rubric excel with {len(items)} items"

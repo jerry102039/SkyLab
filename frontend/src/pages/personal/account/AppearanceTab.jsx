@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import MIcon from "../../../components/MIcon";
 import {
   useTheme,
@@ -20,6 +21,25 @@ const BG_IMAGE_MAX_CHARS = 3 * 1024 * 1024;
 /** 未自訂時玻璃質感「跟隨主色」實際呈現的是原始三色暈染，縮圖同步顯示 */
 const CLASSIC_PREVIEW =
   "linear-gradient(135deg, var(--color-bg-gradient-blue), var(--color-bg-gradient-yellow) 55%, var(--color-bg-gradient-green))";
+
+/** THEME_OPTIONS / STYLE_OPTIONS / BACKGROUND_OPTIONS 定義在 ThemeContext（跨頁共用，非本 namespace 範圍），
+ *  這裡依 key/id 對照翻譯 key，在渲染時覆蓋其原始中文 label */
+const MODE_LABEL_KEYS = {
+  light: "AppearanceTab.modeLight",
+  dark: "AppearanceTab.modeDark",
+  system: "AppearanceTab.modeSystem",
+};
+const STYLE_LABEL_KEYS = {
+  glass: "AppearanceTab.styleGlass",
+  liquid: "AppearanceTab.styleLiquid",
+  white: "AppearanceTab.styleWhite",
+  black: "AppearanceTab.styleBlack",
+};
+const BACKGROUND_LABEL_KEYS = {
+  "auto-gradient": "AppearanceTab.bgAutoGradient",
+  "preset-2": "AppearanceTab.bgPreset2",
+  "preset-3": "AppearanceTab.bgPreset3",
+};
 
 /** 可直接輸入 HEX 色碼的欄位，失焦或 Enter 時套用（無效輸入還原） */
 function HexInput({ value, onChange, ariaLabel }) {
@@ -81,6 +101,7 @@ function OptionGroup({ label, options, value, onSelect }) {
 }
 
 export default function AppearanceTab() {
+  const { t } = useTranslation("personal");
   const {
     theme,
     mode,
@@ -107,14 +128,14 @@ export default function AppearanceTab() {
     try {
       const { dataUrl } = await downscaleImage(file, { maxSize: 1920, quality: 0.82 });
       if (dataUrl.length > BG_IMAGE_MAX_CHARS) {
-        toast.error("圖片壓縮後仍太大，請換一張小一點的圖");
+        toast.error(t("AppearanceTab.imageTooLarge"));
         return;
       }
       setBackgroundImage(dataUrl);
       setBackgroundId("custom-image");
-      toast.success("背景圖已套用");
+      toast.success(t("AppearanceTab.backgroundApplied"));
     } catch (err) {
-      toast.error(err?.message ?? "背景圖讀取失敗");
+      toast.error(err?.message ?? t("AppearanceTab.backgroundReadFailed"));
     }
   }
 
@@ -130,7 +151,7 @@ export default function AppearanceTab() {
         ...BACKGROUND_OPTIONS,
         {
           id: "custom-image",
-          label: "自訂圖片",
+          label: t("AppearanceTab.bgCustomImage"),
           preview: `url("${backgroundImage}") center / cover no-repeat`,
         },
       ]
@@ -153,35 +174,44 @@ export default function AppearanceTab() {
     return opt.preview;
   }
 
+  const translatedStyleOptions = visibleStyleOptions.map((opt) => ({
+    ...opt,
+    label: t(STYLE_LABEL_KEYS[opt.key] ?? opt.key),
+  }));
+  const translatedThemeOptions = THEME_OPTIONS.map((opt) => ({
+    ...opt,
+    label: t(MODE_LABEL_KEYS[opt.key] ?? opt.key),
+  }));
+
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>外觀</h2>
+      <h2 className={styles.cardTitle}>{t("AppearanceTab.title")}</h2>
 
       <div className={styles.form}>
         <div className={styles.field}>
-          <span>主色</span>
+          <span>{t("AppearanceTab.primaryColor")}</span>
           <div className={styles.colorRow}>
             <input
               type="color"
               value={primaryColor}
               onChange={(e) => setPrimaryColor(e.target.value)}
-              aria-label="選擇主色"
+              aria-label={t("AppearanceTab.selectPrimaryColor")}
             />
-            <HexInput value={primaryColor} onChange={setPrimaryColor} ariaLabel="主色 HEX 色碼" />
+            <HexInput value={primaryColor} onChange={setPrimaryColor} ariaLabel={t("AppearanceTab.primaryColorHex")} />
           </div>
           <div className={styles.shadeRow}>
-            <span className={styles.shadeLight}>淺</span>
-            <span className={styles.shadeBase}>主</span>
-            <span className={styles.shadeDark}>深</span>
+            <span className={styles.shadeLight}>{t("AppearanceTab.shadeLight")}</span>
+            <span className={styles.shadeBase}>{t("AppearanceTab.shadeBase")}</span>
+            <span className={styles.shadeDark}>{t("AppearanceTab.shadeDark")}</span>
           </div>
-          <p className={styles.rowMeta}>淺色與深色色階會依主色的明度自動推算</p>
+          <p className={styles.rowMeta}>{t("AppearanceTab.shadeHint")}</p>
         </div>
 
-        <OptionGroup label="風格" options={visibleStyleOptions} value={style} onSelect={setStyle} />
+        <OptionGroup label={t("AppearanceTab.style")} options={translatedStyleOptions} value={style} onSelect={setStyle} />
 
         {/* 背景：與風格無關的同一組花色 */}
         <div className={styles.field}>
-          <span>背景</span>
+          <span>{t("AppearanceTab.background")}</span>
 
           {/* 漸層背景的基準色可與主色分開設定；
               三種風格的所有花色都由基準色衍生，picker 永遠顯示 */}
@@ -190,18 +220,18 @@ export default function AppearanceTab() {
               type="color"
               value={backgroundColor || primaryColor}
               onChange={(e) => setBackgroundColor(e.target.value)}
-              aria-label="選擇背景顏色"
+              aria-label={t("AppearanceTab.selectBackgroundColor")}
             />
             <HexInput
               value={backgroundColor || primaryColor}
               onChange={setBackgroundColor}
-              ariaLabel="背景 HEX 色碼"
+              ariaLabel={t("AppearanceTab.backgroundColorHex")}
             />
             {!backgroundColor && (
-              <span className={styles.rowMeta}>跟隨主色中，可另選背景色</span>
+              <span className={styles.rowMeta}>{t("AppearanceTab.followingPrimaryColor")}</span>
             )}
           </div>
-          
+
           <div className={styles.bgGallery}>
             {backgroundOptions.map((opt) => (
               <button
@@ -212,7 +242,9 @@ export default function AppearanceTab() {
                 onClick={() => setBackgroundId(opt.id)}
               >
                 <span className={styles.bgThumbLabel}>
-                  {opt.id === "auto-gradient" && backgroundColor ? "自訂顏色" : opt.label}
+                  {opt.id === "auto-gradient" && backgroundColor
+                    ? t("AppearanceTab.bgCustomColor")
+                    : t(BACKGROUND_LABEL_KEYS[opt.id] ?? opt.label)}
                 </span>
               </button>
             ))}
@@ -233,23 +265,23 @@ export default function AppearanceTab() {
               onClick={() => bgFileRef.current?.click()}
             >
               <MIcon name="upload" size={16} />
-              上傳背景圖
+              {t("AppearanceTab.uploadBackgroundImage")}
             </button>
             {backgroundImage && (
               <button type="button" className={styles.btnSecondary} onClick={removeBackgroundImage}>
                 <MIcon name="delete" size={16} />
-                移除背景圖
+                {t("AppearanceTab.removeBackgroundImage")}
               </button>
             )}
           </div>
         </div>
 
-        <OptionGroup label="明暗模式" options={THEME_OPTIONS} value={mode} onSelect={setMode} />
+        <OptionGroup label={t("AppearanceTab.colorMode")} options={translatedThemeOptions} value={mode} onSelect={setMode} />
 
         <div className={styles.formActions}>
           <button type="button" className={styles.btnSecondary} onClick={resetToDefaults}>
             <MIcon name="refresh" size={16} />
-            重設為系統預設值
+            {t("AppearanceTab.resetToDefaults")}
           </button>
         </div>
       </div>

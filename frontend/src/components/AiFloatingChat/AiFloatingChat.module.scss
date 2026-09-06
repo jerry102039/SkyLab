@@ -16,6 +16,12 @@
   width: clamp(380px, 31vw, 460px);
   flex-basis: clamp(380px, 31vw, 460px);
   margin-left: 20px;
+
+  /* 往右挪版面右側留白的四分之一。負邊距吃掉 workspace 的 padding，
+     不必為了這個面板去改共用的版面變數。 */
+  @media (min-width: $breakpoint-sidebar) {
+    margin-right: calc(var(--layout-px) * -0.25);
+  }
 }
 
 .panel {
@@ -70,8 +76,7 @@
   }
 }
 
-.brandIcon,
-.emptyIcon {
+.brandIcon {
   color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 11%, transparent);
   @include flex-center;
@@ -147,12 +152,6 @@
     color: var(--color-text-primary);
     font-size: 1.1rem;
   }
-}
-
-.emptyIcon {
-  width: 52px;
-  height: 52px;
-  border-radius: $radius-16;
 }
 
 .suggestions {
@@ -342,17 +341,15 @@
 
   li {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 11px;
-    padding: 12px 14px;
+    padding: 11px 14px;
     border: 1px solid var(--color-border);
     border-radius: $radius-12;
     background: var(--color-surface);
   }
 
-  span { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  strong { font-size: $font-size-14; }
-  small { color: var(--color-text-muted); font-size: $font-size-12; }
+  strong { font-size: $font-size-14; min-width: 0; }
 }
 
 /* 配置模式的答案晶片：點一下就等於回答，不用打字 */
@@ -574,12 +571,21 @@
   gap: $spacing-8;
   padding: 0 $spacing-16;
   border-radius: $radius-pill;
-  background: var(--color-primary);
+  /* 常駐在畫面右下角，稍微透一點才不會一直搶走底下內容的注意力；
+     hover 時回到不透明，表示它是活的 */
+  background: color-mix(in srgb, var(--color-primary) 88%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   color: var(--color-text-on-primary);
-  box-shadow: 0 6px 22px color-mix(in srgb, var(--color-primary) 34%, transparent);
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--color-primary) 26%, transparent);
   cursor: pointer;
+  transition: background $transition-base, box-shadow $transition-base, transform $transition-base;
 
-  &:hover { transform: translateY(-1px); }
+  &:hover {
+    transform: translateY(-1px);
+    background: var(--color-primary);
+    box-shadow: 0 6px 22px color-mix(in srgb, var(--color-primary) 34%, transparent);
+  }
 }
 
 .backdrop { display: none; }

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./Teaching.module.scss";
 import { QuotasService } from "../../services/quotas";
 
 function Meter({ label, used, max, unit }) {
+  const { t } = useTranslation("components");
   const unlimited = max === 0;
   const pct = !unlimited && max > 0 ? Math.min(100, (used / max) * 100) : 0;
   return (
@@ -10,7 +12,7 @@ function Meter({ label, used, max, unit }) {
       <div className={styles.meterHead}>
         <span className={styles.meterLabel}>{label}</span>
         <span className={`${styles.meterValue} ${pct >= 90 ? styles.meterValue_over : ""}`}>
-          {unlimited ? `${used} ${unit}（無限制）` : `${used} / ${max} ${unit}`}
+          {unlimited ? t("QuotaUsageBar.unlimited", { used, unit }) : t("QuotaUsageBar.usedOfMax", { used, max, unit })}
         </span>
       </div>
       <div className={styles.meterTrack}>
@@ -25,6 +27,7 @@ function Meter({ label, used, max, unit }) {
 
 /** 我的配額用量條（掛在「我的資源」頁頂部） */
 export default function QuotaUsageBar() {
+  const { t } = useTranslation("components");
   const [data, setData] = useState(null);
 
   useEffect(() => {
@@ -47,13 +50,13 @@ export default function QuotaUsageBar() {
           unit="cores"
         />
         <Meter
-          label="記憶體"
+          label={t("QuotaUsageBar.memory")}
           used={Math.round(data.used_memory_mb / 1024)}
           max={Math.round(data.quota.max_memory_mb / 1024)}
           unit="GB"
         />
-        <Meter label="磁碟" used={data.used_disk_gb} max={data.quota.max_disk_gb} unit="GB" />
-        <Meter label="實例" used={data.used_instances} max={data.quota.max_instances} unit="台" />
+        <Meter label={t("QuotaUsageBar.disk")} used={data.used_disk_gb} max={data.quota.max_disk_gb} unit="GB" />
+        <Meter label={t("QuotaUsageBar.instances")} used={data.used_instances} max={data.quota.max_instances} unit={t("QuotaUsageBar.unitInstances")} />
       </div>
     </div>
   );

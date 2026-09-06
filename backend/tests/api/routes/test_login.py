@@ -114,7 +114,7 @@ def test_reset_password_invalid_token(
 
     assert "detail" in response
     assert r.status_code == 400
-    assert response["detail"] == "Invalid token"
+    assert response["detail"] == "無效的 token"
 
 
 def test_login_with_bcrypt_password_upgrades_to_argon2(
@@ -266,4 +266,4 @@ def test_google_login_unregistered_email_has_clear_error(
         )
 
     assert r.status_code == 400
-    assert r.json()["detail"] == "Google account is not registered"
+    assert r.json()["detail"] == "此 Google 帳號尚未註冊"

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./ResourceDetailPage.module.scss";
 import MIcon from "../../../../components/MIcon";
 import LoadingState from "../../../../components/LoadingState/LoadingState";
@@ -6,17 +7,17 @@ import RrdChart from "../../../../components/RrdChart/RrdChart";
 import { ResourcesService } from "../../../../services/resources";
 
 const TIMEFRAMES = [
-  { value: "hour",  label: "最近 1 小時" },
-  { value: "day",   label: "最近 1 天" },
-  { value: "week",  label: "最近 1 週" },
-  { value: "month", label: "最近 1 月" },
-  { value: "year",  label: "最近 1 年" },
+  { value: "hour",  labelKey: "MonitoringTab.timeframeHour" },
+  { value: "day",   labelKey: "MonitoringTab.timeframeDay" },
+  { value: "week",  labelKey: "MonitoringTab.timeframeWeek" },
+  { value: "month", labelKey: "MonitoringTab.timeframeMonth" },
+  { value: "year",  labelKey: "MonitoringTab.timeframeYear" },
 ];
 
 const CHART_TABS = [
   { key: "cpu",     label: "CPU" },
-  { key: "memory",  label: "記憶體" },
-  { key: "network", label: "網路" },
+  { key: "memory",  labelKey: "MonitoringTab.memory" },
+  { key: "network", labelKey: "MonitoringTab.network" },
 ];
 
 function formatBytes(bytes) {
@@ -55,6 +56,7 @@ function StatCard({ title, pct, detail, icon }) {
 }
 
 export default function MonitoringTab({ vmid }) {
+  const { t } = useTranslation("personal");
   const [timeframe, setTimeframe] = useState("hour");
   const [chartTab, setChartTab] = useState("cpu");
   const [current, setCurrent] = useState(null);
@@ -98,7 +100,7 @@ export default function MonitoringTab({ vmid }) {
     };
   }, [vmid, timeframe]);
 
-  if (!current) return <LoadingState text="載入監控資料中…" />;
+  if (!current) return <LoadingState text={t("MonitoringTab.loadingData")} />;
 
   const cpuPct = current.cpu ? (current.cpu * 100).toFixed(2) : "0.00";
   const memPct =
@@ -141,16 +143,16 @@ export default function MonitoringTab({ vmid }) {
   return (
     <div className={styles.tabStack}>
       <div className={styles.monHead}>
-        <h2 className={styles.cardTitle}>資源監控</h2>
+        <h2 className={styles.cardTitle}>{t("MonitoringTab.title")}</h2>
         <div className={styles.segment}>
-          {TIMEFRAMES.map((t) => (
+          {TIMEFRAMES.map((tf) => (
             <button
-              key={t.value}
+              key={tf.value}
               type="button"
-              className={`${styles.segmentBtn} ${timeframe === t.value ? styles.segmentActive : ""}`}
-              onClick={() => setTimeframe(t.value)}
+              className={`${styles.segmentBtn} ${timeframe === tf.value ? styles.segmentActive : ""}`}
+              onClick={() => setTimeframe(tf.value)}
             >
-              {t.label}
+              {t(tf.labelKey)}
             </button>
           ))}
         </div>
@@ -159,19 +161,19 @@ export default function MonitoringTab({ vmid }) {
       {/* 即時狀態卡片 */}
       <div className={styles.statGrid}>
         <StatCard
-          title="CPU 用量"
+          title={t("MonitoringTab.cpuUsage")}
           pct={cpuPct}
-          detail={`${current.maxcpu ?? "—"} 核心`}
+          detail={t("MonitoringTab.coresDetail", { count: current.maxcpu ?? "—" })}
           icon="memory"
         />
         <StatCard
-          title="記憶體"
+          title={t("MonitoringTab.memory")}
           pct={memPct}
           detail={`${formatBytes(current.mem)} / ${formatBytes(current.maxmem)}`}
           icon="sd_card"
         />
         <StatCard
-          title="磁碟"
+          title={t("MonitoringTab.disk")}
           pct={diskPct}
           detail={`${formatBytes(current.disk)} / ${formatBytes(current.maxdisk)}`}
           icon="storage"
@@ -179,7 +181,7 @@ export default function MonitoringTab({ vmid }) {
         <div className={styles.statCard}>
           <div className={styles.overviewTop}>
             <div className={styles.overviewInfo}>
-              <span className={styles.factLabel}>網路</span>
+              <span className={styles.factLabel}>{t("MonitoringTab.network")}</span>
               <span className={styles.netLine}>↓ {formatBytes(current.netin)}</span>
               <span className={styles.netLine}>↑ {formatBytes(current.netout)}</span>
             </div>
@@ -194,18 +196,18 @@ export default function MonitoringTab({ vmid }) {
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <div>
-            <h2 className={styles.cardTitle}>歷史資料</h2>
-            <p className={styles.cardDesc}>共 {chartData.length} 個資料點</p>
+            <h2 className={styles.cardTitle}>{t("MonitoringTab.historyTitle")}</h2>
+            <p className={styles.cardDesc}>{t("MonitoringTab.dataPointsCount", { count: chartData.length })}</p>
           </div>
           <div className={styles.segment}>
-            {CHART_TABS.map((t) => (
+            {CHART_TABS.map((ct) => (
               <button
-                key={t.key}
+                key={ct.key}
                 type="button"
-                className={`${styles.segmentBtn} ${chartTab === t.key ? styles.segmentActive : ""}`}
-                onClick={() => setChartTab(t.key)}
+                className={`${styles.segmentBtn} ${chartTab === ct.key ? styles.segmentActive : ""}`}
+                onClick={() => setChartTab(ct.key)}
               >
-                {t.label}
+                {ct.labelKey ? t(ct.labelKey) : ct.label}
               </button>
             ))}
           </div>
@@ -214,7 +216,7 @@ export default function MonitoringTab({ vmid }) {
           {chartTab === "cpu" && (
             <RrdChart
               data={chartData}
-              series={[{ key: "cpu", label: "CPU %", color: "--color-info" }]}
+              series={[{ key: "cpu", label: t("MonitoringTab.seriesCpu"), color: "--color-info" }]}
               unit="%"
               height={260}
             />
@@ -222,7 +224,7 @@ export default function MonitoringTab({ vmid }) {
           {chartTab === "memory" && (
             <RrdChart
               data={chartData}
-              series={[{ key: "memory", label: "記憶體 %", color: "--color-success" }]}
+              series={[{ key: "memory", label: t("MonitoringTab.seriesMemory"), color: "--color-success" }]}
               unit="%"
               height={260}
             />
@@ -231,8 +233,8 @@ export default function MonitoringTab({ vmid }) {
             <RrdChart
               data={netChartData}
               series={[
-                { key: "netin",  label: "下載", color: "--color-info" },
-                { key: "netout", label: "上傳", color: "--color-danger" },
+                { key: "netin",  label: t("MonitoringTab.seriesDownload"), color: "--color-info" },
+                { key: "netout", label: t("MonitoringTab.seriesUpload"), color: "--color-danger" },
               ]}
               unit={netUnit}
               height={260}

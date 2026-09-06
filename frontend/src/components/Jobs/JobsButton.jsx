@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import MIcon from "../MIcon";
 import { useJobs } from "./JobsProvider";
 import { JobEmpty, JobLoading, JobRow, ReminderRow } from "./JobRow";
@@ -20,6 +21,7 @@ const MARGIN = 16;  // popover 與視窗邊緣的最小留白
  * fixed 子元素的定位基準，加上 overflow-x: hidden 會把彈出內容裁掉。
  */
 export default function JobsButton({ collapsed = false }) {
+  const { t } = useTranslation("components");
   const {
     items,
     isAdmin,
@@ -106,8 +108,8 @@ export default function JobsButton({ collapsed = false }) {
         type="button"
         className={`${styles.sidebarBtn} ${collapsed ? styles.sidebarBtnCollapsed : ""} ${open ? styles.sidebarBtnActive : ""}`}
         onClick={toggleOpen}
-        title={collapsed ? "背景任務" : undefined}
-        aria-label="背景任務"
+        title={collapsed ? t("JobsButton.backgroundJobs") : undefined}
+        aria-label={t("JobsButton.backgroundJobs")}
         aria-expanded={open}
       >
         <span className={styles.sidebarBtnIcon}>
@@ -116,7 +118,7 @@ export default function JobsButton({ collapsed = false }) {
         </span>
         {!collapsed && (
           <>
-            <span className={styles.sidebarBtnLabel}>背景任務</span>
+            <span className={styles.sidebarBtnLabel}>{t("JobsButton.backgroundJobs")}</span>
             {attention > 0 && <span className={styles.countBadge}>{attention}</span>}
           </>
         )}
@@ -129,9 +131,9 @@ export default function JobsButton({ collapsed = false }) {
           style={{ left: pos.left, bottom: pos.bottom }}
         >
           <div className={styles.popoverHeader}>
-            <span className={styles.popoverTitle}>執行中任務</span>
+            <span className={styles.popoverTitle}>{t("JobsButton.runningJobsTitle")}</span>
             <span className={styles.popoverSub}>
-              {hasRunning ? `${running} 個執行中` : "無執行中任務"}
+              {hasRunning ? t("JobsButton.runningCount", { count: running }) : t("JobsButton.noRunningJobs")}
             </span>
           </div>
           {isAdmin && (
@@ -141,14 +143,14 @@ export default function JobsButton({ collapsed = false }) {
                 checked={notifyOnlyMine}
                 onChange={(e) => setNotifyOnlyMine(e.target.checked)}
               />
-              <span>只通知「我的」任務（避免被其他使用者的任務轟炸）</span>
+              <span>{t("JobsButton.notifyOnlyMine")}</span>
             </label>
           )}
           <div className={styles.popoverList}>
             {items === null ? (
               <JobLoading />
             ) : items.length === 0 ? (
-              <JobEmpty message="目前無執行中任務，其他狀態請至「背景任務」頁面查看" />
+              <JobEmpty message={t("JobsButton.noRunningJobsHint")} />
             ) : (
               items.map((job) => (
                 <JobRow
@@ -164,19 +166,19 @@ export default function JobsButton({ collapsed = false }) {
           </div>
           <div className={styles.popoverSection}>
             <div className={styles.popoverHeader}>
-              <span className={styles.popoverTitle}>提醒</span>
+              <span className={styles.popoverTitle}>{t("JobsButton.remindersTitle")}</span>
               {unreadReminders.length > 0 ? (
                 <button
                   type="button"
                   className={styles.markAllBtn}
                   onClick={markAllRemindersRead}
                 >
-                  全部標為已讀
+                  {t("JobsButton.markAllRead")}
                   <MIcon name="done_all" size={14} />
                 </button>
               ) : (
                 <span className={styles.popoverSub}>
-                  {(reminders?.length ?? 0) > 0 ? "全部已讀" : "沒有新提醒"}
+                  {(reminders?.length ?? 0) > 0 ? t("JobsButton.allRead") : t("JobsButton.noNewReminders")}
                 </span>
               )}
             </div>
@@ -184,7 +186,7 @@ export default function JobsButton({ collapsed = false }) {
               {reminders === null ? (
                 <JobLoading />
               ) : reminders.length === 0 ? (
-                <JobEmpty message="機器期限、審核結果與近期課堂任務會出現在這裡" />
+                <JobEmpty message={t("JobsButton.noRemindersHint")} />
               ) : (
                 reminders.map((reminder) => (
                   <ReminderRow
@@ -199,7 +201,7 @@ export default function JobsButton({ collapsed = false }) {
           </div>
           <div className={styles.popoverFooter}>
             <Link to="/jobs" className={styles.popoverLink} onClick={() => setOpen(false)}>
-              <span>查看全部任務與歷史</span>
+              <span>{t("JobsButton.viewAllJobs")}</span>
               <MIcon name="chevron_right" size={16} />
             </Link>
           </div>

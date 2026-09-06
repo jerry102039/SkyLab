@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.domain.placement import advisor as placement_advisor
 from app.domain.placement import policy as placement_policy
@@ -69,6 +69,11 @@ def request_capacity_tuple(db_request: VMRequest) -> tuple[float, int, int]:
     if disk_gb <= 0:
         disk_gb = 20 if db_request.resource_type == "vm" else 8
     return cpu_cores, memory_bytes, disk_gb * GIB
+
+
+def request_gpu_slots(db_request: VMRequest) -> int:
+    """這張申請會佔用幾個 GPU 槽。目前一台機器最多掛一張卡。"""
+    return 1 if str(getattr(db_request, "gpu_mapping_id", "") or "").strip() else 0
 
 
 def build_storage_pool_state(
@@ -137,31 +142,6 @@ def provisioned_current_node(request: VMRequest) -> str | None:
     return assigned or None
 
 
-def build_placement_baseline_nodes(
-    *,
-    session: Session,
-    requests: list[VMRequest],
-    get_overcommit_ratios_fn,
-    release_request_from_capacities_fn,
-) -> list[NodeCapacity]:
-    nodes, resources = placement_advisor._load_cluster_state()
-    cpu_overcommit_ratio, disk_overcommit_ratio = get_overcommit_ratios_fn(session)
-    working_nodes = placement_advisor._build_node_capacities(
-        nodes=nodes,
-        resources=resources,
-        cpu_overcommit_ratio=cpu_overcommit_ratio,
-        disk_overcommit_ratio=disk_overcommit_ratio,
-    )
-    for request in requests:
-        if request.vmid is not None:
-            release_request_from_capacities_fn(
-                node_capacities=working_nodes,
-                db_request=request,
-                node_name=str(request.actual_node or request.assigned_node or ""),
-            )
-    return working_nodes
-
-
 def build_preview_vm_request(
     *,
     request: PlacementRequest,
@@ -219,15 +199,24 @@ def node_can_host_request(
     has_managed_storage: bool,
     allowed_gpu_nodes: set[str] | None = None,
     allowed_nodes: set[str] | None = None,
+    allowed_affinity_nodes: set[str] | None = None,
 ) -> bool:
     # 模板節點白名單（None = 不受限；空集合 = 模板在任何節點都拿不到）
     if allowed_nodes is not None and node.node not in allowed_nodes:
+        return False
+    # 群組 affinity 白名單（None = 群組尚無錨點或不屬於任何群組）
+    if allowed_affinity_nodes is not None and node.node not in allowed_affinity_nodes:
         return False
     if gpu_required > 0:
         if allowed_gpu_nodes is not None:
             if node.node not in allowed_gpu_nodes:
                 return False
         elif node.gpu_count < gpu_required:
+            return False
+        # 白名單只回答「這個節點有沒有這張卡」，額度是否還有剩要另外算 ——
+        # 否則同一張卡在同一時段可被多張申請排入並全部核准，直到建機時
+        # 才由 _build_gpu_hostpci 發現額度用盡而失敗。
+        if node.allocatable_gpu_slots < gpu_required:
             return False
     if (
         node.status != "online"
@@ -243,6 +232,71 @@ def node_can_host_request(
 
 def node_disk_bytes_for_capacity(*, disk_bytes: int, has_managed_storage: bool) -> int:
     return 0 if has_managed_storage else disk_bytes
+
+
+def group_anchor_node(
+    *,
+    session: Session,
+    placement_group_id: uuid.UUID | None,
+    exclude_request_id: uuid.UUID | None = None,
+) -> str | None:
+    """同群組中已經定下落點的那個節點；None = 群組還沒有錨點。
+
+    取最早建立的一台為錨點，讓同一組的每次查詢都得到同一個答案（後建的
+    機器不會因為查詢順序不同而跟到不同節點）。
+
+    預設不排除呼叫者自己，這點是刻意的：研究申請核准時
+    rebuild_reserved_assignments 會重新求解整個時窗，其中包含尚未建機的
+    群組成員。此時每個成員都已經有 assigned_node，會以自己為錨點而留在
+    原地，整組因此被凍結成一個單位，不會在重解過程中被拆散到不同節點。
+    要讓某台真的重新自由選點時，才傳入 exclude_request_id。
+    """
+    if placement_group_id is None:
+        return None
+
+    statement = (
+        select(VMRequest)
+        .where(VMRequest.placement_group_id == placement_group_id)
+        .order_by(VMRequest.created_at, VMRequest.id)
+    )
+    for peer in session.exec(statement).all():
+        if exclude_request_id is not None and peer.id == exclude_request_id:
+            continue
+        node = str(
+            peer.actual_node or peer.assigned_node or peer.desired_node or ""
+        ).strip()
+        if node:
+            return node
+    return None
+
+
+def allowed_affinity_nodes_for_request(
+    *,
+    session: Session,
+    request: PlacementRequest,
+    exclude_request_id: uuid.UUID | None = None,
+) -> set[str] | None:
+    """同群組已有落點時的節點白名單；None = 不受群組限制。
+
+    約束是「同一個叢集」而不是「同一台節點」：叢集內跨節點靠同一個 bridge
+    加 PVE firewall 是通的，機器不必擠在同一台。跨叢集才是真正的問題 ——
+    L2 不通、firewall 規則各自獨立、IP 由全域單例網段配發但 gateway 是每個
+    連線各自設定，拓樸 edge 會形同虛設。
+
+    釘成同節點還會讓一組「範本分屬同叢集不同節點」的環境變成無解：LXC
+    linked clone 不能離開自己的範本節點，兩台機器本來就不可能同節點。
+
+    群組第一台自由選點，之後的機器限制在同一叢集；整組放不下時明確失敗，
+    不會出現半組在 A 叢集、半組在 B 叢集的壞環境。
+    """
+    anchor = group_anchor_node(
+        session=session,
+        placement_group_id=request.placement_group_id,
+        exclude_request_id=exclude_request_id,
+    )
+    if not anchor:
+        return None
+    return get_nodes_for_connection(get_connection_id_for_node(anchor)) or {anchor}
 
 
 def allowed_gpu_nodes_for_request(request: PlacementRequest) -> set[str] | None:
@@ -281,6 +335,8 @@ def allowed_template_nodes_for_request(request: PlacementRequest) -> set[str] | 
     """模板決定的候選節點白名單；None = 不受模板限制。
 
     - LXC + ostemplate：只有 iso_storage 看得到該 vztmpl 的節點可選。
+    - LXC + template_vmid（範本克隆）：linked clone 必須與範本同節點同
+      storage，只有範本節點一個選擇。
     - VM + template_vmid：clone 不可跨連線，限制在範本所屬連線的節點；
       範本已不存在時回空集合（無可行節點，讓 placement 明確失敗）。
     - 名稱標記 -GPU 的模板且未指定 GPU mapping 時，再縮限到有 GPU 的
@@ -291,6 +347,8 @@ def allowed_template_nodes_for_request(request: PlacementRequest) -> set[str] | 
     resource_type = str(request.resource_type)
     if resource_type == "lxc" and request.ostemplate:
         cache_key = ("lxc", str(request.ostemplate))
+    elif resource_type == "lxc" and request.template_vmid:
+        cache_key = ("lxc_clone", str(request.template_vmid))
     elif resource_type == "vm" and request.template_vmid:
         cache_key = ("vm", str(request.template_vmid))
     else:
@@ -314,6 +372,18 @@ def allowed_template_nodes_for_request(request: PlacementRequest) -> set[str] | 
                 # 整張映射為空多半是所有節點查詢都失敗，視同不受限
                 allowed = node_map.get(cache_key[1], set()) if node_map else None
                 needs_gpu = _template_needs_gpu(cache_key[1])
+            elif cache_key[0] == "lxc_clone":
+                try:
+                    source = proxmox_service.find_resource(int(cache_key[1]))
+                except NotFoundError:
+                    allowed = set()
+                    source = None
+                else:
+                    node = str(source.get("node") or "")
+                    allowed = {node} if node else None
+                needs_gpu = _template_needs_gpu(
+                    str((source or {}).get("name") or "")
+                )
             else:
                 try:
                     template = proxmox_service.find_vm_template(int(cache_key[1]))
@@ -361,37 +431,6 @@ def allowed_template_nodes_for_request(request: PlacementRequest) -> set[str] | 
     return set(allowed) if allowed is not None else None
 
 
-def release_request_from_capacities(
-    *,
-    node_capacities: list[NodeCapacity],
-    db_request: VMRequest,
-    node_name: str | None,
-    request_capacity_tuple_fn,
-    refresh_node_candidate_fn,
-) -> None:
-    if not node_name:
-        return
-    node = next((item for item in node_capacities if item.node == node_name), None)
-    if node is None:
-        return
-
-    cpu_cores, memory_bytes, disk_bytes = request_capacity_tuple_fn(db_request)
-    node.allocatable_cpu_cores = min(
-        round(node.allocatable_cpu_cores + cpu_cores, 2),
-        round(float(node.total_cpu_cores), 2),
-    )
-    node.allocatable_memory_bytes = min(
-        node.allocatable_memory_bytes + memory_bytes,
-        int(node.total_memory_bytes),
-    )
-    node.allocatable_disk_bytes = min(
-        node.allocatable_disk_bytes + disk_bytes,
-        int(node.total_disk_bytes),
-    )
-    node.running_resources = max(int(node.running_resources) - 1, 0)
-    refresh_node_candidate_fn(node)
-
-
 def reserve_request_on_capacities(
     *,
     node_capacities: list[NodeCapacity],
@@ -409,6 +448,9 @@ def reserve_request_on_capacities(
     node.allocatable_memory_bytes = max(node.allocatable_memory_bytes - memory_bytes, 0)
     node.allocatable_disk_bytes = max(node.allocatable_disk_bytes - disk_bytes, 0)
     node.running_resources = int(node.running_resources) + 1
+    node.allocatable_gpu_slots = max(
+        int(node.allocatable_gpu_slots) - request_gpu_slots(db_request), 0
+    )
     refresh_node_candidate_fn(node)
 
 
@@ -453,6 +495,9 @@ def apply_reserved_requests_to_capacities(
         node.allocatable_cpu_cores = max(node.allocatable_cpu_cores - reserved_cpu, 0.0)
         node.allocatable_memory_bytes = max(node.allocatable_memory_bytes - reserved_memory, 0)
         node.allocatable_disk_bytes = max(node.allocatable_disk_bytes - reserved_disk, 0)
+        node.allocatable_gpu_slots = max(
+            int(node.allocatable_gpu_slots) - request_gpu_slots(reserved), 0
+        )
         node.candidate = (
             node.status == "online"
             and node.allocatable_cpu_cores > 0
@@ -479,9 +524,7 @@ def build_plan(
     get_node_priorities_fn,
     placement_sort_key_fn,
 ) -> PlacementPlan:
-    strategy = placement_policy.normalize_strategy(
-        placement_strategy or placement_policy.get_placement_strategy(session)
-    )
+    strategy = placement_strategy or placement_policy.get_placement_strategy(session)
     priorities = node_priorities or get_node_priorities_fn(session)
     tuning = get_placement_tuning_fn(session=session)
     working_nodes = [item.model_copy(deep=True) for item in node_capacities]
@@ -499,6 +542,9 @@ def build_plan(
     )
     allowed_gpu_nodes = allowed_gpu_nodes_for_request(request)
     allowed_nodes = allowed_template_nodes_for_request(request)
+    allowed_affinity_nodes = allowed_affinity_nodes_for_request(
+        session=session, request=request
+    )
     placements: dict[str, int] = {item.node: 0 for item in working_nodes}
     remaining = request.instance_count
 
@@ -514,6 +560,7 @@ def build_plan(
                 has_managed_storage=has_managed_storage,
                 allowed_gpu_nodes=allowed_gpu_nodes,
                 allowed_nodes=allowed_nodes,
+                allowed_affinity_nodes=allowed_affinity_nodes,
             ):
                 continue
             storage_selection: StorageSelection | None = None
@@ -551,6 +598,9 @@ def build_plan(
         chosen.allocatable_memory_bytes = max(chosen.allocatable_memory_bytes - required_memory, 0)
         chosen.allocatable_disk_bytes = max(chosen.allocatable_disk_bytes - node_disk_bytes, 0)
         chosen.running_resources += 1
+        chosen.allocatable_gpu_slots = max(
+            int(chosen.allocatable_gpu_slots) - request.gpu_required, 0
+        )
         refresh_node_candidate(chosen)
         if chosen_storage is not None:
             reserve_storage_pool(
@@ -685,8 +735,6 @@ def placement_sort_key(
         disk_contention_warn_share=0.7,
         disk_contention_high_share=0.9,
         disk_penalty_weight=0.75,
-        search_max_reassignments=2,
-        search_depth=3,
     )
     projected_cpu_share = placement_scorer.projected_share(
         used=max(node.total_cpu_cores - node.allocatable_cpu_cores, 0.0) + cores,
@@ -774,18 +822,17 @@ def to_placement_request(db_request: VMRequest) -> PlacementRequest:
     )
     if disk_gb <= 0:
         disk_gb = 20 if db_request.resource_type == "vm" else 8
-    # LXC 帶 template_id 時走克隆路徑（節點由範本釘死），不帶 ostemplate 約束
+    # LXC 帶 template_id 時走克隆路徑：不帶 ostemplate 約束，改以 template_vmid
+    # 表示「必須落在範本所在節點」（linked clone 不能離開它，建機端也會強制
+    # 覆寫成範本節點）。不帶這個約束的話，placement 會選出一個之後被覆寫掉的
+    # 節點，群組 affinity 與容量計算都會跟著失準。
     ostemplate = (
         getattr(db_request, "ostemplate", None)
         if db_request.resource_type == "lxc"
         and not getattr(db_request, "template_id", None)
         else None
     )
-    template_vmid = (
-        getattr(db_request, "template_id", None)
-        if db_request.resource_type == "vm"
-        else None
-    )
+    template_vmid = getattr(db_request, "template_id", None)
     return PlacementRequest(
         resource_type=db_request.resource_type,
         cpu_cores=int(db_request.cores or 1),
@@ -796,4 +843,5 @@ def to_placement_request(db_request: VMRequest) -> PlacementRequest:
         gpu_mapping_id=getattr(db_request, "gpu_mapping_id", None),
         ostemplate=ostemplate,
         template_vmid=template_vmid,
+        placement_group_id=getattr(db_request, "placement_group_id", None),
     )

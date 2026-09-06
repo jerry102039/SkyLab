@@ -12,6 +12,7 @@ from sqlmodel import Session, SQLModel, create_engine
 from app.ai.teacher_judge import service as teacher_judge_service
 from app.ai.teacher_judge.schemas import RubricItem
 from app.ai.teacher_judge.template_command_service import (
+    GENERAL_COMMAND,
     format_template_commands_for_prompt,
     get_enabled_template_commands,
     validate_check_steps,
@@ -67,6 +68,19 @@ def _session_with_commands() -> Session:
     return session
 
 
+def _python_entrypoint_command() -> TeacherJudgeTemplateCommand:
+    return TeacherJudgeTemplateCommand(
+        template_key="python",
+        command_key="python.run_entrypoint",
+        command_label="執行 Python 程式入口",
+        category="execution",
+        command_template="python3 main.py",
+        description="受控執行 Python 程式並收集結果。",
+        risk_level="executes_code",
+        requires_confirmation=True,
+    )
+
+
 def test_get_enabled_template_commands_filters_template_and_enabled() -> None:
     session = _session_with_commands()
 
@@ -95,8 +109,27 @@ def test_get_enabled_template_commands_can_include_cross_template_catalog() -> N
 
     assert [(command.template_key, command.command_key) for command in commands] == [
         ("n8n", "n8n.port_check"),
+        ("linux", "system.run_command"),
         ("python", "python.run_entrypoint"),
     ]
+
+
+def test_cross_template_catalog_includes_generic_controlled_command() -> None:
+    session = _session_with_commands()
+
+    commands = get_enabled_template_commands(
+        session, "python", include_cross_template=True
+    )
+    general = next(
+        command for command in commands if command.command_key == "system.run_command"
+    )
+
+    assert general.template_key == "linux"
+    assert general.requires_confirmation is True
+    assert "cat" in general.description
+    assert "cwd" in general.description
+    assert "stdout" in general.description
+    assert "stderr" in general.description
 
 
 def test_validate_check_steps_allows_catalog_backed_cross_template_step() -> None:
@@ -263,7 +296,7 @@ async def test_chat_with_rubric_validates_returned_check_steps(
 
 
 @pytest.mark.asyncio
-async def test_refine_prompt_treats_main_py_as_execution_observation(
+async def test_chat_prompt_accepts_objectively_verifiable_main_py_checkpoint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     command = TeacherJudgeTemplateCommand(
@@ -286,15 +319,18 @@ async def test_refine_prompt_treats_main_py_as_execution_observation(
         return (
             json.dumps(
                 {
-                    "reply": "還需要 main.py 的工作目錄與正常結束條件。",
+                    "reply": "已新增可自動檢查的項目。",
                     "updated_items": [
                         {
                             "id": "item-1",
-                            "title": "main.py 執行時沒有錯誤",
-                            "description": "執行 main.py 並觀察未捕捉例外。",
-                            "detectable": "partial",
-                            "detection_method": "待確認工作目錄與啟動命令後執行。",
-                            "fallback": "請老師提供工作目錄、Python 命令與結束判準。",
+                            "title": "main.py 執行結果",
+                            "description": "執行 main.py，確認無錯誤並輸出整數 20。",
+                            "detectable": "auto",
+                            "detection_method": (
+                                "執行 main.py，依 exit code 與 stderr 判斷錯誤，"
+                                "並精確比對 stdout 是否為整數 20。"
+                            ),
+                            "fallback": None,
                             "check_steps": [
                                 {
                                     "template_key": "python",
@@ -312,34 +348,140 @@ async def test_refine_prompt_treats_main_py_as_execution_observation(
     _patch_teacher_judge_vllm_settings(monkeypatch)
 
     _reply, updated_items, _metrics = await teacher_judge_service.chat_with_rubric(
-        messages=[SimpleNamespace(role="user", content="請潤飾評分表")],
-        rubric_context=json.dumps(
-            {
-                "items": [
-                    {
-                        "id": "item-1",
-                        "title": "判斷main.py有沒有報錯",
-                        "detectable": "manual",
-                    }
-                ]
-            }
-        ),
-        is_refine=True,
+        messages=[
+            SimpleNamespace(
+                role="user",
+                content="幫我新增檢查點：執行 main.py，確認無錯誤並輸出整數 20。",
+            )
+        ],
+        rubric_context=json.dumps({"items": []}),
         template_key="python",
         template_commands=[command],
     )
 
     system_prompt = captured_payload["messages"][0]["content"]
-    assert "無法閱讀完整原始碼，不等於無法執行程式觀察錯誤" in system_prompt
-    assert "判斷 main.py 有沒有報錯" in system_prompt
-    assert "不得建議改成檢查 n8n 服務" in system_prompt
-    assert "工作目錄、直譯器／命令、參數" in system_prompt
+    assert "判斷的是「後續能否自動驗證」，不是現在是否已有答案" in system_prompt
+    assert "執行 main.py，確認無錯誤並輸出整數 20" in system_prompt
+    assert "工作目錄、參數、timeout 或核准屬於執行階段資訊" in system_prompt
+    assert "只有美觀、優雅、體驗、創意等主觀條件" in system_prompt
+    assert "`auto` 項目的 `check_steps` 必須引用該 `command_key`" in system_prompt
+    assert "`checked` 仍是 false" in system_prompt
+    assert "`auto` 項目的 `fallback` 必須是 null" in system_prompt
     assert "python.run_entrypoint" in system_prompt
     assert updated_items is not None
-    assert updated_items[0]["detectable"] == "partial"
-    assert updated_items[0]["check_steps"][0]["command_key"] == (
+    assert updated_items[-1]["detectable"] == "auto"
+    assert updated_items[-1]["check_steps"][0]["command_key"] == (
         "python.run_entrypoint"
     )
+
+
+@pytest.mark.asyncio
+async def test_chat_prompt_accepts_generic_cat_env_checkpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_payload = {}
+
+    async def fake_call_vllm(payload, timeout=60.0):
+        captured_payload.update(payload)
+        return (
+            json.dumps(
+                {
+                    "reply": "已新增可自動檢查的項目。",
+                    "updated_items": [
+                        {
+                            "id": "item-1",
+                            "title": "讀取環境設定",
+                            "description": "在專案目錄執行 cat .env 並回傳內容。",
+                            "detectable": "auto",
+                            "detection_method": (
+                                "以 argv ['cat', '.env']、指定 cwd 與 timeout 執行，"
+                                "並原樣取得 exit code、stdout、stderr。"
+                            ),
+                            "fallback": None,
+                            "check_steps": [
+                                {
+                                    "template_key": "linux",
+                                    "command_key": "system.run_command",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ),
+            {"total_tokens": 1},
+        )
+
+    monkeypatch.setattr(teacher_judge_service, "_call_vllm", fake_call_vllm)
+    _patch_teacher_judge_vllm_settings(monkeypatch)
+
+    _reply, updated_items, _metrics = await teacher_judge_service.chat_with_rubric(
+        messages=[SimpleNamespace(role="user", content="新增檢查點：cat .env")],
+        rubric_context=json.dumps({"items": []}),
+        template_key="n8n",
+        template_commands=[GENERAL_COMMAND],
+    )
+
+    system_prompt = captured_payload["messages"][0]["content"]
+    assert "system.run_command" in system_prompt
+    assert "原樣收集 exit code、stdout、stderr" in system_prompt
+    assert "cd 請以 cwd 表示" in system_prompt
+    assert updated_items is not None
+    assert updated_items[0]["detectable"] == "auto"
+    assert updated_items[0]["check_steps"][0]["command_key"] == (
+        "system.run_command"
+    )
+
+
+@pytest.mark.asyncio
+async def test_chat_prompt_treats_attachment_as_concrete_rubric_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_payload = {}
+
+    async def fake_call_vllm(payload, timeout=60.0):
+        captured_payload.update(payload)
+        return (
+            json.dumps(
+                {
+                    "reply": "已依附件整理評分項目。",
+                    "updated_items": [
+                        {
+                            "id": "item-1",
+                            "title": "服務 Port",
+                            "description": "確認預期服務 Port 正在監聽。",
+                            "checked": False,
+                            "detectable": "auto",
+                            "detection_method": "檢查 listening ports。",
+                            "fallback": None,
+                        }
+                    ],
+                }
+            ),
+            {"total_tokens": 1},
+        )
+
+    monkeypatch.setattr(teacher_judge_service, "_call_vllm", fake_call_vllm)
+    _patch_teacher_judge_vllm_settings(monkeypatch)
+
+    _reply, updated_items, _metrics = await teacher_judge_service.chat_with_rubric(
+        messages=[SimpleNamespace(role="user", content="幫我增加這些項目")],
+        rubric_context=json.dumps({"items": []}),
+        attachment_context=(
+            "--- 附件：rubric.md ---\n"
+            "| 審查重點 | AI 可以參考的線索 |\n"
+            "| 服務 Port | Listening ports |\n"
+            "--- 附件結束 ---"
+        ),
+    )
+
+    system_prompt = captured_payload["messages"][0]["content"]
+    assert "附件中的可讀文字就是老師提供的具體內容" in system_prompt
+    assert "不要因目前項目數為 0 就回覆尚未提供內容" in system_prompt
+    assert "附件表格的每一列可轉成一個評分項目" in system_prompt
+    assert captured_payload["messages"][-1]["role"] == "user"
+    assert "請從附件擷取內容並回傳完整 updated_items" in captured_payload["messages"][-1]["content"]
+    assert updated_items is not None
+    assert updated_items[0]["title"] == "服務 Port"
 
 
 def test_normalize_downgrades_auto_without_valid_check_steps() -> None:
@@ -362,114 +504,41 @@ def test_normalize_downgrades_auto_without_valid_check_steps() -> None:
             description="",
             checked=False,
             detectable="partial",
-            detection_method="目前沒有可引用的有效 command_key，需人工或後續檢查輔助判斷",
+            detection_method="目前沒有可引用的有效 command_key，缺少自動取得客觀證據的能力",
             fallback=None,
             check_steps=[],
         )
     ]
 
 
-def _python_entrypoint_command() -> TeacherJudgeTemplateCommand:
-    return TeacherJudgeTemplateCommand(
-        template_key="python",
-        command_key="python.run_entrypoint",
-        command_label="執行 Python 程式入口",
-        category="execution",
-        command_template="python3 main.py",
-        description="受控執行 Python 程式並收集結果。",
-        risk_level="executes_code",
-        requires_confirmation=True,
-    )
-
-
-def test_normalize_main_py_requires_execution_details() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
-        [{"title": "判斷 main.py 有沒有報錯", "detectable": "manual"}],
-        template_key="python",
-        template_commands=[_python_entrypoint_command()],
-    )
-
-    assert items[0].detectable == "partial"
-    assert items[0].check_steps[0].command_key == "python.run_entrypoint"
-    assert "exit code" in (items[0].detection_method or "")
-    assert "工作目錄" in (items[0].fallback or "")
-
-
-def test_normalize_main_py_does_not_substitute_n8n_command() -> None:
-    n8n_command = TeacherJudgeTemplateCommand(
-        template_key="n8n",
-        command_key="n8n.port_check",
-        command_label="n8n 連接埠檢查",
-        category="port",
-        command_template="ss -lntp | grep ':5678'",
-        description="檢查 n8n 連接埠。",
-    )
-
+def test_normalize_preserves_objectively_verifiable_main_py_checkpoint() -> None:
+    command = _python_entrypoint_command()
     items = teacher_judge_service._normalize_rubric_items(
         [
             {
-                "title": "判斷 main.py 有沒有報錯",
+                "title": "main.py 執行結果",
+                "description": "執行 main.py，確認無錯誤並輸出整數 20。",
                 "detectable": "auto",
+                "detection_method": (
+                    "以 exit code 與 stderr 判斷錯誤，並精確比對 stdout 是否為整數 20。"
+                ),
+                "fallback": "請人工執行。",
                 "check_steps": [
-                    {"template_key": "n8n", "command_key": "n8n.port_check"}
+                    {
+                        "template_key": "python",
+                        "command_key": "python.run_entrypoint",
+                    }
                 ],
             }
         ],
-        template_key="n8n",
-        template_commands=[n8n_command, _python_entrypoint_command()],
-    )
-
-    assert items[0].detectable == "partial"
-    assert items[0].check_steps[0].template_key == "python"
-    assert items[0].check_steps[0].command_key == "python.run_entrypoint"
-    assert "不受主要評分環境限制" in (items[0].detection_method or "")
-    assert "切換" not in (items[0].fallback or "")
-    assert "n8n 服務" not in (items[0].fallback or "")
-
-
-def test_normalize_main_py_is_auto_with_explicit_contract() -> None:
-    items = teacher_judge_service._normalize_rubric_items(
-        [
-            {
-                "title": "判斷 main.py 有沒有報錯",
-                "description": (
-                    "工作目錄：/srv/submission；執行 python3 main.py；"
-                    "程式正常結束且 exit code 0，沒有未捕捉例外。"
-                ),
-                "detectable": "manual",
-            }
-        ],
         template_key="python",
-        template_commands=[_python_entrypoint_command()],
+        template_commands=[command],
     )
 
     assert items[0].detectable == "auto"
     assert items[0].check_steps[0].command_key == "python.run_entrypoint"
     assert "stdout" in (items[0].detection_method or "")
-
-
-def test_python_contract_handles_repeated_whitespace_and_returncode() -> None:
-    text = (
-        "python3 main.py\n"
-        "cwd = /srv/submission\n"
-        f"returncode{' ' * 10_000}0"
-    )
-
-    assert teacher_judge_service._has_complete_python_execution_contract(text)
-
-
-def test_python_contract_rejects_interpreter_with_no_script() -> None:
-    text = "python3" + (" " * 10_000) + "--version"
-
-    assert not teacher_judge_service._has_complete_python_execution_contract(text)
-
-
-def test_python_contract_accepts_bounded_long_running_criteria() -> None:
-    text = "python3 main.py\ncwd = /srv/submission\n" + "常駐" + (
-        "x" * 30
-    ) + "timeout"
-
-    assert teacher_judge_service._has_complete_python_execution_contract(text)
+    assert items[0].fallback is None
 
 
 def test_normalize_python_code_quality_stays_manual() -> None:
@@ -493,6 +562,7 @@ async def test_upload_rubric_defaults_linux_template(
         assert raw_text == "parsed text"
         assert template_key == "linux"
         assert [command.command_key for command in template_commands] == [
+            "system.run_command",
             "n8n.port_check"
         ]
         return (

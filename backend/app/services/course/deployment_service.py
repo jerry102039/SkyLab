@@ -15,6 +15,7 @@ from datetime import UTC, datetime, timedelta
 from sqlmodel import Session, select
 
 from app.core.authorizers import require_teaching_access
+from app.core.i18n import t
 from app.exceptions import (
     BadRequestError,
     NotFoundError,
@@ -83,7 +84,7 @@ def _to_public(
 def _get_vm_request(session: Session, vm_request_id: uuid.UUID) -> VMRequest:
     vm_request = session.get(VMRequest, vm_request_id)
     if vm_request is None:
-        raise NotFoundError("Deployment VM request not found")
+        raise NotFoundError(t("deployment.vm_request_not_found"))
     return vm_request
 
 
@@ -148,20 +149,17 @@ def deploy(
     room = course_service.get_room_or_404(session, room_id)
     course_service.get_published_path_or_404(session, room.path_id)
     if room.template_id is None:
-        raise BadRequestError("This room is theory-only and has no lab")
+        raise BadRequestError(t("deployment.room_theory_only"))
     template = session.get(VMTemplate, room.template_id)
     if template is None:
-        raise BadRequestError("Room template no longer exists")
+        raise BadRequestError(t("deployment.template_missing"))
     course_service._require_ready_template(session, template.id)
 
     governance = governance_repo.get_governance_config(session=session)
     now = _utc_now()
     active = _active_deployment_count(session, user_id=user.id, now=now)
     if active >= governance.course_max_active_per_user:
-        raise BadRequestError(
-            "You already have an active course lab. "
-            "Terminate it before starting another."
-        )
+        raise BadRequestError(t("deployment.active_limit"))
 
     request_in = _build_request(
         room=room,
@@ -220,7 +218,7 @@ def _get_owned_deployment(
 ) -> CourseDeployment:
     deployment = session.get(CourseDeployment, deployment_id)
     if deployment is None:
-        raise NotFoundError("Deployment not found")
+        raise NotFoundError(t("deployment.not_found"))
     if deployment.user_id == user.id:
         return deployment
     # 非本人：只有該課程路徑的擁有老師（或具備 bypass 權限的管理員）可查看/終止，
@@ -230,7 +228,7 @@ def _get_owned_deployment(
         session.get(CoursePath, room.path_id) if room is not None else None
     )
     owner_id = path.created_by if path is not None else None
-    require_teaching_access(user, owner_id, detail="Not your deployment")
+    require_teaching_access(user, owner_id, detail=t("deployment.not_owner"))
     return deployment
 
 

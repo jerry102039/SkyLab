@@ -10,6 +10,7 @@ from app.core.authorizers import (
     require_resource_access,
     require_teaching_access,
 )
+from app.core.i18n import t
 from app.exceptions import PermissionDeniedError
 from app.repositories import resource as resource_repo
 from app.services.proxmox import proxmox_service
@@ -37,9 +38,7 @@ def check_resource_ownership(
         logger.warning(
             f"User {current_user.email} attempted to access unregistered resource {vmid}"
         )
-        raise PermissionDeniedError(
-            "You don't have permission to access this resource"
-        )
+        raise PermissionDeniedError(t("resource_access.no_permission"))
 
     if db_resource.teaching_class_id:
         from app.models import TeachingClass, TeachingClassStatus
@@ -47,22 +46,19 @@ def check_resource_ownership(
         teaching_class = session.get(TeachingClass, db_resource.teaching_class_id)
         if teaching_class is None:
             raise PermissionDeniedError(
-                "This teaching-class resource is no longer assigned"
+                t("resource_access.teaching_class_unassigned")
             )
         if db_resource.user_id == current_user.id:
             if teaching_class.status != TeachingClassStatus.active:
                 raise PermissionDeniedError(
-                    "This teaching-class resource is not available to students"
+                    t("resource_access.teaching_class_inactive")
                 )
             return
         require_teaching_access(current_user, teaching_class.owner_id)
         return
 
     if db_resource.allocation_scope == "teaching_class":
-        raise PermissionDeniedError(
-            "This teaching-class resource has lost its class assignment; "
-            "an administrator must reclaim it"
-        )
+        raise PermissionDeniedError(t("resource_access.teaching_class_scope_lost"))
 
     try:
         require_resource_access(current_user, db_resource.user_id)

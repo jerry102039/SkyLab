@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./GatewayPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -9,14 +10,6 @@ import { useToast } from "../../../hooks/useToast";
 import { GatewayService } from "../../../services/gateway";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
-const TABS = [
-  { key: "connection", label: "連線設定" },
-  { key: "haproxy",    label: "haproxy"  },
-  { key: "traefik",    label: "Traefik"  },
-  { key: "frps",       label: "frps"     },
-  { key: "frpc",       label: "frpc"     },
-];
-
 const SERVICE_FILES = {
   haproxy: { path: "/etc/haproxy/haproxy.cfg", language: "haproxy" },
   traefik: { path: "/etc/traefik/traefik.yml", language: "yaml" },
@@ -24,15 +17,9 @@ const SERVICE_FILES = {
   frpc:    { path: "/etc/frp/frpc.toml",       language: "toml" },
 };
 
-const SERVICE_ACTIONS = [
-  { action: "start",   label: "啟動",   icon: "play_arrow" },
-  { action: "stop",    label: "停止",   icon: "stop" },
-  { action: "restart", label: "重啟",   icon: "restart_alt" },
-  { action: "reload",  label: "Reload", icon: "refresh" },
-];
-
 /* ── 連線設定 Tab ───────────────────────────────────── */
 function ConnectionTab({ config, onConfigChange }) {
+  const { t } = useTranslation("system");
   const toast = useToast();
   const confirm = useConfirm();
   const [form, setForm] = useState({
@@ -72,9 +59,9 @@ function ConnectionTab({ config, onConfigChange }) {
       });
       setFormDirty(false);
       onConfigChange(updated);
-      toast.success("連線設定已儲存");
+      toast.success(t("GatewayPage.toastConnectionSaved"));
     } catch (err) {
-      toast.error(err?.message ?? "儲存失敗");
+      toast.error(err?.message ?? t("GatewayPage.toastSaveFailed"));
     } finally {
       setSaving(false);
     }
@@ -84,10 +71,10 @@ function ConnectionTab({ config, onConfigChange }) {
     setTesting(true);
     try {
       const res = await GatewayService.testConnection();
-      if (res.success) toast.success(res.message || "SSH 連線成功");
-      else toast.error(res.message || "SSH 連線失敗");
+      if (res.success) toast.success(res.message || t("GatewayPage.toastSshConnectSuccess"));
+      else toast.error(res.message || t("GatewayPage.toastSshConnectFailed"));
     } catch (err) {
-      toast.error(err?.message ?? "連線測試失敗");
+      toast.error(err?.message ?? t("GatewayPage.toastConnectTestFailed"));
     } finally {
       setTesting(false);
     }
@@ -96,10 +83,9 @@ function ConnectionTab({ config, onConfigChange }) {
   async function handleGenerateKeypair() {
     if (config?.public_key) {
       const ok = await confirm({
-        title: "重新產生 Keypair",
-        message:
-          "重新產生後舊 Keypair 會立即失效，平台將無法透過 SSH 連線 Gateway VM，直到新公鑰加入 ~/.ssh/authorized_keys。確定繼續？",
-        confirmText: "重新產生",
+        title: t("GatewayPage.regenerateKeypairTitle"),
+        message: t("GatewayPage.regenerateKeypairMessage"),
+        confirmText: t("GatewayPage.regenerateKeypairConfirm"),
         danger: true,
       });
       if (!ok) return;
@@ -108,9 +94,9 @@ function ConnectionTab({ config, onConfigChange }) {
     try {
       const updated = await GatewayService.generateKeypair();
       onConfigChange(updated);
-      toast.success("已產生新的 SSH Keypair，請將公鑰加到 Gateway VM");
+      toast.success(t("GatewayPage.toastKeypairGenerated"));
     } catch (err) {
-      toast.error(err?.message ?? "產生 Keypair 失敗");
+      toast.error(err?.message ?? t("GatewayPage.toastGenerateKeypairFailed"));
     } finally {
       setGenerating(false);
     }
@@ -118,19 +104,18 @@ function ConnectionTab({ config, onConfigChange }) {
 
   async function handleResetHostKey() {
     const ok = await confirm({
-      title: "重設 Host Key",
-      message:
-        "將清除平台記錄的 Gateway VM SSH host key，下次連線會重新記錄。僅在 Gateway VM 重灌或更換機器後使用；若 host key 並非因你預期的變更而不符，可能代表中間人攻擊，請先查明原因。確定重設？",
-      confirmText: "重設",
+      title: t("GatewayPage.resetHostKeyTitle"),
+      message: t("GatewayPage.resetHostKeyMessage"),
+      confirmText: t("GatewayPage.resetHostKeyConfirm"),
       danger: true,
     });
     if (!ok) return;
     setResetting(true);
     try {
       const res = await GatewayService.resetHostKey();
-      toast.success(res.message || "已重設 host key");
+      toast.success(res.message || t("GatewayPage.toastHostKeyReset"));
     } catch (err) {
-      toast.error(err?.message ?? "重設 host key 失敗");
+      toast.error(err?.message ?? t("GatewayPage.toastResetHostKeyFailed"));
     } finally {
       setResetting(false);
     }
@@ -139,22 +124,22 @@ function ConnectionTab({ config, onConfigChange }) {
   function copyPublicKey() {
     if (!config?.public_key) return;
     navigator.clipboard.writeText(config.public_key).then(
-      () => toast.success("公鑰已複製"),
-      () => toast.error("複製失敗"),
+      () => toast.success(t("GatewayPage.toastPublicKeyCopied")),
+      () => toast.error(t("GatewayPage.toastCopyFailed")),
     );
   }
 
   return (
     <div className={styles.panelStack}>
       <form className={styles.card} onSubmit={handleSave}>
-        <h2 className={styles.cardTitle}>SSH 連線設定</h2>
+        <h2 className={styles.cardTitle}>{t("GatewayPage.sshConnectionTitle")}</h2>
         <div className={styles.formGrid}>
           <label className={styles.field}>
             <span>Host / IP *</span>
             <input
               value={form.host}
               onChange={(e) => set("host", e.target.value)}
-              placeholder="例：192.168.100.143"
+              placeholder={t("GatewayPage.hostPlaceholder")}
               required
             />
           </label>
@@ -169,7 +154,7 @@ function ConnectionTab({ config, onConfigChange }) {
             />
           </label>
           <label className={styles.field}>
-            <span>SSH 使用者</span>
+            <span>{t("GatewayPage.sshUser")}</span>
             <input
               value={form.ssh_user}
               onChange={(e) => set("ssh_user", e.target.value)}
@@ -180,43 +165,43 @@ function ConnectionTab({ config, onConfigChange }) {
         <div className={styles.cardActions}>
           <button type="button" className={styles.btnSecondary} onClick={handleTest} disabled={testing || !config?.is_configured}>
             <MIcon name="wifi_tethering" size={16} />
-            {testing ? "測試中..." : "測試連線"}
+            {testing ? t("GatewayPage.testing") : t("GatewayPage.testConnection")}
           </button>
           <button
             type="button"
             className={styles.btnSecondary}
             onClick={handleResetHostKey}
             disabled={resetting || !config?.host}
-            title="Gateway VM 重灌後 host key 變更導致連線被拒時使用"
+            title={t("GatewayPage.resetHostKeyHint")}
           >
             <MIcon name="key_off" size={16} />
-            {resetting ? "重設中..." : "重設 Host Key"}
+            {resetting ? t("GatewayPage.resetting") : t("GatewayPage.resetHostKey")}
           </button>
           <button type="submit" className={styles.btnPrimary} disabled={saving}>
-            {saving ? "儲存中..." : "儲存設定"}
+            {saving ? t("GatewayPage.saving") : t("GatewayPage.saveConnectionSettings")}
           </button>
         </div>
       </form>
 
       <div className={styles.card}>
         <div className={styles.cardHead}>
-          <h2 className={styles.cardTitle}>SSH 公鑰</h2>
+          <h2 className={styles.cardTitle}>{t("GatewayPage.sshPublicKeyTitle")}</h2>
           <div className={styles.cardHeadActions}>
             <button type="button" className={styles.btnSecondary} onClick={copyPublicKey} disabled={!config?.public_key}>
               <MIcon name="content_copy" size={16} />
-              複製
+              {t("GatewayPage.copy")}
             </button>
             <button type="button" className={styles.btnSecondary} onClick={handleGenerateKeypair} disabled={generating}>
               <MIcon name="key" size={16} />
-              {generating ? "產生中..." : "重新產生 Keypair"}
+              {generating ? t("GatewayPage.generating") : t("GatewayPage.regenerateKeypair")}
             </button>
           </div>
         </div>
         <p className={styles.cardHint}>
-          將此公鑰加入 Gateway VM 的 ~/.ssh/authorized_keys，平台才能透過 SSH 管理服務。
+          {t("GatewayPage.publicKeyHint")}
         </p>
         <pre className={styles.keyBlock}>
-          {config?.public_key || "尚未產生 Keypair"}
+          {config?.public_key || t("GatewayPage.keypairNotGenerated")}
         </pre>
       </div>
     </div>
@@ -225,8 +210,15 @@ function ConnectionTab({ config, onConfigChange }) {
 
 /* ── 服務管理 Tab ───────────────────────────────────── */
 function ServiceTab({ service, gatewayReady, host, onDirtyChange }) {
+  const { t } = useTranslation("system");
   const toast = useToast();
   const confirm = useConfirm();
+  const SERVICE_ACTIONS = [
+    { action: "start",   label: t("GatewayPage.actionStart"),   icon: "play_arrow" },
+    { action: "stop",    label: t("GatewayPage.actionStop"),    icon: "stop" },
+    { action: "restart", label: t("GatewayPage.actionRestart"), icon: "restart_alt" },
+    { action: "reload",  label: "Reload", icon: "refresh" },
+  ];
   const [status, setStatus] = useState(null);
   const [configText, setConfigText] = useState("");
   const [savedText, setSavedText] = useState("");
@@ -256,11 +248,11 @@ function ServiceTab({ service, gatewayReady, host, onDirtyChange }) {
       setConfigLoadFailed(failed);
       setConfigText(configRes?.content ?? "");
       setSavedText(configRes?.content ?? "");
-      if (failed) toast.error(`讀取 ${service} 設定檔失敗，請重新載入再編輯`);
+      if (failed) toast.error(t("GatewayPage.toastConfigReadFailed", { service }));
     } finally {
       setLoading(false);
     }
-  }, [service, toast]);
+  }, [service, toast, t]);
 
   useEffect(() => {
     if (gatewayReady) fetchAll();
@@ -288,12 +280,12 @@ function ServiceTab({ service, gatewayReady, host, onDirtyChange }) {
     setActing(action);
     try {
       const res = await GatewayService.controlService(service, action);
-      if (res.success) toast.success(`${service} ${action} 成功`);
-      else toast.error(res.output || `${service} ${action} 失敗`);
+      if (res.success) toast.success(t("GatewayPage.toastServiceActionSuccess", { service, action }));
+      else toast.error(res.output || t("GatewayPage.toastServiceActionFailed", { service, action }));
       const statusRes = await GatewayService.getServiceStatus(service).catch(() => null);
       setStatus(statusRes);
     } catch (err) {
-      toast.error(err?.message ?? `${action} 失敗`);
+      toast.error(err?.message ?? t("GatewayPage.toastActionFailed", { action }));
     } finally {
       setActing(null);
     }
@@ -305,9 +297,9 @@ function ServiceTab({ service, gatewayReady, host, onDirtyChange }) {
     try {
       await GatewayService.writeServiceConfig(service, configText);
       setSavedText(configText);
-      toast.success("設定檔已寫入，記得 reload / restart 服務以套用");
+      toast.success(t("GatewayPage.toastConfigWritten"));
     } catch (err) {
-      toast.error(err?.message ?? "寫入設定檔失敗");
+      toast.error(err?.message ?? t("GatewayPage.toastWriteConfigFailed"));
     } finally {
       setSaving(false);
     }
@@ -316,9 +308,9 @@ function ServiceTab({ service, gatewayReady, host, onDirtyChange }) {
   async function handleReload() {
     if (dirty) {
       const ok = await confirm({
-        title: "重新載入設定檔",
-        message: "目前有尚未寫入的變更，重新載入將捨棄這些變更。確定繼續？",
-        confirmText: "捨棄並重新載入",
+        title: t("GatewayPage.reloadConfigTitle"),
+        message: t("GatewayPage.reloadConfigMessage"),
+        confirmText: t("GatewayPage.reloadConfigConfirm"),
         danger: true,
       });
       if (!ok) return;
@@ -331,7 +323,7 @@ function ServiceTab({ service, gatewayReady, host, onDirtyChange }) {
     try {
       setLogs(await GatewayService.getServiceLogs(service, 100));
     } catch (err) {
-      toast.error(err?.message ?? "載入日誌失敗");
+      toast.error(err?.message ?? t("GatewayPage.toastLoadLogsFailed"));
     } finally {
       setLoadingLogs(false);
     }
@@ -341,13 +333,13 @@ function ServiceTab({ service, gatewayReady, host, onDirtyChange }) {
     return (
       <EmptyState
         icon="dns"
-        title="尚未設定 Gateway 連線"
+        title={t("GatewayPage.emptyNotConfigured")}
       />
     );
   }
 
   if (loading) {
-    return <LoadingState text={`載入 ${service} 狀態...`} />;
+    return <LoadingState text={t("GatewayPage.loadingServiceStatus", { service })} />;
   }
 
   return (
@@ -359,10 +351,10 @@ function ServiceTab({ service, gatewayReady, host, onDirtyChange }) {
             {status ? (
               <span className={`${styles.badge} ${status.active ? styles.badge_success : styles.badge_muted}`}>
                 <MIcon name={status.active ? "check_circle" : "cancel"} size={13} />
-                {status.active ? "運行中" : "已停止"}
+                {status.active ? t("GatewayPage.statusRunning") : t("GatewayPage.statusStopped")}
               </span>
             ) : (
-              <span className={`${styles.badge} ${styles.badge_danger}`}>無法取得狀態</span>
+              <span className={`${styles.badge} ${styles.badge_danger}`}>{t("GatewayPage.statusUnavailable")}</span>
             )}
           </div>
           <div className={styles.cardHeadActions}>
@@ -404,18 +396,18 @@ function ServiceTab({ service, gatewayReady, host, onDirtyChange }) {
 
       <div className={`${styles.card} ${styles.areaLogs}`}>
         <div className={styles.cardHead}>
-          <h2 className={styles.cardTitle}>服務日誌（最近 100 行）</h2>
+          <h2 className={styles.cardTitle}>{t("GatewayPage.serviceLogsTitle")}</h2>
           <button type="button" className={styles.btnSecondary} onClick={handleRefreshLogs} disabled={loadingLogs}>
             <MIcon name="refresh" size={16} />
-            {loadingLogs ? "載入中..." : "重新整理"}
+            {loadingLogs ? t("GatewayPage.loadingLogs") : t("GatewayPage.refresh")}
           </button>
         </div>
         <pre className={styles.logBlock}>
           {loadingLogs
-            ? "載入中..."
+            ? t("GatewayPage.loadingLogs")
             : logs === null
-              ? "（無法載入日誌）"
-              : logs || "（無日誌輸出）"}
+              ? t("GatewayPage.logsLoadFailed")
+              : logs || t("GatewayPage.noLogOutput")}
         </pre>
       </div>
     </div>
@@ -424,12 +416,21 @@ function ServiceTab({ service, gatewayReady, host, onDirtyChange }) {
 
 /* ── Page ──────────────────────────────────────────── */
 export default function GatewayPage() {
+  const { t } = useTranslation("system");
   const toast = useToast();
   const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState("connection");
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const dirtyRef = useRef(false);
+
+  const TABS = [
+    { key: "connection", label: t("GatewayPage.tabConnection") },
+    { key: "haproxy",    label: "haproxy"  },
+    { key: "traefik",    label: "Traefik"  },
+    { key: "frps",       label: "frps"     },
+    { key: "frpc",       label: "frpc"     },
+  ];
 
   const handleDirtyChange = useCallback((dirty) => {
     dirtyRef.current = dirty;
@@ -439,9 +440,9 @@ export default function GatewayPage() {
     if (key === activeTab) return;
     if (dirtyRef.current) {
       const ok = await confirm({
-        title: "切換分頁",
-        message: "目前有尚未寫入的設定檔變更，切換分頁將捨棄這些變更。確定繼續？",
-        confirmText: "捨棄變更",
+        title: t("GatewayPage.switchTabTitle"),
+        message: t("GatewayPage.switchTabMessage"),
+        confirmText: t("GatewayPage.switchTabConfirm"),
         danger: true,
       });
       if (!ok) return;
@@ -452,13 +453,13 @@ export default function GatewayPage() {
   useEffect(() => {
     GatewayService.getConfig()
       .then(setConfig)
-      .catch((err) => toast.error(err?.message ?? "載入 Gateway 設定失敗"))
+      .catch((err) => toast.error(err?.message ?? t("GatewayPage.toastLoadConfigFailed")))
       .finally(() => setLoading(false));
-  }, [toast]);
+  }, [toast, t]);
 
   return (
     <div className={styles.page}>
-      <PageHeader title="閘道 VM" subtitle="管理 haproxy、Traefik、frp 服務設定與狀態">
+      <PageHeader title={t("GatewayPage.pageTitle")} subtitle={t("GatewayPage.pageSubtitle")}>
 
         <div className={styles.tabs}>
           {TABS.map((tab) => (
@@ -476,7 +477,7 @@ export default function GatewayPage() {
 
       <div className={styles.content}>
         {loading ? (
-          <LoadingState fullPage text="載入 Gateway 設定..." />
+          <LoadingState fullPage text={t("GatewayPage.loadingConfig")} />
         ) : activeTab === "connection" ? (
           <ConnectionTab config={config} onConfigChange={setConfig} />
         ) : (

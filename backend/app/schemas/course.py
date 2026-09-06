@@ -257,10 +257,17 @@ class CourseAICheckStudent(BaseModel):
     items: list[CourseAICheckItemStudent] = Field(default_factory=list)
 
 
-class CourseAICheckSubmit(BaseModel):
-    """Optionally limit a student-triggered run to one displayed checkpoint."""
+class CourseAICompletionUpdate(BaseModel):
+    """學生只回報作業是否已完成，不會觸發 AI 檢查。"""
 
-    item_id: str | None = Field(default=None, min_length=1, max_length=255)
+    item_id: str = Field(min_length=1, max_length=255)
+    completed: bool
+
+
+class CourseAICompletionStudent(BaseModel):
+    completed: bool = False
+    completed_item_ids: list[str] = Field(default_factory=list)
+    ready_at: datetime | None = None
 
 
 class CourseAISourceDocumentStudent(BaseModel):
@@ -286,6 +293,9 @@ class CourseAIAssignmentStudent(BaseModel):
     approved_at: datetime | None = None
     items: list[CourseAITaskItemStudent]
     source_document: CourseAISourceDocumentStudent | None = None
+    completion: CourseAICompletionStudent = Field(
+        default_factory=CourseAICompletionStudent
+    )
     latest_check: CourseAICheckStudent | None = None
     checkpoint_checks: dict[str, CourseAICheckStudent] = Field(default_factory=dict)
 
@@ -426,7 +436,8 @@ __all__ = [
     "CourseAITaskItemStudent",
     "CourseAICheckItemStudent",
     "CourseAICheckStudent",
-    "CourseAICheckSubmit",
+    "CourseAICompletionUpdate",
+    "CourseAICompletionStudent",
     "CourseAISourceDocumentStudent",
     "CourseAIAssignmentStudent",
     "CourseWeeklyTaskFileStudent",

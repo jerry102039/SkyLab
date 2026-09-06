@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { ClassroomService } from "../../services/classroom";
 import { useClassroomSocket } from "../../hooks/useClassroomSocket";
 import ClassroomWatchDialog from "./ClassroomWatchDialog";
@@ -24,6 +25,7 @@ export function useClassroomTakeover(vmid) {
  * 掛在 DashboardLayout，對所有登入者生效（非群組成員自然收不到事件）。
  */
 export default function ClassroomStudentLayer({ children }) {
+  const { t } = useTranslation("components");
   const [liveSessionId, setLiveSessionId] = useState(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [watchOpen, setWatchOpen] = useState(false);
@@ -93,7 +95,7 @@ export default function ClassroomStudentLayer({ children }) {
       {watchOpen && liveSessionId !== null && (
         <ClassroomWatchDialog
           sessionId={liveSessionId}
-          title="老師直播"
+          title={t("ClassroomStudentLayer.watchDialogTitle")}
           onClose={() => setWatchOpen(false)}
         />
       )}

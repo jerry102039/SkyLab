@@ -11,6 +11,7 @@ from app.core.authorizers import (
     require_vm_request_cancel,
     require_vm_request_review,
 )
+from app.core.i18n import t
 from app.core.permissions import Permission, has_permission, is_admin
 from app.core.security import encrypt_value
 from app.exceptions import (
@@ -170,7 +171,7 @@ def _approve_and_place(
         )
         if not selection or not selection.node:
             raise BadRequestError(
-                "No node is available for the requested time window."
+                t("vm_request.no_node_for_window")
             )
         vm_request_repo.update_vm_request_provisioning(
             session=session,
@@ -208,7 +209,7 @@ def _approve_and_place(
             current_node = request.actual_node or request.assigned_node
             if not current_node:
                 raise BadRequestError(
-                    f"Provisioned request {request.id} has no known node."
+                    t("vm_request.provisioned_request_no_node", request_id=request.id)
                 )
             vm_request_repo.update_vm_request_provisioning(
                 session=session,
@@ -226,7 +227,7 @@ def _approve_and_place(
         selection = selections.get(request.id)
         if not selection or not selection.node:
             raise BadRequestError(
-                "No node is available for the requested time window after applying reservations."
+                t("vm_request.no_node_after_reservations")
             )
         vm_request_repo.update_vm_request_provisioning(
             session=session,
@@ -265,25 +266,25 @@ def _validate_template_source(
     )
     if template is None:
         if resource_type == "lxc":
-            raise BadRequestError("Selected LXC template is not registered")
+            raise BadRequestError(t("vm_request.lxc_template_not_registered"))
         # 未註冊的 PVE template 就是平台基礎映像，任何人都能申請。
         return None
     # 其他模組一律把「非 lxc」視為 qemu，這裡沿用同一個判定
     template_kind = "lxc" if template.resource_type.lower() == "lxc" else "qemu"
     if template_kind != ("lxc" if resource_type == "lxc" else "qemu"):
-        raise BadRequestError("Selected template type does not match the request")
+        raise BadRequestError(t("vm_request.template_type_mismatch"))
     if template.status != VMTemplateStatus.ready:
-        raise BadRequestError("Selected template is not ready")
+        raise BadRequestError(t("vm_request.template_not_ready"))
     if is_admin(user):
         return template
     if has_permission(user, Permission.TEMPLATE_MANAGE):
         if not vm_template_repo.is_template_visible_to_user(
             template=template, user_id=user.id
         ):
-            raise BadRequestError("Selected template is not accessible")
+            raise BadRequestError(t("vm_request.template_not_accessible"))
         return template
     if template.visibility != VMTemplateVisibility.global_:
-        raise BadRequestError("Selected template is not open to students")
+        raise BadRequestError(t("vm_request.template_not_open_to_students"))
     return template
 
 
@@ -312,14 +313,14 @@ def _require_template_gpu(request_in: VMRequestCreate, template: VMTemplate) -> 
     if not template.requires_gpu:
         return
     if not str(getattr(request_in, "gpu_mapping_id", "") or "").strip():
-        raise BadRequestError("此範本需要 GPU，請選擇要配置的 GPU")
+        raise BadRequestError(t("vm_request.template_requires_gpu"))
 
 
 def create(
     *, session: Session, request_in: VMRequestCreate, user
 ) -> VMRequestPublic:
     if request_in.resource_type not in ("lxc", "vm"):
-        raise BadRequestError("resource_type must be 'lxc' or 'vm'")
+        raise BadRequestError(t("vm_request.invalid_resource_type"))
 
     # ---------- 來源範本：先驗證再算配額（磁碟下限會提高用量） ----------
     source_template: VMTemplate | None = None
@@ -350,7 +351,7 @@ def create(
     if getattr(request_in, "requested_mode", "manual") == "auto":
         governance = governance_repo.get_governance_config(session=session)
         if not governance.workload_advisor_enabled:
-            raise BadRequestError("Auto mode is disabled by administrator")
+            raise BadRequestError(t("vm_request.auto_mode_disabled"))
         advice = workload_advisor.advise(
             environment_type=request_in.environment_type,
             os_info=request_in.os_info,
@@ -364,20 +365,20 @@ def create(
             auto_decision_reason += "（提交值與伺服器建議不同）"
     if request_in.resource_type == "lxc":
         if not request_in.template_id and not request_in.ostemplate:
-            raise BadRequestError("LXC request requires ostemplate or template_id")
+            raise BadRequestError(t("vm_request.lxc_requires_template"))
     if request_in.resource_type == "vm":
         if not request_in.template_id:
-            raise BadRequestError("VM request requires template_id")
+            raise BadRequestError(t("vm_request.vm_requires_template"))
         # Windows 範本帳號由 cloudbase-init 設定檔固定，前端不送 username
         if not request_in.username:
             from app.services.proxmox import provisioning_service  # noqa: PLC0415
 
             if not provisioning_service.is_windows_template(request_in.template_id):
-                raise BadRequestError("VM request requires username")
+                raise BadRequestError(t("vm_request.vm_requires_username"))
 
     # ---------- GPU / vGPU 規格 ----------
     if request_in.gpu_mdev_profile and not request_in.gpu_mapping_id:
-        raise BadRequestError("指定 vGPU 規格時必須同時選擇 GPU")
+        raise BadRequestError(t("vm_request.vgpu_requires_gpu"))
     if request_in.gpu_mapping_id and request_in.gpu_mdev_profile:
         from app.services.proxmox import gpu_service  # noqa: PLC0415
 
@@ -389,8 +390,11 @@ def create(
             known = {p.mdev_type for p in gpu_detail.profiles}
             if request_in.gpu_mdev_profile not in known:
                 raise BadRequestError(
-                    f"GPU '{request_in.gpu_mapping_id}' 沒有 "
-                    f"vGPU 規格 '{request_in.gpu_mdev_profile}'"
+                    t(
+                        "vm_request.gpu_profile_not_found",
+                        gpu=request_in.gpu_mapping_id,
+                        profile=request_in.gpu_mdev_profile,
+                    )
                 )
 
     # ---------- mode validation ----------
@@ -400,7 +404,7 @@ def create(
         # 舊的學生自助路徑會自動核准，繞過本次建立的目錄與審核治理。
         # 快速練習改由 quick_practice 服務整組建立（仍用同一個 request_kind）。
         raise BadRequestError(
-            "此模式已停用；請改用快速練習環境，或以一般申請選用開放的應用範本"
+            t("vm_request.quick_template_mode_disabled")
         )
     if mode == "immediate":
         require_immediate_vm_request_access(user)
@@ -411,12 +415,12 @@ def create(
             if end_at.tzinfo is None:
                 end_at = end_at.replace(tzinfo=UTC)
             if end_at <= request_in.start_at:
-                raise BadRequestError("end_at must be later than start_at")
+                raise BadRequestError(t("vm_request.end_before_start"))
     else:
         # scheduled mode -- both start_at and end_at are required
         if request_in.start_at is None or request_in.end_at is None:
             raise BadRequestError(
-                "Scheduled mode requires both start_at and end_at"
+                t("vm_request.scheduled_requires_window")
             )
         start_at = request_in.start_at
         end_at = request_in.end_at
@@ -425,7 +429,7 @@ def create(
         if end_at.tzinfo is None:
             end_at = end_at.replace(tzinfo=UTC)
         if end_at <= start_at:
-            raise BadRequestError("end_at must be later than start_at")
+            raise BadRequestError(t("vm_request.end_before_start"))
 
     # Only validate window when both start_at and end_at are present.
     # Immediate mode with end_at=None (infinite) skips window validation
@@ -492,7 +496,11 @@ def create(
 
 
 def create_course_request(
-    *, session: Session, request_in: VMRequestCreate, user
+    *,
+    session: Session,
+    request_in: VMRequestCreate,
+    user,
+    placement_group_id: uuid.UUID | None = None,
 ) -> VMRequest:
     """Course Lab 內部專用：免審核建立課程實驗機申請。
 
@@ -518,6 +526,7 @@ def create_course_request(
         user_id=user.id,
         encrypted_password=encrypt_value(request_in.password),
         request_kind="course",
+        placement_group_id=placement_group_id,
         commit=False,
     )
     _approve_and_place(
@@ -540,7 +549,11 @@ def create_course_request(
 
 
 def create_quick_practice_request(
-    *, session: Session, request_in: VMRequestCreate, user
+    *,
+    session: Session,
+    request_in: VMRequestCreate,
+    user,
+    placement_group_id: uuid.UUID | None = None,
 ) -> VMRequest:
     """Create one machine request inside an already validated quick-practice session.
 
@@ -555,6 +568,7 @@ def create_quick_practice_request(
         user_id=user.id,
         encrypted_password=encrypt_value(request_in.password),
         request_kind="quick_template",
+        placement_group_id=placement_group_id,
         commit=False,
     )
     _approve_and_place(
@@ -626,7 +640,7 @@ def get(
         session=session, request_id=request_id
     )
     if not db_request:
-        raise NotFoundError("Request not found")
+        raise NotFoundError(t("vm_request.not_found"))
     require_vm_request_access(current_user, db_request.user_id)
     return _to_public(db_request)
 
@@ -642,14 +656,14 @@ def get_review_context(
         request_id=request_id,
     )
     if not db_request:
-        raise NotFoundError("Request not found")
+        raise NotFoundError(t("vm_request.not_found"))
 
     require_vm_request_review(current_user)
 
     start_at = db_request.start_at
     end_at = db_request.end_at
     if not start_at:
-        raise BadRequestError("A scheduled request window is required for review context")
+        raise BadRequestError(t("vm_request.window_required_for_review"))
     if start_at.tzinfo is None:
         start_at = start_at.replace(tzinfo=UTC)
     # Use a far-future sentinel when end_at is None (infinite request).
@@ -682,7 +696,7 @@ def get_review_context(
     )
     request_selection = selections.get(projection_request.id)
     if not request_selection or not request_selection.node:
-        raise BadRequestError("No projected node is available for this request window")
+        raise BadRequestError(t("vm_request.no_projected_node"))
 
     now = _utc_now()
     active_requests = vm_request_repo.list_active_approved_vm_requests(
@@ -781,6 +795,9 @@ def get_review_context(
             session=session,
             db_request=projection_request,
             reserved_requests=overlapping_requests,
+            # 直接沿用核准路徑（rebuild_reserved_assignments）算出的落點，
+            # 讓畫面標示的選定節點與按下核准後的結果必然一致。
+            selected_node=request_selection.node,
         )
         node_score_breakdowns = [
             VMRequestReviewNodeScore(
@@ -850,16 +867,16 @@ def review(
         session=session, request_id=request_id, for_update=True
     )
     if not db_request:
-        raise NotFoundError("Request not found")
+        raise NotFoundError(t("vm_request.not_found"))
     if db_request.status != VMRequestStatus.pending:
-        raise BadRequestError("This request has already been reviewed")
+        raise BadRequestError(t("vm_request.already_reviewed"))
 
     reservation = None
     try:
         if review_data.status == "approved":
             if not db_request.start_at:
                 raise BadRequestError(
-                    "A scheduled request window is required before approval."
+                    t("vm_request.window_required_before_approval")
                 )
             end_at = db_request.end_at
             if end_at is not None:
@@ -867,7 +884,7 @@ def review(
                     end_at = end_at.replace(tzinfo=UTC)
                 if end_at <= _utc_now():
                     raise BadRequestError(
-                        "This request window has already ended and can no longer be approved."
+                        t("vm_request.window_already_ended")
                     )
 
             reservation = _approve_and_place(
@@ -936,7 +953,7 @@ def review(
         session.rollback()
 
         raise ProvisioningError(
-            "Failed to process review; scheduled provisioning setup may have failed."
+            t("vm_request.review_processing_failed")
         )
 
     refreshed = vm_request_repo.get_vm_request_by_id(
@@ -998,7 +1015,7 @@ def cancel(
         for_update=True,
     )
     if not db_request:
-        raise NotFoundError("Request not found")
+        raise NotFoundError(t("vm_request.not_found"))
 
     require_vm_request_cancel(current_user, db_request.user_id)
 
@@ -1008,7 +1025,7 @@ def cancel(
     )
     if db_request.status not in cancellable:
         raise BadRequestError(
-            f"Cannot cancel VM request in status={db_request.status.value}"
+            t("vm_request.cannot_cancel_status", status=db_request.status.value)
         )
 
     if (
@@ -1016,10 +1033,7 @@ def cancel(
         and db_request.vmid is not None
     ):
         raise BadRequestError(
-            "This request has already been provisioned and its machine is "
-            "managed by the scheduler; cancelling it here would orphan the "
-            "running machine. Delete the resource instead — resource "
-            "deletion cancels the request automatically."
+            t("vm_request.cancel_already_provisioned")
         )
 
     if db_request.status == VMRequestStatus.approved and db_request.vmid is None:
@@ -1028,8 +1042,7 @@ def cancel(
         if not cancelled_in_runner and _is_bg_task_active(bg_task_id):
             # Active but cancel returned False — race. Be honest about it.
             raise BadRequestError(
-                "Provisioning is in progress and could not be cancelled cleanly; "
-                "please retry in a few seconds"
+                t("vm_request.cancel_provisioning_in_progress")
             )
 
     vm_request_repo.update_vm_request_status(
@@ -1082,21 +1095,21 @@ def retry(
         session=session, request_id=request_id, for_update=True,
     )
     if not db_request:
-        raise NotFoundError("Request not found")
+        raise NotFoundError(t("vm_request.not_found"))
 
     require_vm_request_cancel(current_user, db_request.user_id)
 
     if db_request.status != VMRequestStatus.approved:
         raise BadRequestError(
-            f"Only approved VM requests can be retried (current={db_request.status.value})"
+            t("vm_request.retry_requires_approved", status=db_request.status.value)
         )
     if db_request.vmid is not None:
         raise BadRequestError(
-            "This request has already been provisioned; control or delete the resource instead."
+            t("vm_request.retry_already_provisioned")
         )
     if db_request.provisioning_status != VMProvisioningStatus.failed:
         raise BadRequestError(
-            "Only failed provisioning attempts can be retried."
+            t("vm_request.retry_requires_failed")
         )
 
     submit_sync(

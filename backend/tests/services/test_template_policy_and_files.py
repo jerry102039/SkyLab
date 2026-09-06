@@ -466,7 +466,7 @@ def test_manual_download_validates_attachment_id(
     assert path is fake_path
     assert found is attachment
 
-    with pytest.raises(NotFoundError, match="Attachment not found"):
+    with pytest.raises(NotFoundError, match="找不到附件"):
         template_service.get_manual_attachment_for_cloned_resource(
             session=None,  # type: ignore[arg-type]
             vmid=400,

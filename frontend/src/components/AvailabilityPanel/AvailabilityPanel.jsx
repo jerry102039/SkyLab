@@ -7,12 +7,20 @@
  *   onHintChange  (hint: string|null) => void  — contextual UX hint for the parent to display
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { VmRequestAvailabilityService } from "../../services/vmRequestAvailability";
 import styles from "./AvailabilityPanel.module.scss";
 import MIcon from "../MIcon";
 
-const MONTH_NAMES = ["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
-const DAY_HEADERS = ["日","一","二","三","四","五","六"];
+const MONTH_KEYS = [
+  "AvailabilityPanel.month1", "AvailabilityPanel.month2", "AvailabilityPanel.month3", "AvailabilityPanel.month4",
+  "AvailabilityPanel.month5", "AvailabilityPanel.month6", "AvailabilityPanel.month7", "AvailabilityPanel.month8",
+  "AvailabilityPanel.month9", "AvailabilityPanel.month10", "AvailabilityPanel.month11", "AvailabilityPanel.month12",
+];
+const DAY_HEADER_KEYS = [
+  "AvailabilityPanel.daySun", "AvailabilityPanel.dayMon", "AvailabilityPanel.dayTue", "AvailabilityPanel.dayWed",
+  "AvailabilityPanel.dayThu", "AvailabilityPanel.dayFri", "AvailabilityPanel.daySat",
+];
 
 /* picking state: "extend" = waiting for user to pick end date; "idle" = can start fresh */
 const PICK_EXTEND = "extend";
@@ -43,6 +51,15 @@ function isDraftReady(draft) {
   return draft.resource_type === "vm" ? Boolean(draft.disk_size) : Boolean(draft.rootfs_size);
 }
 
+/* 依失敗原因給主訊息 key；api.js 逾時丟 {status:408, timeout:true}、
+   Proxmox 全斷後端回 502、連不上後端則沒有 status */
+function availabilityErrorKey(error) {
+  if (error?.timeout) return "AvailabilityPanel.errorTimeout";
+  if (error?.status === 502) return "AvailabilityPanel.errorCluster";
+  if (error && !error.status) return "AvailabilityPanel.errorNetwork";
+  return "AvailabilityPanel.errorGeneric";
+}
+
 function cacheAvailability(key, data) {
   availabilityCache.set(key, { data, ts: Date.now() });
   while (availabilityCache.size > AVAILABILITY_CACHE_MAX) {
@@ -51,9 +68,11 @@ function cacheAvailability(key, data) {
 }
 
 export default function AvailabilityPanel({ draft, startAt, endAt, onChange, onHintChange, onDataChange }) {
+  const { t } = useTranslation("components");
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(false);
+  const [error, setError]     = useState(null);
+  const [retryToken, setRetryToken] = useState(0);
   const [refreshing, setRefreshing] = useState(false); // 已有月曆時的背景更新
   const dataRef = useRef(null);
   dataRef.current = data;
@@ -116,7 +135,7 @@ export default function AvailabilityPanel({ draft, startAt, endAt, onChange, onH
     const cached = availabilityCache.get(draftKey);
     if (cached && Date.now() - cached.ts < AVAILABILITY_CACHE_TTL_MS) {
       setData(cached.data);
-      setError(false);
+      setError(null);
       setLoading(false);
       setRefreshing(false);
       return;
@@ -127,7 +146,7 @@ export default function AvailabilityPanel({ draft, startAt, endAt, onChange, onH
     const hasStale = dataRef.current != null;
     if (hasStale) setRefreshing(true);
     else setLoading(true);
-    setError(false);
+    setError(null);
     /* 送出過第一次請求後，之後每次規格異動一律等使用者停手再送：
        舊寫法在清空 data 後 debounce 會退化成 0ms，連續拖曳滑桿會對後端連發請求 */
     const delay = hasRequestedRef.current ? AVAILABILITY_DEBOUNCE_MS : 0;
@@ -142,7 +161,7 @@ export default function AvailabilityPanel({ draft, startAt, endAt, onChange, onH
         })
         .catch((err) => {
           if (cancelled || err?.name === "AbortError") return;
-          setError(true);
+          setError({ status: err?.status, timeout: Boolean(err?.timeout) });
         })
         .finally(() => {
           if (cancelled) return;
@@ -156,7 +175,7 @@ export default function AvailabilityPanel({ draft, startAt, endAt, onChange, onH
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [draftKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [draftKey, retryToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Day map ── */
   const dayMap = useMemo(() => {
@@ -215,50 +234,56 @@ export default function AvailabilityPanel({ draft, startAt, endAt, onChange, onH
   const canGoNext = viewYear < maxDate.getFullYear()
     || (viewYear === maxDate.getFullYear() && viewMonth < maxDate.getMonth());
 
+  /* ── Notify parent ── */
+  /* 只在使用者「點擊月曆」時通知表單。不能用 effect 監聽 startDate/endDate：
+     那會把表單 prop 同步進來的變化也回推出去（拍平成 00:00–23:59 的回聲），
+     蓋掉使用者在 datetime-local 輸入框選的時間。 */
+  function notifyRange(nextStart, nextEnd) {
+    if (!nextStart || !nextEnd) {
+      onChangeRef.current?.({ start_at: null, end_at: null });
+      return;
+    }
+    const start = nextStart === todayStr ? new Date() : localDateAt(nextStart, 0);
+    const end = localDateAt(nextEnd, 23, 59, 59);
+    onChangeRef.current?.({
+      start_at: start?.toISOString() ?? null,
+      end_at: end?.toISOString() ?? null,
+    });
+  }
+
   /* ── Day click ── */
   function handleDayClick(dateStr, level) {
     if (!level || level === "none") return;
     if (picking === PICK_IDLE || !startDate) {
       setStartDate(dateStr); setEndDate(dateStr);
       setPicking(PICK_EXTEND);
+      notifyRange(dateStr, dateStr);
     } else {
       if (dateStr > startDate) {
         setEndDate(dateStr);
         setPicking(PICK_IDLE);
+        notifyRange(startDate, dateStr);
       } else {
         // Same or earlier date: restart as single-day
         setStartDate(dateStr); setEndDate(dateStr);
+        notifyRange(dateStr, dateStr);
       }
     }
   }
 
-  /* ── Notify parent ── */
-  useEffect(() => {
-    if (!startDate || !endDate) {
-      onChangeRef.current?.({ start_at: null, end_at: null });
-      return;
-    }
-    const start = startDate === todayStr ? new Date() : localDateAt(startDate, 0);
-    const end = localDateAt(endDate, 23, 59, 59);
-    onChangeRef.current?.({
-      start_at: start?.toISOString() ?? null,
-      end_at: end?.toISOString() ?? null,
-    });
-  }, [startDate, endDate, todayStr]);
-
   useEffect(() => {
     let hint = null;
-    if (!startDate) hint = "點選日期即可選取單日，或繼續點選其他日期延伸範圍";
-    else if (picking === PICK_EXTEND && startDate === endDate) hint = `已選單日 ${startDate}，審核通過後會依日期啟用`;
+    if (!startDate) hint = t("AvailabilityPanel.hintPickStart");
+    else if (picking === PICK_EXTEND && startDate === endDate) hint = t("AvailabilityPanel.hintSingleDaySelected", { date: startDate });
     else if (picking === PICK_IDLE && endDate)
-      hint = "日期已選定，點選日期即可重新選擇";
+      hint = t("AvailabilityPanel.hintRangeSelected");
     onHintChangeRef.current?.(hint);
-  }, [startDate, endDate, picking]);
+  }, [startDate, endDate, picking]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Early returns ── */
   if (!draftReady) return (
     <div className={styles.root}>
-      <p className={styles.hint}>先填完基本規格後，再選日期與連續時段。</p>
+      <p className={styles.hint}>{t("AvailabilityPanel.hintFillSpecFirst")}</p>
     </div>
   );
   if (loading) return (
@@ -270,7 +295,20 @@ export default function AvailabilityPanel({ draft, startAt, endAt, onChange, onH
   );
   if (error || !data) return (
     <div className={styles.root}>
-      <p className={`${styles.hint} ${styles.hintError}`}>目前無法取得時段資料，請稍後再試。</p>
+      <div className={styles.errorBox}>
+        <div className={styles.errorText}>
+          <span className={styles.errorTitle}>{t(availabilityErrorKey(error))}</span>
+          <span className={styles.errorDesc}>{t("AvailabilityPanel.errorGuide")}</span>
+        </div>
+        <button
+          type="button"
+          className={styles.retryBtn}
+          onClick={() => setRetryToken((token) => token + 1)}
+        >
+          <MIcon name="refresh" size={13} />
+          {t("AvailabilityPanel.retry")}
+        </button>
+      </div>
     </div>
   );
 
@@ -283,7 +321,7 @@ export default function AvailabilityPanel({ draft, startAt, endAt, onChange, onH
     <div className={styles.root} aria-busy={refreshing || undefined}>
 
       {refreshing && (
-        <p className={styles.refreshingHint} aria-live="polite">正在依新規格更新可用時段…</p>
+        <p className={styles.refreshingHint} aria-live="polite">{t("AvailabilityPanel.refreshingHint")}</p>
       )}
 
       {/* ── Calendar ── */}
@@ -292,14 +330,14 @@ export default function AvailabilityPanel({ draft, startAt, endAt, onChange, onH
           <button type="button" className={styles.calendarNavBtn} onClick={prevMonth} disabled={!canGoPrevious}>
             <MIcon name="chevron_left" size={18} />
           </button>
-          <span className={styles.calendarTitle}>{MONTH_NAMES[viewMonth]} {viewYear}</span>
+          <span className={styles.calendarTitle}>{t(MONTH_KEYS[viewMonth])} {viewYear}</span>
           <button type="button" className={styles.calendarNavBtn} onClick={nextMonth} disabled={!canGoNext}>
             <MIcon name="chevron_right" size={18} />
           </button>
         </div>
         <div className={styles.calendarGrid}>
-          {DAY_HEADERS.map((h) => (
-            <div key={h} className={styles.calendarDayHeader}>{h}</div>
+          {DAY_HEADER_KEYS.map((key) => (
+            <div key={key} className={styles.calendarDayHeader}>{t(key)}</div>
           ))}
           {calendarDays.map((d, i) => {
             if (!d) return <div key={`pad-${i}`} />;
@@ -348,13 +386,13 @@ export default function AvailabilityPanel({ draft, startAt, endAt, onChange, onH
       {/* ── Legend ── */}
       <div className={styles.legend}>
         {[
-          { cls: styles.calendarDayGood,    label: "可申請" },
-          { cls: styles.calendarDayLimited, label: "名額有限" },
-          { cls: styles.calendarDayNone,    label: "已滿" },
-        ].map(({ cls, label }) => (
-          <div key={label} className={styles.legendItem}>
+          { cls: styles.calendarDayGood,    labelKey: "AvailabilityPanel.legendAvailable" },
+          { cls: styles.calendarDayLimited, labelKey: "AvailabilityPanel.legendLimited" },
+          { cls: styles.calendarDayNone,    labelKey: "AvailabilityPanel.legendFull" },
+        ].map(({ cls, labelKey }) => (
+          <div key={labelKey} className={styles.legendItem}>
             <span className={`${styles.legendDot} ${cls}`} />
-            <span>{label}</span>
+            <span>{t(labelKey)}</span>
           </div>
         ))}
       </div>

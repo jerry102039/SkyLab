@@ -12,6 +12,7 @@ import logging
 
 from sqlmodel import Session, select
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError, ConflictError
 from app.models import Resource
 from app.models.base import get_datetime_utc
@@ -61,17 +62,19 @@ def upsert_subnet_config(
     network = ipaddress.IPv4Network(cidr, strict=False)
 
     # 驗證所有 IP 都在 CIDR 範圍內
-    for ip_str, label in [
-        (gateway, "閘道 IP"),
-        (gateway_vm_ip, "Gateway VM IP"),
+    for ip_str, label_key in [
+        (gateway, "ipManagement.gatewayIpLabel"),
+        (gateway_vm_ip, "ipManagement.gatewayVmIpLabel"),
     ]:
         ip = ipaddress.IPv4Address(ip_str)
         if ip not in network:
-            raise BadRequestError(f"{label} ({ip_str}) 不在子網 {cidr} 範圍內")
+            raise BadRequestError(
+                t("ipManagement.ipNotInSubnet", label=t(label_key), ip=ip_str, cidr=cidr)
+            )
 
     # 閘道與 Gateway VM IP 不可相同
     if gateway == gateway_vm_ip:
-        raise BadRequestError("閘道 IP 與 Gateway VM IP 不可相同")
+        raise BadRequestError(t("ipManagement.gatewayIpsMustDiffer"))
 
     existing = get_subnet_config(session)
 
@@ -86,8 +89,7 @@ def upsert_subnet_config(
             ).first()
             if vm_count is not None:
                 raise ConflictError(
-                    "已有 VM/LXC 使用目前網段的 IP，無法變更 CIDR。"
-                    "請先刪除所有 VM/LXC 後再變更。"
+                    t("ipManagement.cidrChangeBlockedByAllocations")
                 )
 
         existing.cidr = str(network)
@@ -133,7 +135,7 @@ def delete_subnet_config(session: Session) -> None:
     """刪除子網配置（需先確認無 VM/LXC 分配）"""
     config = get_subnet_config(session)
     if config is None:
-        raise BadRequestError("子網配置不存在")
+        raise BadRequestError(t("ipManagement.subnetConfigNotFound"))
 
     vm_alloc = session.exec(
         select(IpAllocation).where(
@@ -141,7 +143,7 @@ def delete_subnet_config(session: Session) -> None:
         )
     ).first()
     if vm_alloc is not None:
-        raise ConflictError("仍有 VM/LXC 使用 IP 分配，無法刪除子網配置")
+        raise ConflictError(t("ipManagement.subnetConfigDeleteBlocked"))
 
     # 刪除所有 IP 分配（含系統保留）
     all_allocs = session.exec(select(IpAllocation)).all()
@@ -204,7 +206,7 @@ def reserve_ips(
         select(SubnetConfig).where(SubnetConfig.id == 1).with_for_update()
     ).first()
     if config is None:
-        raise BadRequestError("請先設定 IP 管理網段才能進行此操作")
+        raise BadRequestError(t("ipManagement.subnetNotConfigured"))
 
     existing_rows = session.exec(
         select(IpAllocation).where(
@@ -226,8 +228,7 @@ def reserve_ips(
     available = [str(ip) for ip in network.hosts() if str(ip) not in allocated]
     if len(available) < len(missing):
         raise ConflictError(
-            f"整組環境需要再預留 {len(missing)} 個 IP，"
-            f"但目前只剩 {len(available)} 個"
+            t("ipManagement.insufficientIpsForReservation", needed=len(missing), available=len(available))
         )
     for key, ip_address in zip(
         missing, available[: len(missing)], strict=True
@@ -298,7 +299,7 @@ def allocate_ip(
         select(SubnetConfig).where(SubnetConfig.id == 1).with_for_update()
     ).first()
     if config is None:
-        raise BadRequestError("請先設定 IP 管理網段才能進行此操作")
+        raise BadRequestError(t("ipManagement.subnetNotConfigured"))
 
     if reservation_key:
         reserved = session.exec(
@@ -307,9 +308,9 @@ def allocate_ip(
             .with_for_update()
         ).first()
         if reserved is None:
-            raise ConflictError("找不到這台課程機器的預留 IP")
+            raise ConflictError(t("ipManagement.reservedIpNotFound"))
         if reserved.vmid not in (None, vmid):
-            raise ConflictError("這個課程預留 IP 已被其他機器使用")
+            raise ConflictError(t("ipManagement.reservedIpAlreadyUsed"))
         reserved.vmid = vmid
         reserved.resource_vmid = (
             vmid if session.get(Resource, vmid) is not None else None
@@ -343,7 +344,7 @@ def allocate_ip(
             logger.info("已為 VMID %s 分配 IP %s (purpose=%s)", vmid, ip_str, purpose)
             return ip_str
 
-    raise ConflictError("IP 地址已耗盡，無法分配新的 IP")
+    raise ConflictError(t("ipManagement.ipPoolExhausted"))
 
 
 def release_ip(
@@ -435,7 +436,7 @@ def ensure_subnet_configured(session: Session) -> SubnetConfig:
     """
     config = get_subnet_config(session)
     if config is None:
-        raise BadRequestError("請先設定 IP 管理網段才能進行此操作")
+        raise BadRequestError(t("ipManagement.subnetNotConfigured"))
     return config
 
 

@@ -1,0 +1,67 @@
+{
+  "teachingClasses.notFound": "找不到班級",
+  "teachingClasses.scheduleInvalid": "結束日期與時間必須晚於開始時間",
+  "teachingClasses.fixedScheduleLocked": "已送出建機後不可修改固定課表",
+  "teachingClasses.archivedCannotExtend": "已封存的班級無法展延",
+  "teachingClasses.extendDateMustBeLater": "新結束日期必須晚於目前的結束日期",
+  "teachingClasses.mustBeArchivedBeforeReclaim": "班級必須先封存才能回收資源",
+  "teachingClasses.studentsLocked": "已送出建機後不可變更學生名單",
+  "teachingClasses.studentNotFound": "找不到班級學生",
+  "teachingClasses.csvDecodeFailed": "無法解析 CSV 檔案編碼",
+  "teachingClasses.machinesManagedByCourseEnvironment": "請從課程環境發布版本，並在班級管理選擇課程環境",
+  "teachingClasses.courseLockedCannotChange": "班級已鎖定，不能更換課程",
+  "teachingClasses.onlyPublishedCourseVersion": "只能選擇已發布的課程版本",
+  "teachingClasses.courseEnvironmentNotFound": "找不到課程環境",
+  "teachingClasses.environmentNotForFormalCourse": "此環境僅供快速練習，不能套用到正式課程",
+  "teachingClasses.courseVersionNoMachines": "課程版本沒有可派發的機器",
+  "teachingClasses.archivedCannotEditWeeklyContent": "已結束的班級不可修改每週內容",
+  "teachingClasses.weekDatesMustMatchSchedule": "週次日期必須由班級固定課表產生，不可手動新增或刪除",
+  "teachingClasses.weekNotFound": "找不到指定週次",
+  "teachingClasses.invalidFileName": "檔案名稱無效",
+  "teachingClasses.taskFileNameTooLong": "任務檔案名稱不可超過 255 字元",
+  "teachingClasses.taskFileTooLarge": "任務檔案不可超過 100 MB",
+  "teachingClasses.taskFileNotFound": "找不到指定任務檔案",
+  "teachingClasses.onlyPlanningCanRecheckCapacity": "只有準備中的班級可以重新執行容量預檢",
+  "teachingClasses.studentsAndMachinesRequired": "學生名單與課程機器必須完成",
+  "teachingClasses.classLockedOrSubmitted": "班級已鎖定或已送出建機",
+  "teachingClasses.selectPublishedCourseFirst": "請先選擇已發布的課程版本",
+  "teachingClasses.onlyFailedCanRetry": "只有建立失敗的班級可以重試",
+  "teachingClasses.noFailedOrStaleTasksToRetry": "沒有失敗或逾時的建置任務可以重試",
+  "teachingClasses.topologyRetryFailed": "網路拓撲重試失敗：{details}",
+  "teachingClasses.cannotVerifyResourceRetryLater": "無法驗證現有資源，請稍後再試",
+  "teachingClasses.provisionedUserNoLongerInClass": "已建置資源的使用者已不在班級中",
+  "teachingClasses.onlyFailedCanResetToEdit": "只有建立失敗的班級可以返回編輯",
+  "teachingClasses.partialMachinesUseRetry": "已有部分機器建立完成，請使用「重試失敗機器」",
+
+  "teacherJudgeFiles.classNotFound": "找不到班級。",
+  "teacherJudgeFiles.unknownTemplate": "未知的評分環境 template。",
+
+  "teacherJudgeScripts.classNotFound": "找不到班級",
+  "teacherJudgeScripts.unknownTemplate": "未知的評分環境 template。",
+
+  "teacherJudgeSessions.selectedFileInUse": "這份評分表已被其他檢查使用；請使用「重構」建立獨立副本，或上傳新的評分表。",
+  "teacherJudgeSessions.classNotFound": "找不到班級。",
+  "teacherJudgeSessions.weekNotInClass": "選擇的週次不屬於這個班級。",
+  "teacherJudgeSessions.archivedReadOnly": "已封存的檢查為唯讀。",
+  "teacherJudgeSessions.archivedCannotPin": "已封存的檢查不能釘選。",
+  "teacherJudgeSessions.invalidMessageCursor": "訊息游標無效。",
+  "teacherJudgeSessions.analysisRevisionConflict": "評分表已被其他變更更新，請重新載入後再請 AI 提案。",
+  "teacherJudgeSessions.runResultNotFound": "找不到這項檢查的執行結果。",
+  "teacherJudgeSessions.scriptNotFound": "找不到這項檢查的腳本。",
+
+  "aiTemplateRecommendation.modelBindingMissing": "config/system-ai.json 缺少 AI 模型綁定設定",
+  "aiTemplateRecommendation.upstreamError": "上游 AI 服務錯誤，請確認 vLLM 伺服器與模型設定（VLLM_BASE_URL / VLLM_MODEL_NAME）。",
+
+  "auditLogs.invalidUserIdFormat": "user_id 格式錯誤",
+
+  "batchProvision.jobNotFound": "找不到批次建置任務",
+  "batchProvision.classNotFound": "找不到班級",
+  "batchProvision.noPendingJobs": "此班級沒有待審核的任務",
+
+  "aiPveLog.chatFailed": "AI-PVE 對話失敗",
+
+  "aiMonitoring.runtimeNotConfigured": "LiteLLM 執行環境監控尚未設定",
+  "aiMonitoring.runtimeUnavailable": "LiteLLM 執行環境目前無法使用",
+
+  "aiProxy.rateLimitExceeded": "已超過速率限制。限制：每 {window_seconds} 秒 {limit} 次請求。"
+}

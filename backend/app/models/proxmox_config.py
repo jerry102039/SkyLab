@@ -43,8 +43,6 @@ class ProxmoxCapacityConfig:
     disk_contention_warn_share: float
     disk_contention_high_share: float
     disk_penalty_weight: float
-    search_max_reassignments: int
-    search_depth: int
     cpu_peak_warn_share: float
     cpu_peak_high_share: float
     memory_peak_warn_share: float
@@ -155,8 +153,6 @@ class ProxmoxConfig(SQLModel, table=True):
             disk_contention_warn_share=self.placement_disk_contention_warn_share,
             disk_contention_high_share=self.placement_disk_contention_high_share,
             disk_penalty_weight=self.placement_disk_penalty_weight,
-            search_max_reassignments=self.placement_search_max_reassignments,
-            search_depth=self.placement_search_depth,
             cpu_peak_warn_share=self.placement_cpu_peak_warn_share,
             cpu_peak_high_share=self.placement_cpu_peak_high_share,
             memory_peak_warn_share=self.placement_memory_peak_warn_share,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./MonitoringPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
@@ -7,20 +8,20 @@ import { MiningIncidentsService } from "../../../services/miningIncidents";
 import { useToast } from "../../../hooks/useToast";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 
-const STATUS_LABELS = {
-  detected: "已偵測",
-  suspended: "已暫停",
-  banned: "已停權",
-  dismissed: "已解除",
-};
-
 /** detected/suspended 視為待處理（紅），其餘中性 */
 function statusBadgeClass(status) {
   return status === "detected" || status === "suspended" ? "badge_err" : "badge_muted";
 }
 
 export default function MiningIncidentsPanel() {
+  const { t } = useTranslation("system");
   const toast = useToast();
+  const STATUS_LABELS = {
+    detected: t("MiningIncidentsPanel.statusDetected"),
+    suspended: t("MiningIncidentsPanel.statusSuspended"),
+    banned: t("MiningIncidentsPanel.statusBanned"),
+    dismissed: t("MiningIncidentsPanel.statusDismissed"),
+  };
   const [incidents, setIncidents] = useState(null);
   const [banTarget, setBanTarget] = useState(null);
   const [dismissTarget, setDismissTarget] = useState(null);
@@ -55,11 +56,11 @@ export default function MiningIncidentsPanel() {
     setBusy(true);
     try {
       await MiningIncidentsService.ban(banTarget.id);
-      toast.success("帳號已停權，VM 維持暫停狀態");
+      toast.success(t("MiningIncidentsPanel.toastBanSuccess"));
       setBanTarget(null);
       await load();
     } catch (e) {
-      toast.error(`停權失敗：${e?.message ?? "未知錯誤"}`);
+      toast.error(t("MiningIncidentsPanel.toastBanFailed", { message: e?.message ?? t("MiningIncidentsPanel.unknownError") }));
     } finally {
       setBusy(false);
     }
@@ -78,11 +79,11 @@ export default function MiningIncidentsPanel() {
         exempt: dismissExempt,
         note: dismissNote || null,
       });
-      toast.success(result.status === "dismissed" ? "已解除事件並嘗試恢復 VM" : "已解除事件");
+      toast.success(result.status === "dismissed" ? t("MiningIncidentsPanel.toastDismissedAndRecovered") : t("MiningIncidentsPanel.toastDismissed"));
       closeDismiss();
       await load();
     } catch (e) {
-      toast.error(`解除失敗：${e?.message ?? "未知錯誤"}`);
+      toast.error(t("MiningIncidentsPanel.toastDismissFailed", { message: e?.message ?? t("MiningIncidentsPanel.unknownError") }));
     } finally {
       setBusy(false);
     }
@@ -94,30 +95,30 @@ export default function MiningIncidentsPanel() {
         <div>
           <h2 className={styles.cardTitle}>
             <MIcon name="gavel" size={18} />
-            挖礦事件
+            {t("MiningIncidentsPanel.title")}
           </h2>
           <p className={styles.cardDesc}>
-            CPU 長期滿載的疑似挖礦資源（已自動存證與暫停，待管理員審核）
+            {t("MiningIncidentsPanel.desc")}
           </p>
         </div>
-        {open.length > 0 && <span className={styles.alertCount}>{open.length} 待處理</span>}
+        {open.length > 0 && <span className={styles.alertCount}>{t("MiningIncidentsPanel.pendingCount", { count: open.length })}</span>}
       </div>
 
       {incidents === null ? (
         <LoadingState />
       ) : incidents.length === 0 ? (
-        <EmptyState icon="verified_user" title="目前沒有挖礦事件" />
+        <EmptyState icon="verified_user" title={t("MiningIncidentsPanel.emptyNone")} />
       ) : (
         <table className={styles.table}>
           <thead>
             <tr>
               <th className={styles.th}>VMID</th>
-              <th className={styles.th}>平均 CPU</th>
-              <th className={styles.th}>觀察視窗</th>
-              <th className={styles.th}>存證快照</th>
-              <th className={styles.th}>狀態</th>
-              <th className={styles.th}>偵測時間</th>
-              <th className={`${styles.th} ${styles.thRight}`}>操作</th>
+              <th className={styles.th}>{t("MiningIncidentsPanel.colAvgCpu")}</th>
+              <th className={styles.th}>{t("MiningIncidentsPanel.colWindow")}</th>
+              <th className={styles.th}>{t("MiningIncidentsPanel.colSnapshot")}</th>
+              <th className={styles.th}>{t("MiningIncidentsPanel.colStatus")}</th>
+              <th className={styles.th}>{t("MiningIncidentsPanel.colDetectedAt")}</th>
+              <th className={`${styles.th} ${styles.thRight}`}>{t("MiningIncidentsPanel.colActions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -128,7 +129,7 @@ export default function MiningIncidentsPanel() {
                   {incident.avg_cpu.toFixed(1)}%
                 </td>
                 <td className={`${styles.td} ${styles.mutedCell}`}>
-                  {incident.window_hours} 小時
+                  {t("MiningIncidentsPanel.hoursValue", { hours: incident.window_hours })}
                 </td>
                 <td className={styles.td}>
                   {incident.snapshot_name ? (
@@ -137,7 +138,7 @@ export default function MiningIncidentsPanel() {
                       {incident.snapshot_name}
                     </span>
                   ) : (
-                    <span className={styles.mutedCell}>存證失敗</span>
+                    <span className={styles.mutedCell}>{t("MiningIncidentsPanel.snapshotFailed")}</span>
                   )}
                 </td>
                 <td className={styles.td}>
@@ -157,7 +158,7 @@ export default function MiningIncidentsPanel() {
                         onClick={() => setBanTarget(incident)}
                       >
                         <MIcon name="block" size={14} />
-                        停權
+                        {t("MiningIncidentsPanel.ban")}
                       </button>
                       <button
                         type="button"
@@ -165,7 +166,7 @@ export default function MiningIncidentsPanel() {
                         onClick={() => setDismissTarget(incident)}
                       >
                         <MIcon name="undo" size={14} />
-                        誤判解除
+                        {t("MiningIncidentsPanel.dismissMisjudged")}
                       </button>
                     </>
                   )}
@@ -183,10 +184,9 @@ export default function MiningIncidentsPanel() {
           onClick={() => setBanTarget(null)}
         >
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <span className={styles.modalTitle}>確認停權帳號？</span>
+            <span className={styles.modalTitle}>{t("MiningIncidentsPanel.banConfirmTitle")}</span>
             <p className={styles.modalDesc}>
-              VMID {banDialog.item.vmid} 的擁有者帳號將被停用（無法登入），VM
-              維持暫停狀態以保留證據。此操作可由管理員在使用者管理中還原。
+              {t("MiningIncidentsPanel.banConfirmMessage", { vmid: banDialog.item.vmid })}
             </p>
             <div className={styles.modalActions}>
               <button
@@ -194,7 +194,7 @@ export default function MiningIncidentsPanel() {
                 className={styles.btnSecondary}
                 onClick={() => setBanTarget(null)}
               >
-                取消
+                {t("MiningIncidentsPanel.cancel")}
               </button>
               <button
                 type="button"
@@ -202,7 +202,7 @@ export default function MiningIncidentsPanel() {
                 disabled={busy}
                 onClick={handleBan}
               >
-                {busy ? "處理中…" : "確認停權"}
+                {busy ? t("MiningIncidentsPanel.processing") : t("MiningIncidentsPanel.confirmBan")}
               </button>
             </div>
           </div>
@@ -216,9 +216,9 @@ export default function MiningIncidentsPanel() {
           onClick={closeDismiss}
         >
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <span className={styles.modalTitle}>解除挖礦事件</span>
+            <span className={styles.modalTitle}>{t("MiningIncidentsPanel.dismissTitle")}</span>
             <p className={styles.modalDesc}>
-              VMID {dismissDialog.item.vmid} 將標記為誤判並嘗試恢復運行。
+              {t("MiningIncidentsPanel.dismissMessage", { vmid: dismissDialog.item.vmid })}
             </p>
             <label className={styles.checkLine}>
               <input
@@ -226,21 +226,21 @@ export default function MiningIncidentsPanel() {
                 checked={dismissExempt}
                 onChange={(e) => setDismissExempt(e.target.checked)}
               />
-              同時將此資源加入豁免（之後不再偵測）
+              {t("MiningIncidentsPanel.exemptLabel")}
             </label>
             <div className={styles.field}>
-              <label htmlFor="mining-note">備註（選填）</label>
+              <label htmlFor="mining-note">{t("MiningIncidentsPanel.noteLabel")}</label>
               <textarea
                 id="mining-note"
                 rows={3}
-                placeholder="例如：教授的模型訓練工作負載"
+                placeholder={t("MiningIncidentsPanel.notePlaceholder")}
                 value={dismissNote}
                 onChange={(e) => setDismissNote(e.target.value)}
               />
             </div>
             <div className={styles.modalActions}>
               <button type="button" className={styles.btnSecondary} onClick={closeDismiss}>
-                取消
+                {t("MiningIncidentsPanel.cancel")}
               </button>
               <button
                 type="button"
@@ -248,7 +248,7 @@ export default function MiningIncidentsPanel() {
                 disabled={busy}
                 onClick={handleDismiss}
               >
-                {busy ? "處理中…" : "確認解除"}
+                {busy ? t("MiningIncidentsPanel.processing") : t("MiningIncidentsPanel.confirmDismiss")}
               </button>
             </div>
           </div>

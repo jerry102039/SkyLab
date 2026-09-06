@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../../contexts/AuthContext";
 import { AuthStorage } from "../../services/auth";
 import { CoursesService } from "../../services/courses";
 import { connectJobsWebSocket, JobsService } from "../../services/jobs";
 import JobDetailDialog from "./JobDetailDialog";
-import { JOB_KIND_LABEL } from "./JobRow";
+import { JOB_KIND_LABEL_KEYS } from "./JobRow";
 
 const NOTIFY_ONLY_MINE_KEY = "jobs:notifyOnlyMine";
 
@@ -26,28 +27,28 @@ function loadReadReminderIds(user) {
 /* 從 running/pending/blocked → 終態時觸發 toast */
 const TERMINAL_STATUSES = new Set(["completed", "failed", "blocked", "cancelled"]);
 
-function notifyJobTransition(job, prevStatus, onView) {
+function notifyJobTransition(job, prevStatus, onView, t) {
   // 第一次看到（prev undefined）且本來就是終態 → 不通知（避免重整時轟炸）
   if (prevStatus === undefined) return;
   if (prevStatus === job.status) return;
   if (!TERMINAL_STATUSES.has(job.status)) return;
 
-  const kindLabel = JOB_KIND_LABEL[job.kind] ?? job.kind;
-  const action = { label: "檢視", onClick: () => onView(job.id) };
+  const kindLabel = JOB_KIND_LABEL_KEYS[job.kind] ? t(JOB_KIND_LABEL_KEYS[job.kind]) : job.kind;
+  const action = { label: t("JobsProvider.viewAction"), onClick: () => onView(job.id) };
   const description = job.title;
 
   switch (job.status) {
     case "completed":
-      toast.success(`${kindLabel}已完成`, { description, action });
+      toast.success(t("JobsProvider.jobCompleted", { kindLabel }), { description, action });
       break;
     case "failed":
-      toast.error(`${kindLabel}失敗`, { description: job.message ?? description, action });
+      toast.error(t("JobsProvider.jobFailed", { kindLabel }), { description: job.message ?? description, action });
       break;
     case "blocked":
-      toast.warning(`${kindLabel}受阻`, { description: job.message ?? description, action });
+      toast.warning(t("JobsProvider.jobBlocked", { kindLabel }), { description: job.message ?? description, action });
       break;
     case "cancelled":
-      toast(`${kindLabel}已取消`, { description, action });
+      toast(t("JobsProvider.jobCancelled", { kindLabel }), { description, action });
       break;
   }
 }
@@ -66,6 +67,7 @@ export function useJobs() {
  * - 掛載共用的 JobDetailDialog；顯示用的按鈕（JobsButton）放在 Sidebar 底部
  */
 export default function JobsProvider({ children }) {
+  const { t } = useTranslation("components");
   const { user } = useAuth();
   const [items, setItems] = useState(null); // 執行中任務；null = 尚未載入
   const [focusJobId, setFocusJobId] = useState(null);
@@ -123,7 +125,7 @@ export default function JobsProvider({ children }) {
         for (const j of all) {
           // admin 開「只通知自己」：跳過非本人的 job
           if (enabled && j.user_id !== myUserId) continue;
-          notifyJobTransition(j, prev.get(j.id), setFocusJobId);
+          notifyJobTransition(j, prev.get(j.id), setFocusJobId, t);
         }
       }
       prevStatusMapRef.current = next;

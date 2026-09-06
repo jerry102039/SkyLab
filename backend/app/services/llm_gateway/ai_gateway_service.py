@@ -11,6 +11,7 @@ from sqlalchemy import and_, or_
 from sqlmodel import Session, select
 
 from app.core.authorizers import require_ai_api_access
+from app.core.i18n import t
 from app.core.security import decrypt_value, encrypt_value
 from app.exceptions import BadRequestError, NotFoundError
 from app.features.ai.config import settings as ai_api_settings
@@ -55,7 +56,7 @@ def _get_owned_credential(
 ) -> AIAPICredential:
     credential = session.get(AIAPICredential, credential_id)
     if not credential:
-        raise NotFoundError("AI API credential not found")
+        raise NotFoundError(t("ai_gateway.credential_not_found"))
     require_ai_api_access(current_user, credential.user_id)
     return credential
 
@@ -198,7 +199,7 @@ def get_request(
 ) -> AIAPIRequestPublic:
     db_request = session.get(AIAPIRequest, request_id)
     if not db_request:
-        raise NotFoundError("AI API request not found")
+        raise NotFoundError(t("ai_gateway.request_not_found"))
     require_ai_api_access(current_user, db_request.user_id)
     return _to_request_public(db_request)
 
@@ -212,9 +213,9 @@ def review_request(
 ) -> AIAPIRequestPublic:
     db_request = session.get(AIAPIRequest, request_id)
     if not db_request:
-        raise NotFoundError("AI API request not found")
+        raise NotFoundError(t("ai_gateway.request_not_found"))
     if db_request.status != AIAPIRequestStatus.pending:
-        raise BadRequestError("This AI API request has already been reviewed")
+        raise BadRequestError(t("ai_gateway.request_already_reviewed"))
 
     db_request.status = review_data.status
     db_request.reviewer_id = reviewer.id
@@ -228,7 +229,7 @@ def review_request(
         base_url = ai_api_settings.resolved_public_base_url
         api_key = _generate_user_api_key()
         if not base_url:
-            raise BadRequestError("AI API connection settings are incomplete")
+            raise BadRequestError(t("ai_gateway.connection_incomplete"))
 
         expires_at = None
         now = get_datetime_utc()
@@ -355,7 +356,7 @@ def rotate_credential(
     )
 
     if credential.revoked_at is not None:
-        raise BadRequestError("This AI API credential has already been revoked")
+        raise BadRequestError(t("ai_gateway.credential_already_revoked"))
 
     credential.revoked_at = get_datetime_utc()
     session.add(credential)

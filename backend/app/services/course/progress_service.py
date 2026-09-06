@@ -8,6 +8,7 @@ import uuid
 
 from sqlmodel import Session, func, select
 
+from app.core.i18n import t
 from app.exceptions import BadRequestError, NotFoundError
 from app.models import (
     CoursePath,
@@ -126,17 +127,17 @@ def submit_answer(
     """
     question = session.get(CourseQuestion, question_id)
     if question is None:
-        raise NotFoundError("Course question not found")
+        raise NotFoundError(t("progress.question_not_found"))
 
     task = session.get(CourseTask, question.task_id)
     if task is None:
-        raise NotFoundError("Course task not found")
+        raise NotFoundError(t("progress.task_not_found"))
     room = session.get(CourseRoom, task.room_id)
     if room is None:
-        raise NotFoundError("Course room not found")
+        raise NotFoundError(t("progress.room_not_found"))
     path = session.get(CoursePath, room.path_id)
     if path is None or path.status != CoursePathStatus.published:
-        raise NotFoundError("Course path not found")
+        raise NotFoundError(t("progress.path_not_found"))
 
     already = session.exec(
         select(UserCourseProgress).where(
@@ -150,7 +151,7 @@ def submit_answer(
     elif question.question_type == CourseQuestionType.no_answer:
         correct = True
     else:  # pragma: no cover — enum 目前僅兩型
-        raise BadRequestError("Unsupported question type")
+        raise BadRequestError(t("progress.unsupported_question_type"))
 
     newly_completed = False
     if correct and already is None:

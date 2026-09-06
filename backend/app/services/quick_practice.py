@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 import sqlalchemy as sa
 from sqlmodel import Session, col, func, select
 
+from app.core.i18n import t
 from app.core.permissions import is_admin
 from app.exceptions import BadRequestError, NotFoundError
 from app.infrastructure.worker import submit_sync
@@ -64,7 +65,7 @@ def _environment_for_version(
 ) -> CourseEnvironment:
     environment = session.get(CourseEnvironment, version.environment_id)
     if environment is None:
-        raise NotFoundError("Quick-practice environment not found")
+        raise NotFoundError(t("quick_practice.environment_not_found"))
     return environment
 
 
@@ -104,10 +105,10 @@ def get_published_template(
 ) -> tuple[CourseEnvironment, CourseEnvironmentVersion]:
     environment = session.get(CourseEnvironment, environment_id)
     if environment is None or environment.usage_scope not in {"quick_practice", "both"}:
-        raise NotFoundError("Quick-practice template not found")
+        raise NotFoundError(t("quick_practice.template_not_found"))
     if not is_visible_to(session, environment=environment, user=user):
         # Same error as "does not exist": the audience must not be probeable.
-        raise NotFoundError("Quick-practice template not found")
+        raise NotFoundError(t("quick_practice.template_not_found"))
     version = session.exec(
         select(CourseEnvironmentVersion)
         .where(
@@ -117,7 +118,7 @@ def get_published_template(
         .order_by(col(CourseEnvironmentVersion.version).desc())
     ).first()
     if version is None:
-        raise NotFoundError("Published quick-practice template not found")
+        raise NotFoundError(t("quick_practice.published_version_not_found"))
     return environment, version
 
 
@@ -230,18 +231,24 @@ def _apply_session_topology(
                 directions.append((source, target, "any", None))
 
     errors: list[str] = []
+    planned = []
+    scope_vmids = {
+        request.vmid for request in machines_by_key.values() if request.vmid is not None
+    }
     for source, target, protocol, port in directions:
         if source.vmid is None or target.vmid is None:
             continue
         try:
-            class_network_service.allow_one_way(
-                session,
-                scope_id=practice.id,
-                comment_prefix=QUICK_NETWORK_COMMENT_PREFIX,
-                source_vmid=source.vmid,
-                target_vmid=target.vmid,
-                protocol=protocol,
-                port=port,
+            planned.extend(
+                class_network_service.plan_one_way(
+                    session,
+                    scope_id=practice.id,
+                    comment_prefix=QUICK_NETWORK_COMMENT_PREFIX,
+                    source_vmid=source.vmid,
+                    target_vmid=target.vmid,
+                    protocol=protocol,
+                    port=port,
+                )
             )
         except Exception:
             logger.exception(
@@ -251,6 +258,14 @@ def _apply_session_topology(
                 target.vmid,
             )
             errors.append(f"{source.vmid} → {target.vmid}: topology failed")
+    # 同步而非只建立：重試換過 vmid 的機器會留下指向舊 IP 的白名單
+    errors.extend(
+        class_network_service.sync_scope_rules(
+            comment_prefix=QUICK_NETWORK_COMMENT_PREFIX,
+            scope_vmids=scope_vmids,
+            planned=planned,
+        )
+    )
     return errors
 
 
@@ -511,7 +526,9 @@ def _machine_request(
     if node.source_type == "template" and node.source_template_id:
         template = session.get(VMTemplate, node.source_template_id)
         if template is None or template.status != VMTemplateStatus.ready:
-            raise BadRequestError(f"機器「{node.name}」的來源範本尚未就緒")
+            raise BadRequestError(
+                t("quick_practice.machine_template_not_ready", name=node.name)
+            )
 
     template_id: int | None = None
     ostemplate: str | None = None
@@ -528,7 +545,9 @@ def _machine_request(
         try:
             template_id = int(node.custom_image_ref or "0")
         except ValueError as exc:
-            raise BadRequestError(f"機器「{node.name}」的 VM 範本無效") from exc
+            raise BadRequestError(
+                t("quick_practice.machine_template_invalid", name=node.name)
+            ) from exc
         username = node.custom_username or "student"
 
     return VMRequestCreate(
@@ -581,7 +600,7 @@ def launch(
     )
     nodes = nodes_for_version(session, version_id=version.id)
     if not nodes:
-        raise BadRequestError("快速練習模板沒有機器")
+        raise BadRequestError(t("quick_practice.template_no_machines"))
 
     # Serialize launches for one user so simultaneous clicks cannot bypass the
     # one-active-session and rolling 24-hour limits.
@@ -589,7 +608,7 @@ def launch(
         select(User).where(User.id == user.id).with_for_update()
     ).one_or_none()
     if locked_user is None:
-        raise NotFoundError("User not found")
+        raise NotFoundError(t("quick_practice.user_not_found"))
 
     now = _utc_now()
     active_sessions = list(
@@ -602,7 +621,7 @@ def launch(
         ).all()
     )
     if sum(_session_has_live_request(session, item) for item in active_sessions) >= MAX_ACTIVE_SESSIONS_PER_USER:
-        raise BadRequestError("你已經有一個進行中的快速練習環境")
+        raise BadRequestError(t("quick_practice.active_session_exists"))
 
     recent_count = session.exec(
         select(func.count(col(QuickPracticeSession.id))).where(
@@ -617,7 +636,7 @@ def launch(
         )
     ).one()
     if int(recent_count or 0) >= MAX_SESSIONS_PER_24_HOURS:
-        raise BadRequestError("已達 24 小時內快速練習建立上限")
+        raise BadRequestError(t("quick_practice.daily_limit_reached"))
 
     if environment.max_concurrent_sessions:
         version_ids = list(
@@ -640,8 +659,10 @@ def launch(
         ]
         if len(running) >= environment.max_concurrent_sessions:
             raise BadRequestError(
-                "這個環境目前已額滿（同時最多 "
-                f"{environment.max_concurrent_sessions} 組），請稍後再試"
+                t(
+                    "quick_practice.environment_full",
+                    max=environment.max_concurrent_sessions,
+                )
             )
 
     quota_service.check_quota(
@@ -690,6 +711,9 @@ def launch(
             session=session,
             request_in=request_in,
             user=user,
+            # 整組共用 Session id 當群組鍵：placement 會把後續機器釘在
+            # 第一台選中的節點上，拓樸 edge 才有實際連通性可言。
+            placement_group_id=practice.id,
         )
         session.add(
             QuickPracticeSessionMachine(
@@ -721,7 +745,7 @@ def end_session(
     """
     practice = session.get(QuickPracticeSession, practice_id)
     if practice is None or (practice.user_id != user.id and not is_admin(user)):
-        raise NotFoundError("Quick-practice session not found")
+        raise NotFoundError(t("quick_practice.session_not_found"))
     if practice.status in {"reclaiming", "reclaimed"} or practice.reclaimed_at:
         return practice
     _queue_session_reclaim(session, practice=practice)
@@ -756,7 +780,7 @@ def list_sessions(
 def serialize_session(session: Session, item: QuickPracticeSession) -> dict:
     version = session.get(CourseEnvironmentVersion, item.environment_version_id)
     if version is None:
-        raise NotFoundError("Quick-practice environment version not found")
+        raise NotFoundError(t("quick_practice.version_not_found"))
     environment = _environment_for_version(session, version)
     rows = list(
         session.exec(

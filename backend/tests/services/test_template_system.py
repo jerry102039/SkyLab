@@ -322,7 +322,7 @@ async def test_request_clone_student_batch_denied(
 ) -> None:
     from app.schemas.template import TemplateCloneRequest
 
-    with pytest.raises(PermissionDeniedError, match="batch"):
+    with pytest.raises(PermissionDeniedError, match="批次"):
         await clone_service.request_clone(
             session=None,  # type: ignore[arg-type]
             user=make_user("student"),
@@ -346,7 +346,7 @@ async def test_request_clone_student_quota_exceeded(
         ],
     )
 
-    with pytest.raises(ConflictError, match="quota"):
+    with pytest.raises(ConflictError, match="配額"):
         await clone_service.request_clone(
             session=None,  # type: ignore[arg-type]
             user=make_user("student"),
@@ -396,7 +396,7 @@ async def test_request_clone_rejects_not_ready_template(
         template_service, "_require_view", lambda session, user, template: None
     )
 
-    with pytest.raises(ConflictError, match="not ready"):
+    with pytest.raises(ConflictError, match="尚未就緒"):
         await clone_service.request_clone(
             session=None,  # type: ignore[arg-type]
             user=make_user("teacher"),

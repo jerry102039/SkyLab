@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
+import { useTranslation } from "react-i18next";
 import MIcon from "../MIcon";
 import { useToast } from "../../hooks/useToast";
 import { AiPveLogService } from "../../services/aiPveLog";
@@ -17,7 +18,19 @@ export function sanitizeAiPveContent(value) {
     .trim();
 }
 
+/** 將 AI 回覆以安全的 Markdown 呈現，避免格式標記以原始文字顯示。 */
+export function AiPveMarkdownContent({ content }) {
+  return (
+    <div className={`${styles.msgContent} ${styles.msgMarkdown}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+        {sanitizeAiPveContent(content)}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 export default function AiPveChat({ initialPrompt = "", compact = false, fill = false }) {
+  const { t } = useTranslation("components");
   const toast = useToast();
   const initialPromptRef = useRef(String(initialPrompt ?? "").trim());
   const initialPromptHandledRef = useRef(false);
@@ -26,7 +39,7 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "我是 AI PVE 維運助手。你可以詢問全站節點資源、VM/LXC 狀態、儲存空間使用率等資訊。",
+      content: t("AiPveChat.introMessage"),
     },
   ]);
   const [chatHistory, setChatHistory] = useState([]);
@@ -47,7 +60,7 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
       ...previous,
       {
         role: "assistant",
-        content: response.reply || response.error || "指令執行完畢",
+        content: response.reply || response.error || t("AiPveChat.commandDoneFallback"),
         tools: response.tools_called,
       },
     ]);
@@ -61,7 +74,7 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
         setPendingTool({
           token: sshTool.result.confirm_token,
           command,
-          reason: sshTool.args?.reason || "執行系統指令",
+          reason: sshTool.args?.reason || t("AiPveChat.defaultConfirmReason"),
         });
         setPendingCommand(command);
       }
@@ -85,11 +98,11 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
       );
       handleChatResponse(response);
     } catch (error) {
-      const detail = error?.message ?? "AI-PVE 對話失敗";
+      const detail = error?.message ?? t("AiPveChat.chatFailedFallback");
       toast.error(detail);
       setMessages((previous) => [
         ...previous,
-        { role: "assistant", content: `發生錯誤：${detail}` },
+        { role: "assistant", content: t("AiPveChat.errorOccurred", { detail }) },
       ]);
     } finally {
       setIsSending(false);
@@ -112,7 +125,7 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
     if (!pendingTool) return;
     const command = pendingCommand.trim();
     if (approved && !command) {
-      toast.error("請先輸入要執行的指令");
+      toast.error(t("AiPveChat.enterCommandFirst"));
       return;
     }
     setIsSending(true);
@@ -130,7 +143,7 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
       if (!approved) {
         setMessages((previous) => [
           ...previous,
-          { role: "assistant", content: "已取消執行指令。" },
+          { role: "assistant", content: t("AiPveChat.commandCancelled") },
         ]);
         setIsSending(false);
         return;
@@ -152,7 +165,7 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
       const response = await AiPveLogService.chat({ messages: updatedHistory });
       handleChatResponse(response);
     } catch (error) {
-      toast.error(error?.message ?? "確認失敗");
+      toast.error(error?.message ?? t("AiPveChat.confirmFailed"));
     } finally {
       setIsSending(false);
     }
@@ -168,20 +181,20 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
           >
             <div className={styles.msgHead}>
               <MIcon name={message.role === "assistant" ? "smart_toy" : "person"} size={16} />
-              <span>{message.role === "assistant" ? "AI-PVE" : "你"}</span>
+              <span>{message.role === "assistant" ? "AI-PVE" : t("AiPveChat.you")}</span>
             </div>
-            {/* 維運回覆常是節點清單、用量表格與指令片段，直接印純文字會看到
-                一堆星號與管線符號 */}
-            <div className={styles.msgContent}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+            {message.role === "assistant" ? (
+              <AiPveMarkdownContent content={message.content} />
+            ) : (
+              <p className={`${styles.msgContent} ${styles.msgPlain}`}>
                 {sanitizeAiPveContent(message.content)}
-              </ReactMarkdown>
-            </div>
+              </p>
+            )}
             {message.tools?.length > 0 && (
               <div className={styles.toolRow}>
                 <span className={styles.toolLabel}>
                   <MIcon name="terminal" size={14} />
-                  系統呼叫：
+                  {t("AiPveChat.toolCallsLabel")}
                 </span>
                 {message.tools.map((tool, toolIndex) => (
                   <span key={`${tool.name}-${toolIndex}`} className={styles.toolBadge}>
@@ -197,19 +210,19 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
           <div className={styles.pendingBox}>
             <div className={styles.pendingHead}>
               <MIcon name="warning" size={18} />
-              AI 請求執行安全指令
+              {t("AiPveChat.pendingHeading")}
             </div>
             <p className={styles.pendingReason}>
-              <strong>目的：</strong>
+              <strong>{t("AiPveChat.pendingReasonLabel")}</strong>
               {pendingTool.reason}
             </p>
             <textarea
               value={pendingCommand}
               onChange={(event) => setPendingCommand(event.target.value)}
-              placeholder="可在此修改後再允許執行"
+              placeholder={t("AiPveChat.pendingCommandPlaceholder")}
               disabled={isSending}
             />
-            <p className={styles.pendingHint}>為保護伺服器安全，請確認指令內容後再允許執行。</p>
+            <p className={styles.pendingHint}>{t("AiPveChat.pendingHint")}</p>
             <div className={styles.pendingActions}>
               <button
                 type="button"
@@ -218,7 +231,7 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
                 disabled={isSending || pendingCommand.trim().length === 0}
               >
                 <MIcon name="check" size={16} />
-                允許執行
+                {t("AiPveChat.allowButton")}
               </button>
               <button
                 type="button"
@@ -227,7 +240,7 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
                 disabled={isSending}
               >
                 <MIcon name="close" size={16} />
-                拒絕
+                {t("AiPveChat.rejectButton")}
               </button>
             </div>
           </div>
@@ -236,7 +249,7 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
         {isSending && (
           <div className={styles.thinking}>
             <span className={styles.pulse} />
-            AI-PVE 思考中...
+            {t("AiPveChat.thinking")}
           </div>
         )}
         <div ref={logEndRef} />
@@ -246,13 +259,13 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
         <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="繼續描述問題，或請 AI 進一步確認節點與機器狀態"
+          placeholder={t("AiPveChat.composerPlaceholder")}
           disabled={isSending || Boolean(pendingTool)}
         />
         <div className={styles.composerActions}>
           <button type="submit" className={styles.btnPrimary} disabled={!canSend}>
             <MIcon name="send" size={16} />
-            發送訊息
+            {t("AiPveChat.sendButton")}
           </button>
         </div>
       </form>

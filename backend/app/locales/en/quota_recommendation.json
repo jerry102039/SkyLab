@@ -1,0 +1,19 @@
+{
+  "quota.violation.cpu": "CPU quota exceeded (current {used} + additional {delta} > limit {limit} cores)",
+  "quota.violation.memory": "Memory quota exceeded (current {used} + additional {delta} > limit {limit} MB)",
+  "quota.violation.disk": "Disk quota exceeded (current {used} + additional {delta} > limit {limit} GB)",
+  "quota.violation.instances": "Instance quota exceeded (current {used} + additional {delta} > limit {limit} instances)",
+  "recommendation.usageLabel.coursework": "coursework",
+  "recommendation.usageLabel.teaching": "teaching service",
+  "recommendation.usageLabel.research": "research use",
+  "recommendation.usageLabel.general": "general use",
+  "recommendation.scopeLabel.personal": "personal use",
+  "recommendation.scopeLabel.shared": "shared use",
+  "recommendation.submissionReason": "Requesting a {env} to run {service}, for {usage} in {scope}, configured with {cores} vCPU, {memory} MB RAM, {disk} GB Disk, to match current functional needs and avoid resource waste.",
+  "recommendation.gpuCandidateReason": "This GPU currently has available capacity, making it suitable as the default recommendation.",
+  "recommendation.gpuReasonSelected": "AI selected the best-fit mapping based on currently available GPUs and node status.",
+  "recommendation.gpuReasonInsufficient": "The user explicitly requires a GPU, but there is currently insufficient GPU capacity available.",
+  "recommendation.recommendedPathWhy": "AI planned this recommended path based on the requirements and available devices.",
+  "recommendation.environmentReason.vm": "Using a VM to meet operating system or environment requirements.",
+  "recommendation.environmentReason.lxc": "Using LXC to provide a more lightweight service deployment."
+}

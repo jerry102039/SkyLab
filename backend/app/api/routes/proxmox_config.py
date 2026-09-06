@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.serialization import Encoding
 from fastapi import APIRouter, Body, HTTPException
 
 from app.api.deps import AdminUser, SessionDep
+from app.core.i18n import t
 from app.domain.placement.constants import DEFAULT_PLACEMENT_STRATEGY
 from app.exceptions import BadRequestError
 from app.infrastructure.proxmox import (
@@ -348,7 +349,7 @@ def _resolve_credentials(
     elif existing:
         password = proxmox_config_repo.get_decrypted_password(existing)
     else:
-        raise BadRequestError("初次設定必須提供密碼")
+        raise BadRequestError(t("proxmoxConfig.passwordRequired"))
 
     # 決定 CA cert / verify_ssl
     ca_cert = config_in.ca_cert
@@ -420,7 +421,7 @@ def update_proxmox_config(
         if proxmox_connection_repo.get_all_connections(session):
             password = ""
         else:
-            raise BadRequestError("初次設定必須提供密碼")
+            raise BadRequestError(t("proxmoxConfig.passwordRequired"))
 
     if config_in.ca_cert:
         try:
@@ -428,7 +429,7 @@ def update_proxmox_config(
                 config_in.ca_cert.encode(), default_backend()
             )
         except Exception:
-            raise BadRequestError("CA 憑證格式無效，請貼上正確的 PEM 格式內容")
+            raise BadRequestError(t("proxmoxConfig.invalidCaCert"))
 
     config = proxmox_config_repo.upsert_proxmox_config(
         session=session,
@@ -709,7 +710,7 @@ def create_connection(
                 conn_in.ca_cert.encode(), default_backend()
             )
         except Exception:
-            raise BadRequestError("CA 憑證格式無效，請貼上正確的 PEM 格式內容")
+            raise BadRequestError(t("proxmoxConfig.invalidCaCert"))
 
     # 第一筆連線自動成為預設
     is_default = conn_in.is_default or not proxmox_connection_repo.get_all_connections(
@@ -759,7 +760,7 @@ def update_connection(
                 conn_in.ca_cert.encode(), default_backend()
             )
         except Exception:
-            raise BadRequestError("CA 憑證格式無效，請貼上正確的 PEM 格式內容")
+            raise BadRequestError(t("proxmoxConfig.invalidCaCert"))
 
     conn = proxmox_connection_repo.update_connection(
         session,
@@ -807,7 +808,7 @@ def delete_connection(
         if c.id != connection_id
     ]
     if conn.is_default and others:
-        raise BadRequestError("此連線為預設連線，請先將其他連線設為預設再刪除")
+        raise BadRequestError(t("proxmoxConfig.cannotDeleteDefault"))
 
     # 先清掉該連線的節點對應 Storage 記錄，再刪節點與連線
     node_names = {
@@ -862,11 +863,13 @@ def test_connection_by_id(
         node_names = [n.get("node", "") for n in nodes]
         return ProxmoxConnectionTestResult(
             success=True,
-            message=f"連線成功，偵測到節點：{', '.join(node_names)}",
+            message=t("proxmoxConfig.connectionSuccess", nodes=", ".join(node_names)),
         )
     except Exception as e:
         logger.warning(f"Proxmox connection test failed for {connection_id}: {e}")
-        return ProxmoxConnectionTestResult(success=False, message="連線失敗，請檢查設定與憑證")
+        return ProxmoxConnectionTestResult(
+            success=False, message=t("proxmoxConfig.connectionFailed")
+        )
 
 
 @router.post(
@@ -890,7 +893,7 @@ def sync_connection(
         logger.warning(f"Connection sync failed for {connection_id}: {e}")
         return ConnectionSyncResult(
             success=False, connection_id=connection_id, nodes=[],
-            storage_count=0, error="同步失敗，請確認連線設定",
+            storage_count=0, error=t("proxmoxConfig.syncFailed"),
         )
 
     invalidate_proxmox_client()
@@ -931,7 +934,7 @@ def sync_now(
         if config is None:
             return SyncNowResult(
                 success=False, nodes=[], storage_count=0,
-                error="尚未設定 Proxmox 連線資訊",
+                error=t("proxmoxConfig.notConfigured"),
             )
         from app.models.proxmox_connection import ProxmoxConnection
 
@@ -961,7 +964,7 @@ def sync_now(
             errors.append(str(e))
         except Exception as e:
             logger.warning(f"sync-now failed for connection {conn.name}: {e}")
-            errors.append(f"連線「{conn.name}」同步失敗")
+            errors.append(t("proxmoxConfig.connectionSyncFailed", name=conn.name))
 
     invalidate_proxmox_client()
 
@@ -1018,7 +1021,9 @@ def test_proxmox_connection(
     """測試目前設定的 Proxmox 連線"""
     config = proxmox_config_repo.get_proxmox_config(session)
     if config is None:
-        return ProxmoxConnectionTestResult(success=False, message="尚未設定 Proxmox 連線資訊")
+        return ProxmoxConnectionTestResult(
+            success=False, message=t("proxmoxConfig.notConfigured")
+        )
 
     try:
         from proxmoxer import ProxmoxAPI
@@ -1042,8 +1047,10 @@ def test_proxmox_connection(
         node_names = [n.get("node", "") for n in nodes]
         return ProxmoxConnectionTestResult(
             success=True,
-            message=f"連線成功，偵測到節點：{', '.join(node_names)}",
+            message=t("proxmoxConfig.connectionSuccess", nodes=", ".join(node_names)),
         )
     except Exception as e:
         logger.warning(f"Proxmox connection test failed: {e}")
-        return ProxmoxConnectionTestResult(success=False, message="連線失敗，請檢查設定與憑證")
+        return ProxmoxConnectionTestResult(
+            success=False, message=t("proxmoxConfig.connectionFailed")
+        )

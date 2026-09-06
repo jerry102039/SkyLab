@@ -122,10 +122,31 @@
 }
 
 /* ── Tabs ── */
+/* 分頁與搜尋擺同一排，省下的垂直空間留給右側詳情表單與審核按鈕 */
+.tabsRow {
+  display: flex;
+  align-items: flex-end;
+  gap: $spacing-16;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--color-border);
+}
+
 .tabs {
   display: flex;
   gap: $spacing-4;
-  border-bottom: 1px solid var(--color-border);
+  /* 手機仍讓搜尋換到下一行，桌面才緊接在分頁按鈕旁邊 */
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  @include respond-to(md) {
+    flex: 0 1 auto;
+  }
 }
 
 .tab {
@@ -151,23 +172,18 @@
   }
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: $spacing-8;
-  flex-wrap: wrap;
-}
-
 .search {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin-bottom: $spacing-8;
   padding: 6px $spacing-8 6px 10px;
   border: 1px solid var(--color-border);
   border-radius: $radius-8;
   background: var(--color-surface);
   color: var(--color-text-muted);
-  min-width: 280px;
+  flex: 0 1 280px;
+  min-width: 200px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -460,15 +476,36 @@
   }
 }
 
+/* 審核區釘在詳情欄底部，備註與按鈕同一排：上方資訊再長，
+   審核動作都不必捲動就看得到 */
+.reviewBar {
+  display: flex;
+  align-items: flex-end;
+  gap: $spacing-16;
+  flex-wrap: wrap;
+  margin: auto (-$spacing-16) (-$spacing-16);
+  padding: $spacing-8 $spacing-16 $spacing-16;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0 0 $radius-12 $radius-12;
+  background: var(--color-surface);
+
+  @include respond-to(lg) {
+    position: sticky;
+    bottom: 0;
+  }
+}
+
 .commentField {
   @include flex-column;
   gap: $spacing-8;
+  flex: 1 1 240px;
+  min-width: 0;
   color: var(--color-text-primary);
   font-size: $font-size-14;
   font-weight: $font-weight-500;
 
   textarea {
-    min-height: 96px;
+    min-height: 56px;
     resize: vertical;
     padding: 10px 12px;
     border: 1px solid var(--color-border);
