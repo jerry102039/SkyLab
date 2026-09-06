@@ -179,7 +179,7 @@ class AuthorizedKeysResponse(BaseModel):
     message: str
 
 
-# ===== 標籤與備註 =====
+# ===== 標籤 =====
 
 _TAG_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_\-\+\.]{0,31}$")
 
@@ -187,18 +187,14 @@ _TAG_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_\-\+\.]{0,31}$")
 class ResourceMetadataPublic(BaseModel):
     vmid: int
     tags: list[str] = Field(default_factory=list)
-    description: str | None = None
 
 
 class ResourceMetadataUpdate(BaseModel):
-    tags: list[str] | None = Field(default=None, max_length=16)
-    description: str | None = Field(default=None, max_length=4000)
+    tags: list[str] = Field(max_length=16)
 
     @field_validator("tags")
     @classmethod
-    def _validate_tags(cls, value: list[str] | None) -> list[str] | None:
-        if value is None:
-            return None
+    def _validate_tags(cls, value: list[str]) -> list[str]:
         cleaned: list[str] = []
         for raw in value:
             tag = str(raw).strip().lower()
@@ -209,12 +205,6 @@ class ResourceMetadataUpdate(BaseModel):
             if tag not in cleaned:
                 cleaned.append(tag)
         return cleaned
-
-    @model_validator(mode="after")
-    def _at_least_one(self) -> "ResourceMetadataUpdate":
-        if self.tags is None and self.description is None:
-            raise ValueError("nothing to update")
-        return self
 
 
 # ===== 共享與轉移 =====

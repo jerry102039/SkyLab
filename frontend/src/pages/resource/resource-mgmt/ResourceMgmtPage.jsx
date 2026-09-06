@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import styles from "./ResourceMgmtPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import PowerMenu from "../../../components/PowerMenu/PowerMenu";
+import TemplateConvertDialog from "../../../components/TemplateConvertDialog/TemplateConvertDialog";
+import useDialogPresence from "../../../hooks/useDialogPresence";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import { useToast } from "../../../hooks/useToast";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
@@ -398,6 +400,12 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
   const [menuOpen, setMenuOpen]           = useState(false);
   const [menuClosing, setMenuClosing]     = useState(false);
   const [consoleOpen, setConsoleOpen]     = useState(false);
+  const [convertOpen, setConvertOpen]     = useState(false);
+  const convertDialog = useDialogPresence(convertOpen);
+  /* 課堂機器由老師統一管理，不轉範本；申請中的佔位列也沒有實體可轉 */
+  const canConvertTemplate = resource.allocation_scope !== "teaching_class"
+    && !resource.is_placeholder
+    && resource.vmid > 0;
   const menuBtnRef = useRef(null);
 
   function closeMenu() {
@@ -525,6 +533,7 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
                     actionLoading={actionLoading}
                     onControl={handleControl}
                     onDeleteClick={() => { closeMenu(); setDeleteConfirm(true); }}
+                    onConvertTemplate={canConvertTemplate ? () => { closeMenu(); setConvertOpen(true); } : undefined}
                     onClose={closeMenu}
                     anchorRef={menuBtnRef}
                     closing={menuClosing}
@@ -570,6 +579,15 @@ function ResourceRow({ resource, onUpdated, onDeleted, selected = false, onToggl
       )}
       {consoleOpen && !isLxc && createPortal(
         <VncDialog resource={resource} onClose={() => setConsoleOpen(false)} />,
+        document.body,
+      )}
+      {convertDialog.open && createPortal(
+        <TemplateConvertDialog
+          resource={resource}
+          closing={convertDialog.closing}
+          onClose={() => setConvertOpen(false)}
+          onDone={() => onDeleted(resource.vmid)}
+        />,
         document.body,
       )}
     </>

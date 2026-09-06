@@ -1,4 +1,4 @@
-"""資源進階設定：規格摘要、開機選項（onboot / 開機順序 / ISO）、標籤與備註。
+"""資源進階設定：規格摘要、開機選項（onboot / 開機順序 / ISO）、標籤。
 
 Proxmox 的 guest config 是這些設定的 source of truth，這裡只做讀寫與驗證，
 不在 DB 另存副本。
@@ -309,7 +309,7 @@ def update_boot_options(
     )
 
 
-# ─── 標籤與備註 ───────────────────────────────────────────────────────────────
+# ─── 標籤 ─────────────────────────────────────────────────────────────────────
 
 
 def parse_tags(raw: Any) -> list[str]:
@@ -326,12 +326,7 @@ def get_metadata(*, vmid: int, resource_info: dict[str, Any]) -> ResourceMetadat
     except Exception as exc:
         logger.error("Failed to read config for %s: %s", vmid, exc)
         raise ProxmoxError(t("resource_settings.readConfigFailed", vmid=vmid))
-    description = config.get("description")
-    return ResourceMetadataPublic(
-        vmid=vmid,
-        tags=parse_tags(config.get("tags")),
-        description=str(description) if description else None,
-    )
+    return ResourceMetadataPublic(vmid=vmid, tags=parse_tags(config.get("tags")))
 
 
 def update_metadata(
@@ -345,28 +340,14 @@ def update_metadata(
     rtype = _rtype(resource_info)
     node = resource_info["node"]
     params: dict[str, Any] = {}
-    to_delete: list[str] = []
-    changes: list[str] = []
-
-    if data.tags is not None:
-        if data.tags:
-            params["tags"] = ";".join(data.tags)
-            changes.append(f"tags={params['tags']}")
-        else:
-            to_delete.append("tags")
-            changes.append("tags=(none)")
-    if data.description is not None:
-        text = data.description.strip()
-        if text:
-            params["description"] = text
-            changes.append("description updated")
-        else:
-            to_delete.append("description")
-            changes.append("description cleared")
+    if data.tags:
+        params["tags"] = ";".join(data.tags)
+        changes = f"tags={params['tags']}"
+    else:
+        params["delete"] = "tags"
+        changes = "tags=(none)"
 
     try:
-        if to_delete:
-            params["delete"] = ",".join(to_delete)
         proxmox_service.update_config(node, vmid, rtype, **params)
     except Exception as exc:
         logger.error("Failed to update metadata for %s: %s", vmid, exc)
@@ -379,7 +360,7 @@ def update_metadata(
         user_id=user_id,
         vmid=vmid,
         action="config_update",
-        details=f"Metadata updated on {rtype} {vmid}: {', '.join(changes)}",
+        details=f"Tags updated on {rtype} {vmid}: {changes}",
     )
     return get_metadata(vmid=vmid, resource_info=resource_info)
 

@@ -124,16 +124,22 @@ def test_lxc_has_no_boot_order(fake_proxmox: SimpleNamespace) -> None:
 def test_metadata_roundtrip(fake_proxmox: SimpleNamespace) -> None:
     meta = svc.get_metadata(vmid=150, resource_info=_info())
     assert meta.tags == ["db", "final"]
-    assert meta.description == "期末專題"
 
     svc.update_metadata(
         session=None,
         vmid=150,
         resource_info=_info(),
         user_id=None,
-        data=ResourceMetadataUpdate(tags=["Web", "web", "db"], description="  "),
+        data=ResourceMetadataUpdate(tags=["Web", "web", "db"]),
     )
-    assert fake_proxmox.updates == [{"tags": "web;db", "delete": "description"}]
+    svc.update_metadata(
+        session=None,
+        vmid=150,
+        resource_info=_info(),
+        user_id=None,
+        data=ResourceMetadataUpdate(tags=[]),
+    )
+    assert fake_proxmox.updates == [{"tags": "web;db"}, {"delete": "tags"}]
 
 
 def test_metadata_tag_validation() -> None:

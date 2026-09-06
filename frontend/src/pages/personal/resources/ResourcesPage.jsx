@@ -6,6 +6,8 @@ import { useAuth } from "../../../contexts/AuthContext";
 import styles from "./ResourcesPage.module.scss";
 import MIcon from "../../../components/MIcon";
 import PowerMenu from "../../../components/PowerMenu/PowerMenu";
+import TemplateConvertDialog from "../../../components/TemplateConvertDialog/TemplateConvertDialog";
+import useDialogPresence from "../../../hooks/useDialogPresence";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import { ResourcesService } from "../../../services/resources";
 import {
@@ -235,12 +237,20 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
   const { user } = useAuth();
   /* VMID 是系統內部編號，僅管理員／老師看得到 */
   const showVmid = user?.is_superuser || user?.role === "admin" || user?.role === "teacher";
+  /* 轉成範本只給老師／管理員，且只有自己能管理的個人機器 */
+  const canConvertTemplate = showVmid
+    && resource.can_manage !== false
+    && resource.allocation_scope !== "teaching_class"
+    && !resource.is_placeholder
+    && resource.vmid > 0;
   const [actionLoading, setActionLoading] = useState(null);
   const [deleteConfirm, setDeleteConfirm]  = useState(false);
   const [deleting, setDeleting]            = useState(false);
   const [menuOpen, setMenuOpen]            = useState(false);
   const [menuClosing, setMenuClosing]      = useState(false);
   const [consoleOpen, setConsoleOpen]      = useState(false);
+  const [convertOpen, setConvertOpen]      = useState(false);
+  const convertDialog = useDialogPresence(convertOpen);
   const menuBtnRef = useRef(null);
 
   function closeMenu() {
@@ -311,7 +321,7 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
           </button>
           {actionLoading && <MIcon name="hourglass_empty" size={16} />}
           <div className={styles.menuWrap}>
-            {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onDeleteClick={resource.can_delete === false ? undefined : () => { closeMenu(); setDeleteConfirm(true); }} onClose={closeMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
+            {menuOpen && <PowerMenu resource={resource} actionLoading={actionLoading} onControl={handleControl} onDeleteClick={resource.can_delete === false ? undefined : () => { closeMenu(); setDeleteConfirm(true); }} onConvertTemplate={canConvertTemplate ? () => { closeMenu(); setConvertOpen(true); } : undefined} onClose={closeMenu} anchorRef={menuBtnRef} closing={menuClosing} />}
             <button ref={menuBtnRef} type="button" className={`${styles.menuBtn} ${menuOpen ? styles.menuBtnActive : ""}`} onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)} title={t("ResourceRow.moreActions")}><MIcon name="more_vert" size={18} /></button>
           </div>
         </div> : <span className={styles.deletedNote}>{STATUS_MAP[resource.status]?.labelKey ? t(STATUS_MAP[resource.status].labelKey) : resource.status}</span>}
@@ -320,6 +330,7 @@ function ResourceRow({ resource, onUpdated, onDeleted }) {
     {deleteConfirm && createPortal(<ConfirmModal title={t("ResourceRow.confirmDeleteTitle")} desc={showVmid ? t("ResourceRow.confirmDeleteDescWithVmid", { name: resource.name, vmid: resource.vmid }) : t("ResourceRow.confirmDeleteDescNoVmid", { name: resource.name })} confirmLabel={t("ResourceRow.confirmDeleteLabel")} danger loading={deleting} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />, document.body)}
     {consoleOpen && isLxc && createPortal(<TerminalDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
     {consoleOpen && !isLxc && createPortal(<VncDialog resource={resource} onClose={() => setConsoleOpen(false)} />, document.body)}
+    {convertDialog.open && createPortal(<TemplateConvertDialog resource={resource} closing={convertDialog.closing} onClose={() => setConvertOpen(false)} onDone={() => onDeleted(resource.vmid)} />, document.body)}
   </>;
 }
 
