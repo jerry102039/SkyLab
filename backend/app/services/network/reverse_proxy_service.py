@@ -14,6 +14,7 @@ import yaml
 
 from app.exceptions import BadRequestError, ProxmoxError
 from app.schemas.reverse_proxy import ReverseProxySetupContext, ReverseProxyZoneOption
+from app.services.network.publish_target_policy import assert_publishable_vm_ip
 
 logger = logging.getLogger(__name__)
 _HOSTNAME_LABEL_PATTERN = re.compile(
@@ -331,6 +332,9 @@ def apply_reverse_proxy_rule(
     from app.services.network import cloudflare_service  # noqa: PLC0415
 
     ensure_reverse_proxy_ready(session)
+    # vm_ip 來自 guest agent 回報，VM 擁有者可偽造：必須確認它真的是
+    # 平台配發的 VM 位址，而不是 Gateway / PVE 節點等內部主機
+    assert_publishable_vm_ip(session, vm_ip)
 
     if getattr(session, "get", lambda *_: None)(Resource, vmid) is None:
         raise BadRequestError(f"VMID {vmid} 不在 SkyLab 資源清單中，無法建立反向代理規則")
@@ -439,6 +443,7 @@ def update_reverse_proxy_rule(
     from app.services.network import cloudflare_service  # noqa: PLC0415
 
     ensure_reverse_proxy_ready(session)
+    assert_publishable_vm_ip(session, vm_ip)
     rule = rp_repo.get_rule(session, _uuid.UUID(rule_id))  # type: ignore[arg-type]
     if rule is None:
         raise BadRequestError(f"反向代理規則 {rule_id} 不存在")

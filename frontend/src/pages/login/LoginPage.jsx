@@ -59,6 +59,13 @@ function clearResetTokenFromUrl() {
   window.history.replaceState(null, "", url.toString());
 }
 
+function clearDeviceCodeFromUrl() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("device_code");
+  window.history.replaceState(null, "", url.toString());
+}
+
 /* ─── 共用元件 ─────────────────────────────────────────── */
 
 function PasswordField({ id, label, value, onChange, disabled, placeholder }) {
@@ -376,7 +383,33 @@ function LoginView({ onForgot, onRegister, deviceApproval = false }) {
   );
 }
 
-function DeviceApprovalView({ status, error }) {
+function DeviceApprovalView({ status, error, user, onApprove, onDecline }) {
+  if (status === "idle") {
+    return (
+      <>
+        <h1 className={styles.title}>授權桌面 App 登入</h1>
+        <p className={styles.subtitle}>SkyLab Connect 要求以您的帳號登入</p>
+        <div className={styles.deviceNotice}>
+          <MIcon name="devices" size={20} />
+          <span>
+            將以 <strong>{user?.email ?? "目前帳號"}</strong> 的身份授權桌面 App
+            存取您的 VM。
+          </span>
+        </div>
+        <p className={styles.deviceHelp}>
+          只有在您剛才親自在 SkyLab Connect 按下「登入」時才按下授權；
+          若這個連結是別人傳給您的，請按「取消」。
+        </p>
+        <button type="button" className={styles.btn} onClick={onApprove}>
+          授權此裝置
+        </button>
+        <button type="button" className={styles.backBtn} onClick={onDecline}>
+          取消
+        </button>
+      </>
+    );
+  }
+
   if (status === "approved") {
     return (
       <>
@@ -711,34 +744,38 @@ export default function LoginPage() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  useEffect(() => {
+  // 裝置授權必須由使用者明確按下「授權此裝置」，不可在頁面載入時自動核准：
+  // 否則任何人把 /login?device_code=... 丟給已登入的使用者，就能拿到對方
+  // 帳號的桌面 App token（釣魚）。
+  const approveDevice = async () => {
     if (!deviceCode || !user) return;
 
     const approvalKey = `${deviceCode}:${user.id ?? user.email ?? "current"}`;
     if (approvalKeyRef.current === approvalKey) return;
     approvalKeyRef.current = approvalKey;
-    let cancelled = false;
 
     setDeviceApproval({ status: "approving", error: "" });
-    apiPost("/api/v1/desktop-client/auth/approve", {
-      device_code: deviceCode,
-    })
-      .then(() => {
-        if (!cancelled) setDeviceApproval({ status: "approved", error: "" });
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setDeviceApproval({
-            status: "error",
-            error: err?.message ?? "授權失敗，請重新產生登入連結",
-          });
-        }
+    try {
+      await apiPost("/api/v1/desktop-client/auth/approve", {
+        device_code: deviceCode,
       });
+      setDeviceApproval({ status: "approved", error: "" });
+    } catch (err) {
+      approvalKeyRef.current = "";
+      setDeviceApproval({
+        status: "error",
+        error: err?.message ?? "授權失敗，請重新產生登入連結",
+      });
+    }
+  };
 
-    return () => {
-      cancelled = true;
-    };
-  }, [deviceCode, user]);
+  const declineDevice = () => {
+    clearDeviceCodeFromUrl();
+    setDeviceCode("");
+    setDeviceApproval({ status: "idle", error: "" });
+    // 已登入使用者回到首頁（整頁重載讓 App 重新判斷路由）
+    window.location.replace("/");
+  };
 
   const goLogin = () => {
     clearResetTokenFromUrl();
@@ -755,6 +792,9 @@ export default function LoginPage() {
           <DeviceApprovalView
             status={deviceApproval.status}
             error={deviceApproval.error}
+            user={user}
+            onApprove={approveDevice}
+            onDecline={declineDevice}
           />
         </div>
       </div>

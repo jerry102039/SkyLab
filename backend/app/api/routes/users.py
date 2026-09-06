@@ -92,9 +92,13 @@ async def upload_avatar_me(
     ext = AVATAR_CONTENT_TYPES.get((file.content_type or "").lower())
     if not ext:
         raise HTTPException(status_code=400, detail="僅支援 PNG / JPEG / WebP / GIF 圖片")
-    data = await file.read()
-    if len(data) > AVATAR_MAX_BYTES:
-        raise HTTPException(status_code=400, detail="圖片大小不可超過 2MB")
+    # 邊讀邊檢查大小，超過上限立即中止，避免先把整個檔案讀進記憶體
+    buffer = bytearray()
+    while chunk := await file.read(64 * 1024):
+        buffer.extend(chunk)
+        if len(buffer) > AVATAR_MAX_BYTES:
+            raise HTTPException(status_code=400, detail="圖片大小不可超過 2MB")
+    data = bytes(buffer)
 
     AVATAR_DIR.mkdir(parents=True, exist_ok=True)
     for old in AVATAR_DIR.glob(f"{current_user.id}.*"):
