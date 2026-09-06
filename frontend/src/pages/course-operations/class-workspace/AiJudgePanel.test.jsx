@@ -12,6 +12,7 @@ import {
   getPendingRubricItemIds,
   getSessionMenuPosition,
   getSelectedRubricSource,
+  getScriptCreationDestination,
   resolveActiveSessionId,
 } from "./AiJudgePanel";
 import { RUBRIC_POLISH_PROMPT } from "../../../services/aiJudge";
@@ -36,7 +37,7 @@ describe("ChatPanel", () => {
     expect(html).toContain("清除內容");
   });
 
-  test("在聊天室提供潤飾評分表與資料來源入口，不再提供自動檢測支援按鈕", () => {
+  test("在聊天室提供 AI 一鍵整理與資料來源入口，並在停留時說明用途", () => {
     const html = renderToStaticMarkup(
       <ChatPanel
         messages={[]}
@@ -47,7 +48,8 @@ describe("ChatPanel", () => {
       />,
     );
 
-    expect(html).toContain(">潤飾評分表</button>");
+    expect(html).toContain(">AI一鍵整理</button>");
+    expect(html).toContain('title="(好用) AI幫助你把評分表規則化，後續方便腳本生成"');
     expect(html).toContain("資料來源");
     expect(html).toContain('aria-controls="ai-chat-data-sources"');
     expect(html).not.toContain("評分表來源");
@@ -91,6 +93,68 @@ describe("ChatPanel", () => {
     expect(html).toContain('aria-label="新增附件"');
     expect(html).toContain("requirements.md");
     expect(html).toContain("已讀取");
+  });
+
+  test("聊天室整合製作檢查腳本按鈕，有評分表時才可點擊", () => {
+    const withScript = renderToStaticMarkup(
+      <ChatPanel
+        messages={[]}
+        onSendMessage={() => {}}
+        isLoading={false}
+        hasRubric
+        onCreateScript={() => {}}
+        canCreateScript
+      />,
+    );
+
+    expect(withScript).toContain("製作檢查腳本");
+    expect(withScript).not.toContain("匯出 Excel");
+    expect(withScript).not.toContain("匯出中");
+
+    const withoutItems = renderToStaticMarkup(
+      <ChatPanel
+        messages={[]}
+        onSendMessage={() => {}}
+        isLoading={false}
+        hasRubric
+        onCreateScript={() => {}}
+        canCreateScript={false}
+        createScriptHint="請先新增至少一個檢查項目"
+      />,
+    );
+
+    expect(withoutItems).toContain("製作檢查腳本");
+    expect(withoutItems).toContain("disabled");
+    expect(withoutItems).toContain('title="請先新增至少一個檢查項目"');
+  });
+
+  test("沒有評分表時不提供製作檢查腳本入口", () => {
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        messages={[]}
+        onSendMessage={() => {}}
+        isLoading={false}
+      />,
+    );
+
+    expect(html).not.toContain("製作檢查腳本");
+    expect(html).not.toContain("匯出 Excel");
+  });
+
+  test("製作中時顯示製作中狀態", () => {
+    const html = renderToStaticMarkup(
+      <ChatPanel
+        messages={[]}
+        onSendMessage={() => {}}
+        isLoading={false}
+        hasRubric
+        onCreateScript={() => {}}
+        isCreatingScript
+        canCreateScript
+      />,
+    );
+
+    expect(html).toContain("製作中...");
   });
 });
 
@@ -157,7 +221,7 @@ describe("RubricTable", () => {
     expect(html).not.toContain("AI 偵測判斷（僅由 AI 更新）");
   });
 
-  test("只在異動的評分項目列標示待更新", () => {
+  test("只在異動的檢查項目列標示待更新", () => {
     const html = renderToStaticMarkup(
       <RubricTable
         items={items}
@@ -288,5 +352,12 @@ describe("resolveActiveSessionId", () => {
   test("保留仍存在的選擇，清除已不存在的選擇", () => {
     expect(resolveActiveSessionId("session-2", sessions)).toBe("session-2");
     expect(resolveActiveSessionId("session-missing", sessions)).toBeNull();
+  });
+});
+
+describe("script creation workflow", () => {
+  test("通過自動檢查後進入執行結果，失敗時進入腳本總覽", () => {
+    expect(getScriptCreationDestination({ status: "approved" })).toBe("execution");
+    expect(getScriptCreationDestination({ status: "review_failed", id: "script-1" })).toBe("scripts");
   });
 });

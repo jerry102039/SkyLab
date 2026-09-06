@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -114,14 +115,33 @@ async def upload_class_teacher_judge_file(
         environment_keys, template_key
     )
     conflict_strategy = parse_conflict_strategy(conflict_strategy)
-    file_bytes = await file.read()
+    allowed_suffixes = {".md", ".txt", ".doc", ".docx", ".pdf"}
+    # Early suffix validation before paying full upload IO (mirrors legacy
+    # `rubric.py` which validates suffix before `await file.read()`).
+    # `prepare_file_payload` re-validates defensively with the same set.
+    filename_hint = file.filename or "unknown"
+    safe_hint = Path(filename_hint).name.strip() or "rubric"
+    suffix_hint = Path(safe_hint).suffix.lower()
+    if suffix_hint not in allowed_suffixes:
+        raise HTTPException(
+            status_code=415,
+            detail=t(
+                "file.unsupported_format",
+                suffix=suffix_hint,
+                allowed=", ".join(sorted(allowed_suffixes)),
+            ),
+        )
+    max_upload_size_bytes = settings.VLLM_MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    # Bounded read: max+1 bytes suffice to decide 413 without loading an
+    # unbounded upload fully into memory; valid files still arrive complete.
+    file_bytes = await file.read(max_upload_size_bytes + 1)
 
     try:
         original_filename, file_hash, raw_text = prepare_file_payload(
             filename=file.filename or "unknown",
             file_bytes=file_bytes,
-            allowed_suffixes={".md", ".txt", ".doc", ".docx", ".pdf"},
-            max_upload_size_bytes=settings.VLLM_MAX_UPLOAD_SIZE_MB * 1024 * 1024,
+            allowed_suffixes=allowed_suffixes,
+            max_upload_size_bytes=max_upload_size_bytes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc

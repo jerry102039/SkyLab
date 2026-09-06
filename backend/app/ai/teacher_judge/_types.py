@@ -69,6 +69,7 @@ class GateResult(TypedDict):
     quality_approved: bool
     quality_issues: list[str]
     review_attempts: NotRequired[list[dict[str, object]]]
+    retry_summary: NotRequired[dict[str, object]]
 
 
 # ── Previous Review Feedback ──────────────────────────────────────────────────

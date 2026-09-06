@@ -4,7 +4,15 @@ from __future__ import annotations
 
 RESULT_SCHEMA_VERSION = "teacher_judge_result.v1"
 RAW_OUTPUT_CHAR_LIMIT = 4000
-SCRIPT_GENERATION_MAX_ATTEMPTS = 3
+# The first generated candidate is not a retry.  A candidate may be repaired
+# at most four times overall, while the same normalized failure may trigger at
+# most two repairs before the workflow is stopped and surfaced to the teacher.
+SCRIPT_GENERATION_MAX_RETRIES = 4
+SCRIPT_GENERATION_SAME_FAILURE_MAX_RETRIES = 2
+# Keep the old name import-compatible for callers outside this module.  It is
+# now the total candidate count: the initial candidate plus four retries. New
+# orchestration code should use the explicit retry constants above.
+SCRIPT_GENERATION_MAX_ATTEMPTS = SCRIPT_GENERATION_MAX_RETRIES + 1
 
 SCRIPT_GENERATION_CONTRACT_PROMPT = f"""
 # 腳本品質契約

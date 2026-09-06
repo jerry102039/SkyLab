@@ -312,12 +312,15 @@ def save_analyzed_file(
     now = _now()
 
     if existing is not None and conflict_strategy is None:
-        raise_if_file_name_conflict(
-            session=session,
-            teaching_class_id=teaching_class_id,
-            original_filename=original_filename,
-            conflict_strategy=conflict_strategy,
-        )
+        # `existing` already proves the active-name conflict; reuse it instead
+        # of a second identical `_active_file_by_name` SELECT via
+        # `raise_if_file_name_conflict` (same 409 payload, one fewer query).
+        _raise_name_conflict(existing)
+
+    # Single Pydantic serialization / env normalization shared by the create
+    # and overwrite-reuse branches below (only one branch runs per call).
+    analysis_json = analysis.model_dump(mode="json")
+    normalized_environment_keys = list(dict.fromkeys(environment_keys or [template_key]))
 
     if existing is not None and conflict_strategy == "copy":
         target_filename = _copy_filename(
@@ -342,9 +345,9 @@ def save_analyzed_file(
             template_key=template_key,
             source_type="uploaded",
             display_name=display_name or _display_name_from_filename(original_filename),
-            environment_keys=list(dict.fromkeys(environment_keys or [template_key])),
+            environment_keys=list(normalized_environment_keys),
             analysis_revision=1,
-            analysis_json=analysis.model_dump(mode="json"),
+            analysis_json=dict(analysis_json),
             status=TeacherJudgeFileStatus.active,
             updated_at=now,
         )
@@ -354,9 +357,9 @@ def save_analyzed_file(
         target_file.template_key = template_key
         target_file.source_type = "uploaded"
         target_file.display_name = display_name or _display_name_from_filename(target_filename)
-        target_file.environment_keys = list(dict.fromkeys(environment_keys or [template_key]))
+        target_file.environment_keys = list(normalized_environment_keys)
         target_file.analysis_revision = int(target_file.analysis_revision or 1) + 1
-        target_file.analysis_json = analysis.model_dump(mode="json")
+        target_file.analysis_json = dict(analysis_json)
         target_file.status = TeacherJudgeFileStatus.active
         target_file.updated_at = now
         target_file.original_filename = target_filename

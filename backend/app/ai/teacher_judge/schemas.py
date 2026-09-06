@@ -307,6 +307,20 @@ class TeacherJudgeScriptRegenerateRequest(BaseModel):
     rubric_snapshot: TeacherJudgeRubricAnalysis | None = None
 
 
+class TeacherJudgeScriptUpdateRequest(BaseModel):
+    """Rename a managed script artifact."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError(t("schemas.name_blank"))
+        return name
+
+
 class TeacherJudgeScriptArtifactPublic(BaseModel):
     id: str
     teaching_class_id: str

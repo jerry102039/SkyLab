@@ -33,6 +33,14 @@ beforeEach(() => {
 });
 
 describe("AiJudgeService persistent sessions", () => {
+  test("session 清單不再傳送進行中或已封存的狀態分類", async () => {
+    await AiJudgeService.listSessions("class-1");
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toContain("/api/v1/teaching-classes/class-1/judge/sessions/");
+    expect(url).not.toContain("status=");
+  });
+
   test("評分環境提供 PostgreSQL 模板", () => {
     expect(TEMPLATE_OPTIONS.map((option) => option.key)).toContain("postgresql");
     expect(getTemplateLabel("postgresql")).toBe("PostgreSQL");
