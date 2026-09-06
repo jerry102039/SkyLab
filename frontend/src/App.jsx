@@ -46,7 +46,6 @@ const ClassSetupPage = lazy(() => import("./pages/course-operations/class-setup/
 const AdminPage = lazy(() => import("./pages/system/admin/AdminPage"));
 const SettingsPage = lazy(() => import("./pages/system/settings/SettingsPage"));
 const MonitoringPage = lazy(() => import("./pages/system/monitoring/MonitoringPage"));
-const QuotasPage = lazy(() => import("./pages/system/quotas/QuotasPage"));
 const IpManagementPage = lazy(() => import("./pages/system/ip-management/IpManagementPage"));
 const AuditPage = lazy(() => import("./pages/system/audit/AuditPage"));
 const JobsPage = lazy(() => import("./pages/system/jobs/JobsPage"));
@@ -208,7 +207,8 @@ function App() {
             <>
               <Route path="/admin"     element={<AdminPage />} />
               <Route path="/settings"  element={<SettingsPage />} />
-              <Route path="/quotas"    element={<QuotasPage />} />
+              {/* 配額管理已併入系統設定的分頁，舊網址導向新位置 */}
+              <Route path="/quotas"    element={<Navigate to="/settings?tab=quotas" replace />} />
               <Route path="/ip-management" element={<IpManagementPage />} />
               <Route path="/monitoring" element={<MonitoringPage />} />
               <Route path="/audit"     element={<AuditPage />} />

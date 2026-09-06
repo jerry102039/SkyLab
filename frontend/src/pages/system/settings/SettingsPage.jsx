@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import styles from "./SettingsPage.module.scss";
 import MIcon from "../../../components/MIcon";
@@ -9,6 +9,7 @@ import EmptyState from "../../../components/EmptyState/EmptyState";
 import { useToast } from "../../../hooks/useToast";
 import { ProxmoxConfigService } from "../../../services/proxmoxConfig";
 import GovernanceTab from "./GovernanceTab";
+import QuotasTab from "./QuotasTab";
 import LdapTab from "./LdapTab";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
@@ -730,11 +731,21 @@ export default function SettingsPage() {
     { key: "pve",       label: t("SettingsPage.tabPve"),       icon: "device_hub"    },
     { key: "scheduler", label: t("SettingsPage.tabScheduler"), icon: "settings_input_component" },
     { key: "governance", label: t("SettingsPage.tabGovernance"), icon: "policy"        },
+    { key: "quotas",    label: t("SettingsPage.tabQuotas"),    icon: "data_usage"    },
     { key: "ldap",      label: "LDAP",      icon: "badge"         },
     { key: "nodes",     label: t("SettingsPage.tabNodes"),     icon: "lock"          },
     { key: "storage",   label: "Storage",   icon: "storage"       },
   ];
-  const [activeTab, setActiveTab] = useState("pve");
+  // 分頁狀態放在網址 ?tab=，讓 /settings?tab=quotas 這類連結能直接開到指定分頁
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab = TABS.some((tab) => tab.key === requestedTab) ? requestedTab : TABS[0].key;
+  const selectTab = (key) => {
+    const next = new URLSearchParams(searchParams);
+    if (key === TABS[0].key) next.delete("tab");
+    else next.set("tab", key);
+    setSearchParams(next, { replace: true });
+  };
   const [form, setForm] = useState(buildFormFromConfig(null));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -790,7 +801,7 @@ export default function SettingsPage() {
               key={tab.key}
               type="button"
               className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ""}`}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => selectTab(tab.key)}
             >
               <MIcon name={tab.icon} size={16} />
               {tab.label}
@@ -816,6 +827,7 @@ export default function SettingsPage() {
               <SchedulerTab form={form} setField={setField} onSave={handleSave} saving={saving} />
             )}
             {activeTab === "governance" && <GovernanceTab />}
+            {activeTab === "quotas" && <QuotasTab />}
             {activeTab === "ldap" && <LdapTab />}
             {activeTab === "nodes" && <NodesTab />}
             {activeTab === "storage" && <StorageTab />}

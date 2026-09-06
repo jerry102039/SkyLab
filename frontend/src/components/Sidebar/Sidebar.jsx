@@ -70,7 +70,6 @@ const navGroups = [
     icon: "tune",
     items: [
       { key: "admin",         labelKey: "Sidebar.itemAdmin", icon: "admin_panel_settings", adminOnly: true },
-      { key: "quotas",        labelKey: "Sidebar.itemQuotas",   icon: "data_usage", adminOnly: true },
       { key: "ip-management", labelKey: "Sidebar.itemIpManagement",    icon: "lan", adminOnly: true },
       { key: "domain",        labelKey: "Sidebar.itemDomain",   icon: "domain", adminOnly: true },
       { key: "gateway",       labelKey: "Sidebar.itemGateway",    icon: "dns", adminOnly: true },

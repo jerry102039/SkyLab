@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import styles from "./QuotasPage.module.scss";
+import styles from "./QuotasTab.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
@@ -9,7 +9,11 @@ import { UsersService } from "../../../services/users";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { useToast } from "../../../hooks/useToast";
 import useDialogPresence from "../../../hooks/useDialogPresence";
-import PageHeader from "../../../components/PageHeader/PageHeader";
+
+/**
+ * 配額分頁（系統設定 → 配額）：全域預設上限 + 個別使用者覆寫。
+ * 原本是獨立的 /quotas 頁面，2026-09 併入系統設定；舊網址會導向 /settings?tab=quotas。
+ */
 
 const FIELD_KEYS = ["max_cpu_cores", "max_memory_mb", "max_disk_gb", "max_instances"];
 
@@ -17,7 +21,7 @@ const PICKER_MAX_ROWS = 50;
 
 /** 上限顯示：0 = 無限制。 */
 function fmtLimit(value, t, unit = "") {
-  if (Number(value) === 0) return t("QuotasPage.unlimited");
+  if (Number(value) === 0) return t("QuotasTab.unlimited");
   return unit ? `${value} ${unit}` : String(value);
 }
 
@@ -26,9 +30,9 @@ function useNumberFields() {
   // fallback：取消「無限制」勾選時回填的預設值；0 = 無限制
   return [
     { key: "max_cpu_cores", label: "CPU cores", min: 1, max: 256, fallback: 8 },
-    { key: "max_memory_mb", label: t("QuotasPage.fieldMemoryMb"), min: 256, max: 1048576, fallback: 16384 },
-    { key: "max_disk_gb", label: t("QuotasPage.fieldDiskGb"), min: 1, max: 65536, fallback: 100 },
-    { key: "max_instances", label: t("QuotasPage.fieldInstances"), min: 1, max: 100, fallback: 5 },
+    { key: "max_memory_mb", label: t("QuotasTab.fieldMemoryMb"), min: 256, max: 1048576, fallback: 16384 },
+    { key: "max_disk_gb", label: t("QuotasTab.fieldDiskGb"), min: 1, max: 65536, fallback: 100 },
+    { key: "max_instances", label: t("QuotasTab.fieldInstances"), min: 1, max: 100, fallback: 5 },
   ];
 }
 
@@ -70,7 +74,7 @@ function LimitField({ idPrefix, field, value, onChange }) {
         min={min}
         max={max}
         value={unlimited ? "" : value}
-        placeholder={unlimited ? t("QuotasPage.unlimited") : undefined}
+        placeholder={unlimited ? t("QuotasTab.unlimited") : undefined}
         disabled={unlimited}
         onChange={(e) =>
           onChange(e.target.value === "" ? "" : Number(e.target.value))
@@ -82,7 +86,7 @@ function LimitField({ idPrefix, field, value, onChange }) {
           checked={unlimited}
           onChange={(e) => onChange(e.target.checked ? 0 : fallback)}
         />
-        {t("QuotasPage.unlimited")}
+        {t("QuotasTab.unlimited")}
       </label>
     </div>
   );
@@ -130,13 +134,13 @@ function UserPicker({ users, loading, value, onChange }) {
 
   return (
     <div className={styles.field} ref={wrapRef}>
-      <label htmlFor="quota-user">{t("QuotasPage.userLabel")}</label>
+      <label htmlFor="quota-user">{t("QuotasTab.userLabel")}</label>
       <div className={styles.picker}>
         <input
           id="quota-user"
           autoComplete="off"
           value={query || (selected ? formatUser(selected) : "")}
-          placeholder={loading ? t("QuotasPage.loadingUsers") : t("QuotasPage.userSearchPlaceholder")}
+          placeholder={loading ? t("QuotasTab.loadingUsers") : t("QuotasTab.userSearchPlaceholder")}
           onFocus={() => setOpen(true)}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -148,7 +152,7 @@ function UserPicker({ users, loading, value, onChange }) {
           <ul className={`${styles.pickerList} ${list.closing ? styles.pickerListOut : ""}`}>
             {matches.length === 0 ? (
               <li className={styles.pickerEmpty}>
-                {loading ? t("QuotasPage.loading") : t("QuotasPage.noMatchingUsers")}
+                {loading ? t("QuotasTab.loading") : t("QuotasTab.noMatchingUsers")}
               </li>
             ) : (
               matches.map((user) => (
@@ -199,17 +203,17 @@ function QuotaDialog({ mode, quota, candidates, loadingUsers, defaults, closing 
           return;
         }
         await QuotasService.update(quota.id, patch);
-        toast.success(t("QuotasPage.toastUpdated"));
+        toast.success(t("QuotasTab.toastUpdated"));
       } else {
         await QuotasService.create({
           user_id: userId,
           ...normNumbers(form, baseline),
         });
-        toast.success(t("QuotasPage.toastCreated"));
+        toast.success(t("QuotasTab.toastCreated"));
       }
       onSaved();
     } catch (e) {
-      toast.error(e?.message ?? (isEdit ? t("QuotasPage.toastUpdateFailed") : t("QuotasPage.toastCreateFailed")));
+      toast.error(e?.message ?? (isEdit ? t("QuotasTab.toastUpdateFailed") : t("QuotasTab.toastCreateFailed")));
     } finally {
       setSaving(false);
     }
@@ -223,12 +227,12 @@ function QuotaDialog({ mode, quota, candidates, loadingUsers, defaults, closing 
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <span className={styles.modalTitle}>
           <MIcon name="data_usage" size={18} />
-          {isEdit ? t("QuotasPage.editQuota") : t("QuotasPage.addQuota")}
+          {isEdit ? t("QuotasTab.editQuota") : t("QuotasTab.addQuota")}
         </span>
 
         {isEdit ? (
           <div className={styles.field}>
-            <label htmlFor="quota-target">{t("QuotasPage.userLabel")}</label>
+            <label htmlFor="quota-target">{t("QuotasTab.userLabel")}</label>
             <input id="quota-target" value={quota.user_email ?? quota.user_id} disabled />
           </div>
         ) : (
@@ -254,13 +258,13 @@ function QuotaDialog({ mode, quota, candidates, loadingUsers, defaults, closing 
 
         {!isEdit && (
           <p className={styles.hint}>
-            {t("QuotasPage.createHint")}
+            {t("QuotasTab.createHint")}
           </p>
         )}
 
         <div className={styles.modalActions}>
           <button type="button" className={styles.btnGhost} onClick={onClose}>
-            {t("QuotasPage.cancel")}
+            {t("QuotasTab.cancel")}
           </button>
           <button
             type="button"
@@ -268,7 +272,7 @@ function QuotaDialog({ mode, quota, candidates, loadingUsers, defaults, closing 
             disabled={saving || (!isEdit && !userId)}
             onClick={handleSave}
           >
-            {saving ? t("QuotasPage.saving") : isEdit ? t("QuotasPage.save") : t("QuotasPage.create")}
+            {saving ? t("QuotasTab.saving") : isEdit ? t("QuotasTab.save") : t("QuotasTab.create")}
           </button>
         </div>
       </div>
@@ -294,9 +298,9 @@ function GlobalQuotaCard({ config, onSaved }) {
     setSaving(true);
     try {
       onSaved(await QuotasService.updateGlobal(patch));
-      toast.success(t("QuotasPage.toastGlobalUpdated"));
+      toast.success(t("QuotasTab.toastGlobalUpdated"));
     } catch (e) {
-      toast.error(e?.message ?? t("QuotasPage.toastUpdateFailed"));
+      toast.error(e?.message ?? t("QuotasTab.toastUpdateFailed"));
     } finally {
       setSaving(false);
     }
@@ -308,15 +312,15 @@ function GlobalQuotaCard({ config, onSaved }) {
         <div className={styles.cardHeading}>
           <span className={styles.cardTitle}>
             <MIcon name="tune" size={18} />
-            {t("QuotasPage.globalQuotaTitle")}
+            {t("QuotasTab.globalQuotaTitle")}
           </span>
           <p className={styles.cardSubtitle}>
-            {t("QuotasPage.globalQuotaDesc")}
+            {t("QuotasTab.globalQuotaDesc")}
           </p>
         </div>
         {config?.updated_at && (
           <span className={styles.updatedAt}>
-            {t("QuotasPage.lastUpdated")} {new Date(config.updated_at).toLocaleString("zh-TW")}
+            {t("QuotasTab.lastUpdated")} {new Date(config.updated_at).toLocaleString("zh-TW")}
           </span>
         )}
       </header>
@@ -344,7 +348,7 @@ function GlobalQuotaCard({ config, onSaved }) {
               disabled={saving}
               onClick={() => setForm(baseline)}
             >
-              {t("QuotasPage.restore")}
+              {t("QuotasTab.restore")}
             </button>
           )}
           <button
@@ -353,7 +357,7 @@ function GlobalQuotaCard({ config, onSaved }) {
             disabled={!dirty || saving}
             onClick={handleSave}
           >
-            {saving ? t("QuotasPage.saving") : t("QuotasPage.save")}
+            {saving ? t("QuotasTab.saving") : t("QuotasTab.save")}
           </button>
         </div>
       </div>
@@ -361,7 +365,7 @@ function GlobalQuotaCard({ config, onSaved }) {
   );
 }
 
-export default function QuotasPage() {
+export default function QuotasTab() {
   const { t } = useTranslation("system");
   const toast = useToast();
   const confirm = useConfirm();
@@ -382,7 +386,7 @@ export default function QuotasPage() {
       setQuotas(list);
       setGlobalQuota(config);
     } catch (e) {
-      toast.error(e?.message ?? t("QuotasPage.toastLoadFailed"));
+      toast.error(e?.message ?? t("QuotasTab.toastLoadFailed"));
       setQuotas((prev) => prev ?? []);
     }
   }, [toast, t]);
@@ -416,62 +420,71 @@ export default function QuotasPage() {
   const handleDelete = async (quota) => {
     const target = quota.user_email ?? quota.id;
     const ok = await confirm({
-      title: t("QuotasPage.deleteQuotaTitle"),
-      message: t("QuotasPage.deleteQuotaMessage", { target }),
-      confirmText: t("QuotasPage.delete"),
+      title: t("QuotasTab.deleteQuotaTitle"),
+      message: t("QuotasTab.deleteQuotaMessage", { target }),
+      confirmText: t("QuotasTab.delete"),
       danger: true,
     });
     if (!ok) return;
     setDeleting(quota.id);
     try {
       await QuotasService.remove(quota.id);
-      toast.success(t("QuotasPage.toastDeleted"));
+      toast.success(t("QuotasTab.toastDeleted"));
       load();
     } catch (e) {
-      toast.error(e?.message ?? t("QuotasPage.toastDeleteFailed"));
+      toast.error(e?.message ?? t("QuotasTab.toastDeleteFailed"));
     } finally {
       setDeleting(null);
     }
   };
 
   return (
-    <div className={styles.page}>
-      <PageHeader title={t("QuotasPage.pageTitle")} subtitle={t("QuotasPage.pageSubtitle")}>
-        <button
-          type="button"
-          className={styles.btnPrimary}
-          onClick={() => setDialog({ mode: "create" })}
-        >
-          <MIcon name="add" size={16} />
-          {t("QuotasPage.addQuota")}
-        </button>
-      </PageHeader>
-
+    <div className={styles.stack}>
       {globalQuota && <GlobalQuotaCard config={globalQuota} onSaved={setGlobalQuota} />}
 
-      <div className={styles.card}>
+      <section className={styles.card}>
+        <header className={styles.cardHeader}>
+          <div className={styles.cardHeading}>
+            <span className={styles.cardTitle}>
+              <MIcon name="manage_accounts" size={18} />
+              {t("QuotasTab.overridesTitle")}
+            </span>
+            <p className={styles.cardSubtitle}>
+              {t("QuotasTab.overridesDesc")}
+            </p>
+          </div>
+          <button
+            type="button"
+            className={styles.btnPrimary}
+            onClick={() => setDialog({ mode: "create" })}
+          >
+            <MIcon name="add" size={16} />
+            {t("QuotasTab.addQuota")}
+          </button>
+        </header>
+
         {quotas === null ? (
           <LoadingState />
         ) : quotas.length === 0 ? (
-          <EmptyState icon="data_usage" title={t("QuotasPage.emptyNoOverrides")} />
+          <EmptyState icon="data_usage" title={t("QuotasTab.emptyNoOverrides")} />
         ) : (
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>{t("QuotasPage.colScope")}</th>
-                <th>{t("QuotasPage.colTarget")}</th>
+                <th>{t("QuotasTab.colScope")}</th>
+                <th>{t("QuotasTab.colTarget")}</th>
                 <th>CPU</th>
-                <th>{t("QuotasPage.fieldMemoryMb")}</th>
-                <th>{t("QuotasPage.fieldDiskGb")}</th>
-                <th>{t("QuotasPage.colInstanceCount")}</th>
-                <th className={styles.thRight}>{t("QuotasPage.colActions")}</th>
+                <th>{t("QuotasTab.fieldMemoryMb")}</th>
+                <th>{t("QuotasTab.fieldDiskGb")}</th>
+                <th>{t("QuotasTab.colInstanceCount")}</th>
+                <th className={styles.thRight}>{t("QuotasTab.colActions")}</th>
               </tr>
             </thead>
             <tbody>
               {quotas.map((q) => (
                 <tr key={q.id}>
                   <td>
-                    <span className={`${styles.badge} ${styles.badge_user}`}>{t("QuotasPage.personalOverride")}</span>
+                    <span className={`${styles.badge} ${styles.badge_user}`}>{t("QuotasTab.personalOverride")}</span>
                   </td>
                   <td>{q.user_email ?? "—"}</td>
                   <td>{fmtLimit(q.max_cpu_cores, t)}</td>
@@ -484,7 +497,7 @@ export default function QuotasPage() {
                         type="button"
                         className={styles.btnIcon}
                         onClick={() => setDialog({ mode: "edit", quota: q })}
-                        title={t("QuotasPage.editQuotaTitle")}
+                        title={t("QuotasTab.editQuotaTitle")}
                       >
                         <MIcon name="edit" size={16} />
                       </button>
@@ -493,7 +506,7 @@ export default function QuotasPage() {
                         className={styles.btnDanger}
                         disabled={deleting === q.id}
                         onClick={() => handleDelete(q)}
-                        title={t("QuotasPage.deleteQuotaTitle")}
+                        title={t("QuotasTab.deleteQuotaTitle")}
                       >
                         <MIcon name="delete" size={16} />
                       </button>
@@ -504,7 +517,7 @@ export default function QuotasPage() {
             </tbody>
           </table>
         )}
-      </div>
+      </section>
 
       {dialogPresence.open && (
         <QuotaDialog

@@ -151,13 +151,6 @@ _ROUTES: tuple[NavigationRoute, ...] = (
         access="admin",
     ),
     NavigationRoute(
-        path="/quotas",
-        title="配額設定",
-        summary="設定各角色可用的資源上限。",
-        keywords=("配額", "quota", "上限", "限制"),
-        access="admin",
-    ),
-    NavigationRoute(
         path="/monitoring",
         title="資源監控",
         summary="查看節點與機器的即時負載。",
@@ -174,8 +167,8 @@ _ROUTES: tuple[NavigationRoute, ...] = (
     NavigationRoute(
         path="/settings",
         title="系統設定",
-        summary="調整平台層級的設定與政策。",
-        keywords=("系統設定", "設定", "configuration", "政策"),
+        summary="調整平台層級的設定、政策與資源配額。",
+        keywords=("系統設定", "設定", "configuration", "政策", "配額", "quota", "上限", "限制"),
         access="admin",
     ),
     NavigationRoute(
