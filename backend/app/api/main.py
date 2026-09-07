@@ -27,6 +27,7 @@ from app.api.routes import (
     quick_practice,
     quotas,
     resource_details,
+    resource_settings,
     resources,
     reverse_proxy,
     rubric,
@@ -50,6 +51,7 @@ api_router.include_router(users.router)
 api_router.include_router(utils.router)
 api_router.include_router(resources.router)
 api_router.include_router(resource_details.router)
+api_router.include_router(resource_settings.router)
 api_router.include_router(vm.router)
 api_router.include_router(lxc.router)
 api_router.include_router(vm_requests.router)

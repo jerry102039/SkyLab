@@ -22,6 +22,7 @@ export default function PowerMenu({
   actionLoading,
   onControl,
   onDeleteClick,
+  onConvertTemplate,
   onClose,
   anchorRef,
   closing,
@@ -112,6 +113,16 @@ export default function PowerMenu({
             {t(labelKey)}
           </button>
         ))}
+        {/* 老師／管理員把調好的機器轉成範本；沒有 onConvertTemplate 就不顯示 */}
+        {onConvertTemplate && <button
+          type="button"
+          className={styles.powerMenuItem}
+          disabled={!!actionLoading}
+          onClick={() => { onClose(); onConvertTemplate(); }}
+        >
+          <span className={styles.powerMenuIcon}><MIcon name="library_add" size={15} /></span>
+          {t("PowerMenu.convertTemplate")}
+        </button>}
         {/* 環境內的機器不能單台刪除，整組回收由環境層級處理；沒有 onDeleteClick 就不顯示 */}
         {onDeleteClick && <button
           type="button"

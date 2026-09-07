@@ -7,13 +7,15 @@ from typing import Any, Literal
 
 from sqlmodel import Session, select
 
-from app.exceptions import BadRequestError, ProxmoxError
-from app.models import TeachingClass, TeachingClassStatus
+from app.core.authorizers import can_bypass_resource_ownership
+from app.exceptions import BadRequestError, PermissionDeniedError, ProxmoxError
+from app.models import TeachingClass, TeachingClassStatus, User
 from app.models.quick_practice import QuickPracticeSessionMachine
 from app.models.vm_request import VMProvisioningStatus, VMRequest, VMRequestStatus
 from app.repositories import audit_log as audit_log_repo
 from app.repositories import batch_provision as batch_provision_repo
 from app.repositories import resource as resource_repo
+from app.repositories import resource_share as share_repo
 from app.repositories import spec_change_request as spec_request_repo
 from app.repositories import vm_request as vm_request_repo
 from app.schemas import ResourcePublic
@@ -26,6 +28,7 @@ from app.schemas.resource import (
 )
 from app.services.network import firewall_service
 from app.services.proxmox import proxmox_service
+from app.services.resource.access import require_resource_management
 from app.services.scheduling.recurrence import (
     get_schedule_policy,
     is_in_window,
@@ -230,9 +233,73 @@ def _build_resource_public(
         mem=resource.get("mem"),
         maxmem=resource.get("maxmem"),
         uptime=resource.get("uptime"),
-        idle_since=db_resource.idle_since if db_resource else None,
+        auto_stop_at=(
+            _ensure_utc(getattr(db_resource, "auto_stop_at", None)) if db_resource else None
+        ),
+        auto_stop_reason=(
+            getattr(db_resource, "auto_stop_reason", None) if db_resource else None
+        ),
+        idle_since=_ensure_utc(db_resource.idle_since) if db_resource else None,
+        scheduled_deletion_at=(
+            _ensure_utc(getattr(db_resource, "scheduled_deletion_at", None))
+            if db_resource
+            else None
+        ),
         mining_exempt=bool(db_resource.mining_exempt) if db_resource else False,
+        tags=_parse_tags(resource.get("tags")),
     )
+
+
+def _parse_tags(raw: object) -> list[str]:
+    """cluster/resources 的 tags 是 ``;`` 分隔字串。"""
+    if not raw:
+        return []
+    return [tag for tag in str(raw).replace(",", ";").split(";") if tag]
+
+
+def _mark_shared(public: ResourcePublic, db_resource, session: Session) -> None:
+    """被分享的機器只能「用」，擁有者層級的動作全部關掉。"""
+    owner = session.get(User, db_resource.user_id)
+    public.access_role = "shared"
+    public.can_manage = False
+    public.can_delete = False
+    public.can_request_spec_change = False
+    public.can_extend = False
+    public.owner_email = owner.email if owner else None
+
+
+def annotate_access_for_user(
+    *, session: Session, public: ResourcePublic, user
+) -> ResourcePublic:
+    """替單筆資源標上目前使用者的關係（擁有者／被分享／課堂成員／管理員）與可管理與否。"""
+    if public.vmid is None:
+        return public
+    db_resource = resource_repo.get_resource_by_vmid(session=session, vmid=public.vmid)
+    if db_resource is None:
+        public.access_role = "admin" if can_bypass_resource_ownership(user) else "owner"
+        return public
+
+    if db_resource.user_id == user.id:
+        public.access_role = (
+            "class_member"
+            if db_resource.allocation_scope == "teaching_class"
+            else "owner"
+        )
+    elif can_bypass_resource_ownership(user):
+        public.access_role = "admin"
+    elif share_repo.get_share(session=session, vmid=public.vmid, user_id=user.id):
+        _mark_shared(public, db_resource, session)
+        return public
+    else:
+        # 例如課堂老師：不是擁有者但有管理權
+        public.access_role = "admin"
+
+    try:
+        require_resource_management(session=session, user=user, vmid=public.vmid)
+        public.can_manage = True
+    except PermissionDeniedError:
+        public.can_manage = False
+    return public
 
 
 def get_by_vmid(
@@ -384,30 +451,45 @@ def list_by_user(
         result: list[ResourcePublic] = []
         shown_vmids: set[int] = set()
 
-        # 1. Live resources owned by the user (from Proxmox + DB join).
+        # 1. Live resources owned by the user (from Proxmox + DB join),
+        #    plus machines other owners shared with them (use-only access).
         user_resources = resource_repo.get_resources_by_user(
             session=session, user_id=user_id
         )
-        if user_resources:
-            owned_vmids = {r.vmid: r for r in user_resources}
+        owned_vmids = {r.vmid: r for r in user_resources}
+        shared_rows: dict[int, Any] = {}
+        for share in share_repo.list_shares_for_user(session=session, user_id=user_id):
+            if share.resource_vmid in owned_vmids:
+                continue
+            shared_db = resource_repo.get_resource_by_vmid(
+                session=session, vmid=share.resource_vmid
+            )
+            if shared_db is not None:
+                shared_rows[share.resource_vmid] = shared_db
+        if user_resources or shared_rows:
             known_practice_ids = practice_request_ids(session)
             try:
                 for r in proxmox_service.list_all_resources():
                     if r.get("template") == 1:
                         continue
                     vmid = r.get("vmid")
-                    if vmid not in owned_vmids:
+                    db_row = owned_vmids.get(vmid) or shared_rows.get(vmid)
+                    if db_row is None:
                         continue
-                    result.append(
-                        _build_resource_public(
-                            r,
-                            owned_vmids[vmid],
-                            r.get("node", ""),
-                            r.get("type", ""),
-                            session,
-                            known_practice_ids,
-                        )
+                    public = _build_resource_public(
+                        r,
+                        db_row,
+                        r.get("node", ""),
+                        r.get("type", ""),
+                        session,
+                        known_practice_ids,
                     )
+                    if vmid in shared_rows:
+                        _mark_shared(public, db_row, session)
+                    elif db_row.allocation_scope == "teaching_class":
+                        public.access_role = "class_member"
+                        public.can_manage = False
+                    result.append(public)
                     shown_vmids.add(vmid)
             except Exception:
                 logger.warning("Proxmox unavailable; marking owned resources as unknown")

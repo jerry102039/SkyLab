@@ -383,6 +383,31 @@ _SETTINGS_ELEMENTS: tuple[ElementSpec, ...] = (
         id="settings.loadavg_penalty_weight", role="number",
         label="LoadAvg 懲罰權重", section="資源排程",
     ),
+    # 配額：全域預設上限與個別使用者覆寫
+    ElementSpec(
+        id="settings.quota_global", role="list", label="全域預設配額",
+        section="配額",
+        help="沒有個人覆寫的使用者一律套用這組上限。調整只影響之後的新增與擴容，"
+             "不會回頭處理既有資源。",
+    ),
+    ElementSpec(
+        id="settings.quota_user", role="select", label="使用者", section="配額",
+        help="輸入姓名或 email 搜尋要設定覆寫的對象。",
+    ),
+    ElementSpec(
+        id="settings.quota_create", role="button", label="新增配額",
+        section="配額",
+        help="欄位會帶入目前的全域預設值，改成這位使用者專屬的上限即可。"
+             "勾選「無限制」代表該項目不設上限。",
+    ),
+    ElementSpec(
+        id="settings.quota_edit", role="button", label="編輯配額",
+        section="配額",
+    ),
+    ElementSpec(
+        id="settings.quota_delete", role="button", label="刪除配額",
+        section="配額", help="刪除後這位使用者改回套用全域預設值。",
+    ),
 )
 
 
@@ -483,34 +508,6 @@ _GPU_MGMT_ELEMENTS: tuple[ElementSpec, ...] = (
     ElementSpec(
         id="gpu.remove_mapping", role="button", label="移除映射",
         section="GPU 清單", help="把這組 GPU mapping 從平台移除。",
-    ),
-)
-
-# ── 配額管理 ────────────────────────────────────────────────────────
-_QUOTAS_ELEMENTS: tuple[ElementSpec, ...] = (
-    ElementSpec(
-        id="quotas.global", role="list", label="全域預設配額",
-        section="全域預設值",
-        help="沒有個人覆寫的使用者一律套用這組上限。調整只影響之後的新增與擴容，"
-             "不會回頭處理既有資源。",
-    ),
-    ElementSpec(
-        id="quotas.user", role="select", label="使用者", section="個別使用者覆寫",
-        help="輸入姓名或 email 搜尋要設定覆寫的對象。",
-    ),
-    ElementSpec(
-        id="quotas.create", role="button", label="新增配額",
-        section="個別使用者覆寫",
-        help="欄位會帶入目前的全域預設值，改成這位使用者專屬的上限即可。"
-             "勾選「無限制」代表該項目不設上限。",
-    ),
-    ElementSpec(
-        id="quotas.edit", role="button", label="編輯配額",
-        section="個別使用者覆寫",
-    ),
-    ElementSpec(
-        id="quotas.delete", role="button", label="刪除配額",
-        section="個別使用者覆寫", help="刪除後這位使用者改回套用全域預設值。",
     ),
 )
 
@@ -1396,15 +1393,6 @@ _SURFACES: tuple[SurfaceSpec, ...] = (
         access="admin",
     ),
     SurfaceSpec(
-        id="quotas",
-        path="/quotas",
-        title="配額管理",
-        purpose="設定全域預設的資源上限，以及個別使用者的覆寫值。",
-        sections=("全域預設值", "個別使用者覆寫"),
-        elements=_QUOTAS_ELEMENTS,
-        access="admin",
-    ),
-    SurfaceSpec(
         id="monitoring",
         path="/monitoring",
         title="資源監控",
@@ -1426,8 +1414,8 @@ _SURFACES: tuple[SurfaceSpec, ...] = (
         id="settings",
         path="/settings",
         title="系統設定",
-        purpose="管理 Proxmox VE 連線、節點、Storage 與資源排程設定。",
-        sections=("PVE 連線", "節點管理", "資源排程", "治理"),
+        purpose="管理 Proxmox VE 連線、節點、Storage、資源排程與配額設定。",
+        sections=("PVE 連線", "節點管理", "資源排程", "治理", "配額"),
         elements=_SETTINGS_ELEMENTS,
         access="admin",
     ),

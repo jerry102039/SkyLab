@@ -1,7 +1,7 @@
 """規格調整申請 schemas"""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -30,6 +30,9 @@ class SpecChangeRequestCreate(BaseModel):
     requested_cpu: int | None = Field(default=None, ge=1, le=32)
     requested_memory: int | None = Field(default=None, ge=512, le=65536)
     requested_disk: int | None = Field(default=None, ge=1, le=1000)
+    requested_expiry_date: date | None = Field(
+        default=None, description="change_type=expiry：希望延長到的到期日"
+    )
 
 
 class SpecChangeRequestReview(BaseModel):
@@ -72,6 +75,8 @@ class SpecChangeRequestPublic(BaseModel):
     requested_cpu: int | None
     requested_memory: int | None
     requested_disk: int | None
+    current_expiry_date: date | None = None
+    requested_expiry_date: date | None = None
     status: SpecChangeRequestStatus
     reviewer_id: uuid.UUID | None
     review_comment: str | None
