@@ -1,12 +1,7 @@
-.page {
+/* 分頁內容：外層版面（padding、頁首）由 SettingsPage 負責，這裡只管卡片堆疊 */
+.stack {
   @include flex-column;
   gap: $spacing-24;
-  padding: $spacing-8 $spacing-16;
-  flex: 1;
-
-  @media (min-width: $breakpoint-sidebar) {
-    padding: 0;
-  }
 }
 
 /* ── 卡片 ── */

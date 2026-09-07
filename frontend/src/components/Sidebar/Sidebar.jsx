@@ -41,7 +41,7 @@ const navGroups = [
     icon: "router",
     items: [
       { key: "firewall",      labelKey: "Sidebar.itemFirewall",     icon: "security" },
-      { key: "reverse-proxy", labelKey: "Sidebar.itemReverseProxy",   icon: "swap_horiz" },
+      /* 對外網址已併入「網域管理」（管理員）；使用者在資源詳情的「進階設定」設定自己的對外服務 */
     ],
   },
   {
@@ -70,7 +70,6 @@ const navGroups = [
     icon: "tune",
     items: [
       { key: "admin",         labelKey: "Sidebar.itemAdmin", icon: "admin_panel_settings", adminOnly: true },
-      { key: "quotas",        labelKey: "Sidebar.itemQuotas",   icon: "data_usage", adminOnly: true },
       { key: "ip-management", labelKey: "Sidebar.itemIpManagement",    icon: "lan", adminOnly: true },
       { key: "domain",        labelKey: "Sidebar.itemDomain",   icon: "domain", adminOnly: true },
       { key: "gateway",       labelKey: "Sidebar.itemGateway",    icon: "dns", adminOnly: true },

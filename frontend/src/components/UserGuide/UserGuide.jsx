@@ -134,14 +134,9 @@ const PAGE_GUIDES = {
         textKey: "UserGuide.reverseProxy.step1.text",
       },
       {
-        selector: '[data-guide="proxy-help"]',
+        selector: '[data-guide="proxy-list"]',
         titleKey: "UserGuide.reverseProxy.step2.title",
         textKey: "UserGuide.reverseProxy.step2.text",
-      },
-      {
-        selector: '[data-guide="proxy-list"]',
-        titleKey: "UserGuide.reverseProxy.step3.title",
-        textKey: "UserGuide.reverseProxy.step3.text",
       },
     ],
   },

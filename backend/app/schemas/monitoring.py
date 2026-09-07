@@ -87,6 +87,7 @@ class GovernanceConfigPublic(BaseModel):
     idle_detection_enabled: bool
     idle_cpu_threshold_percent: float
     idle_window_hours: int
+    idle_notify_after_hours: int
     idle_grace_hours: int
     idle_scan_batch_size: int
     workload_advisor_enabled: bool
@@ -120,6 +121,7 @@ class GovernanceConfigUpdate(BaseModel):
     idle_detection_enabled: bool | None = None
     idle_cpu_threshold_percent: float | None = Field(default=None, ge=0.1, le=20)
     idle_window_hours: int | None = Field(default=None, ge=1, le=720)
+    idle_notify_after_hours: int | None = Field(default=None, ge=1, le=720)
     idle_grace_hours: int | None = Field(default=None, ge=1, le=720)
     idle_scan_batch_size: int | None = Field(default=None, ge=1, le=200)
     workload_advisor_enabled: bool | None = None

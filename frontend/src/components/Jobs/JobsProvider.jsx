@@ -1,14 +1,29 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../contexts/AuthContext";
 import { AuthStorage } from "../../services/auth";
+import {
+  dismissPrompt as dismissDesktopPrompt,
+  getPermission as getDesktopPermission,
+  isEnabled as isDesktopPrefEnabled,
+  isPageInBackground,
+  isPromptDismissed as isDesktopPromptDismissed,
+  isSupported as isDesktopSupported,
+  requestPermission as requestDesktopPermission,
+  setEnabled as setDesktopPref,
+  showNotification as showDesktopNotification,
+} from "../../services/browserNotifications";
 import { CoursesService } from "../../services/courses";
 import { connectJobsWebSocket, JobsService } from "../../services/jobs";
 import JobDetailDialog from "./JobDetailDialog";
 import { JOB_KIND_LABEL_KEYS } from "./JobRow";
 
 const NOTIFY_ONLY_MINE_KEY = "jobs:notifyOnlyMine";
+const DESKTOP_PROMPT_TOAST_ID = "desktop-notifications-prompt";
+// 登入後稍等再問通知權限，避免跟首頁載入的其他 toast 擠在一起
+const DESKTOP_PROMPT_DELAY_MS = 2500;
 
 /* 沿用學生首頁提醒中心時代的 key，保留使用者既有的已讀紀錄 */
 function reminderStorageKey(user) {
@@ -27,29 +42,58 @@ function loadReadReminderIds(user) {
 /* 從 running/pending/blocked → 終態時觸發 toast */
 const TERMINAL_STATUSES = new Set(["completed", "failed", "blocked", "cancelled"]);
 
-function notifyJobTransition(job, prevStatus, onView, t) {
+/** 終態轉換的通知內容；不需通知時回 null */
+function describeJobTransition(job, prevStatus, t) {
   // 第一次看到（prev undefined）且本來就是終態 → 不通知（避免重整時轟炸）
-  if (prevStatus === undefined) return;
-  if (prevStatus === job.status) return;
-  if (!TERMINAL_STATUSES.has(job.status)) return;
+  if (prevStatus === undefined) return null;
+  if (prevStatus === job.status) return null;
+  if (!TERMINAL_STATUSES.has(job.status)) return null;
 
   const kindLabel = JOB_KIND_LABEL_KEYS[job.kind] ? t(JOB_KIND_LABEL_KEYS[job.kind]) : job.kind;
-  const action = { label: t("JobsProvider.viewAction"), onClick: () => onView(job.id) };
-  const description = job.title;
+  const detail = job.message ?? job.title;
 
   switch (job.status) {
     case "completed":
-      toast.success(t("JobsProvider.jobCompleted", { kindLabel }), { description, action });
-      break;
+      return { level: "success", title: t("JobsProvider.jobCompleted", { kindLabel }), description: job.title };
     case "failed":
-      toast.error(t("JobsProvider.jobFailed", { kindLabel }), { description: job.message ?? description, action });
-      break;
+      return { level: "error", title: t("JobsProvider.jobFailed", { kindLabel }), description: detail };
     case "blocked":
-      toast.warning(t("JobsProvider.jobBlocked", { kindLabel }), { description: job.message ?? description, action });
-      break;
+      return { level: "warning", title: t("JobsProvider.jobBlocked", { kindLabel }), description: detail };
     case "cancelled":
-      toast(t("JobsProvider.jobCancelled", { kindLabel }), { description, action });
+      return { level: "default", title: t("JobsProvider.jobCancelled", { kindLabel }), description: job.title };
+    default:
+      return null;
+  }
+}
+
+function notifyJobTransition(job, prevStatus, onView, t) {
+  const info = describeJobTransition(job, prevStatus, t);
+  if (!info) return;
+
+  const action = { label: t("JobsProvider.viewAction"), onClick: () => onView(job.id) };
+  const options = { description: info.description, action };
+  switch (info.level) {
+    case "success":
+      toast.success(info.title, options);
       break;
+    case "error":
+      toast.error(info.title, options);
+      break;
+    case "warning":
+      toast.warning(info.title, options);
+      break;
+    default:
+      toast(info.title, options);
+  }
+
+  // 桌面（系統）通知只在使用者不在這個分頁／視窗時補一則，
+  // 人在頁面上時 toast 已經看得到，避免同一件事跳兩次。
+  if (isPageInBackground()) {
+    showDesktopNotification(info.title, {
+      body: info.description,
+      tag: job.id,
+      onClick: () => onView(job.id),
+    });
   }
 }
 
@@ -64,11 +108,14 @@ export function useJobs() {
  * 全站任務狀態來源（無 UI）：
  * - /ws/jobs WebSocket 即時推送為主，REST 每 15 秒輪詢為 fallback
  * - 任務進入終態（完成／失敗／受阻／取消）時彈 toast，不論當前頁面
+ * - 桌面（系統）通知：登入後以 toast 詢問一次瀏覽器通知權限；開啟後，
+ *   使用者不在本分頁／視窗時，任務終態與新提醒會再發一則系統通知
  * - 掛載共用的 JobDetailDialog；顯示用的按鈕（JobsButton）放在 Sidebar 底部
  */
 export default function JobsProvider({ children }) {
   const { t } = useTranslation("components");
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState(null); // 執行中任務；null = 尚未載入
   const [focusJobId, setFocusJobId] = useState(null);
   const [notifyOnlyMine, setNotifyOnlyMineState] = useState(
@@ -84,6 +131,16 @@ export default function JobsProvider({ children }) {
   filterRef.current = { enabled: notifyOnlyMine && isAdmin, myUserId };
   // 上一次 WS snapshot 中各 job 的狀態，用於 diff 觸發 toast
   const prevStatusMapRef = useRef(null);
+  // 上一次 WS snapshot 中的提醒 id，用於偵測「新出現」的提醒發桌面通知
+  const prevReminderIdsRef = useRef(null);
+
+  /* 桌面（系統）通知：瀏覽器權限狀態 + 使用者偏好 */
+  const [desktopPermission, setDesktopPermission] = useState(() => getDesktopPermission());
+  const [desktopPrefEnabled, setDesktopPrefEnabled] = useState(() => isDesktopPrefEnabled());
+  // WS callback 以 [] 依賴掛載，點擊提醒通知的處理要走 ref 才拿得到最新的 user／navigate
+  const reminderClickRef = useRef(() => {});
+  const readReminderIdsRef = useRef(readReminderIds);
+  readReminderIdsRef.current = readReminderIds;
 
   /* REST fallback：每 15 秒抓一次執行中任務（WS 為主） */
   const load = useCallback(async () => {
@@ -113,7 +170,24 @@ export default function JobsProvider({ children }) {
 
       // /ws/jobs 的 snapshot 會附帶個人提醒（約每 30 秒重算一次）；
       // 缺欄位（舊後端）時維持 REST 載入的結果
-      if (Array.isArray(snapshot?.reminders)) setReminders(snapshot.reminders);
+      if (Array.isArray(snapshot?.reminders)) {
+        setReminders(snapshot.reminders);
+
+        // ── 新出現且未讀的提醒 → 桌面通知（首次 snapshot 只建 baseline）──
+        const prevIds = prevReminderIdsRef.current;
+        if (prevIds !== null && isPageInBackground()) {
+          for (const reminder of snapshot.reminders) {
+            if (prevIds.has(reminder.id)) continue;
+            if (readReminderIdsRef.current.includes(reminder.id)) continue;
+            showDesktopNotification(reminder.title, {
+              body: reminder.description,
+              tag: reminder.id,
+              onClick: () => reminderClickRef.current(reminder),
+            });
+          }
+        }
+        prevReminderIdsRef.current = new Set(snapshot.reminders.map((r) => r.id));
+      }
 
       // ── Diff: 比對上一次 snapshot 的狀態，發 toast ──
       const prev = prevStatusMapRef.current;
@@ -184,6 +258,80 @@ export default function JobsProvider({ children }) {
     }
   }, []);
 
+  /* 點擊提醒的桌面通知：標已讀並跳到目標頁 */
+  reminderClickRef.current = (reminder) => {
+    markReminderRead(reminder.id);
+    if (reminder.target) navigate(reminder.target);
+  };
+
+  /* 使用者可能在瀏覽器的網站設定改過權限：popover 開啟時重新讀一次 */
+  const syncDesktopPermission = useCallback(() => {
+    setDesktopPermission(getDesktopPermission());
+  }, []);
+
+  /**
+   * 開啟桌面通知：向瀏覽器要權限（必須由使用者點擊觸發）。
+   * 拿到權限就立刻發一則示範通知，讓使用者確認系統通知真的會出現。
+   */
+  const enableDesktopNotifications = useCallback(async () => {
+    const result = await requestDesktopPermission();
+    setDesktopPermission(getDesktopPermission());
+    if (result === "granted") {
+      setDesktopPref(true);
+      setDesktopPrefEnabled(true);
+      toast.dismiss(DESKTOP_PROMPT_TOAST_ID);
+      showDesktopNotification(t("JobsProvider.desktopEnabledTitle"), {
+        body: t("JobsProvider.desktopEnabledBody"),
+        tag: "skylab-desktop-notifications-enabled",
+      });
+      toast.success(t("JobsProvider.desktopEnabledTitle"));
+    } else if (result === "denied") {
+      toast.dismiss(DESKTOP_PROMPT_TOAST_ID);
+      toast.error(t("JobsProvider.desktopDenied"));
+    }
+    return result;
+  }, [t]);
+
+  const disableDesktopNotifications = useCallback(() => {
+    setDesktopPref(false);
+    setDesktopPrefEnabled(false);
+  }, []);
+
+  /* 登入後詢問一次通知權限：只在瀏覽器還沒決定、且使用者沒按過「稍後再說」時 */
+  useEffect(() => {
+    if (!isDesktopSupported()) return undefined;
+    if (getDesktopPermission() !== "default") return undefined;
+    if (!isDesktopPrefEnabled() || isDesktopPromptDismissed()) return undefined;
+
+    const timer = setTimeout(() => {
+      toast(t("JobsProvider.desktopPromptTitle"), {
+        id: DESKTOP_PROMPT_TOAST_ID,
+        description: t("JobsProvider.desktopPromptDescription"),
+        duration: Infinity,
+        action: {
+          label: t("JobsProvider.desktopPromptAllow"),
+          onClick: () => {
+            enableDesktopNotifications();
+          },
+        },
+        cancel: {
+          label: t("JobsProvider.desktopPromptLater"),
+          onClick: () => dismissDesktopPrompt(),
+        },
+      });
+    }, DESKTOP_PROMPT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [enableDesktopNotifications, t]);
+
+  const desktopNotifications = {
+    supported: isDesktopSupported(),
+    permission: desktopPermission,
+    enabled: desktopPermission === "granted" && desktopPrefEnabled,
+    enable: enableDesktopNotifications,
+    disable: disableDesktopNotifications,
+    sync: syncDesktopPermission,
+  };
+
   return (
     <JobsContext.Provider
       value={{
@@ -197,6 +345,7 @@ export default function JobsProvider({ children }) {
         refreshReminders,
         markReminderRead,
         markAllRemindersRead,
+        desktopNotifications,
       }}
     >
       {children}

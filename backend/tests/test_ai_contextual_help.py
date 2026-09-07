@@ -116,11 +116,11 @@ def test_system_prompt_forbids_describing_position() -> None:
 
 def test_students_cannot_ask_about_admin_only_pages() -> None:
     student_surfaces = get_surfaces_for_user(_user(UserRole.student))
-    assert find_surface("quotas", student_surfaces) is None
+    assert find_surface("settings", student_surfaces) is None
     assert find_surface("request-form", student_surfaces) is not None
 
     admin_surfaces = get_surfaces_for_user(_user(UserRole.admin))
-    assert find_surface("quotas", admin_surfaces) is not None
+    assert find_surface("settings", admin_surfaces) is not None
 
 
 @pytest.mark.asyncio
@@ -129,7 +129,7 @@ async def test_unknown_surface_does_not_reveal_that_it_exists(
 ) -> None:
     _no_model(monkeypatch)
     result = await help_service.explain(
-        _request(surface_id="quotas"), _user(UserRole.student)
+        _request(surface_id="settings"), _user(UserRole.student)
     )
     # 沒權限與不存在回同一句話，否則這支 API 會變成頁面探測器。
     assert "沒有這個畫面的資料" in result.answer
