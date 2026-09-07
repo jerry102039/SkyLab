@@ -205,208 +205,419 @@ _REVERSE_PROXY_ELEMENTS: tuple[ElementSpec, ...] = (
 )
 
 
-# ── 系統設定 ─────────────────────────────────────────────────────────
-# label 一律沿用畫面上的文字，help 取自各欄既有的 hint / placeholder / 確認訊息。
-_SETTINGS_ELEMENTS: tuple[ElementSpec, ...] = (
-    # PVE 連線清單上的動作
+# ── 系統管理底下的七個設定頁 ───────────────────────────────────────
+# 原「系統設定」的分頁，2026-09 各自升格為獨立頁面。label 一律沿用畫面上的文字，
+# help 取自各欄既有的 hint / placeholder / 確認訊息。
+
+# ── PVE 連線 ─────────────────────────────────────────────────────────
+_PVE_CONNECTIONS_ELEMENTS: tuple[ElementSpec, ...] = (
+    # 連線清單上的動作
     ElementSpec(
-        id="settings.add_connection", role="button", label="新增連線",
-        section="PVE 連線",
+        id="pve.add_connection", role="button", label="新增連線",
+        section="PVE 連線清單",
         help="建立一組 PVE 連線。第一組建立時會自動成為預設連線。",
     ),
     ElementSpec(
-        id="settings.connection_test", role="button", label="測試",
-        section="PVE 連線",
+        id="pve.connection_test", role="button", label="測試",
+        section="PVE 連線清單",
         help="用這組連線目前存的設定實際連一次 PVE，確認連得上。",
     ),
     ElementSpec(
-        id="settings.connection_sync", role="button", label="同步",
-        section="PVE 連線",
+        id="pve.connection_sync", role="button", label="同步",
+        section="PVE 連線清單",
         help="從這組 PVE 重新抓一次節點與 Storage 清單，完成後會回報同步到幾個。",
     ),
     ElementSpec(
-        id="settings.connection_edit", role="button", label="編輯",
-        section="PVE 連線", help="修改這組連線的設定。",
+        id="pve.connection_edit", role="button", label="編輯",
+        section="PVE 連線清單", help="修改這組連線的設定。",
     ),
     ElementSpec(
-        id="settings.connection_delete", role="button", label="刪除",
-        section="PVE 連線",
+        id="pve.connection_delete", role="button", label="刪除",
+        section="PVE 連線清單",
         help="刪除這組連線，它底下的節點與 Storage 記錄會一併移除。",
     ),
     # 連線設定表單
     ElementSpec(
-        id="settings.connection_name", role="text", label="名稱",
-        section="PVE 連線", help="這組連線的識別名稱，例：機房A。",
+        id="pve.connection_name", role="text", label="名稱",
+        section="連線設定", help="這組連線的識別名稱，例：機房A。",
         constraints=("必填",),
     ),
     ElementSpec(
-        id="settings.host", role="text", label="Host",
-        section="PVE 連線", help="PVE 的位址，例：192.168.100.2。",
+        id="pve.host", role="text", label="Host",
+        section="連線設定", help="PVE 的位址，例：192.168.100.2。",
         constraints=("必填",),
     ),
     ElementSpec(
-        id="settings.port", role="number", label="Port",
-        section="PVE 連線", constraints=("1 到 65535",),
+        id="pve.port", role="number", label="Port",
+        section="連線設定", constraints=("1 到 65535",),
     ),
     ElementSpec(
-        id="settings.api_user", role="text", label="API 使用者",
-        section="PVE 連線", constraints=("必填",),
+        id="pve.api_user", role="text", label="API 使用者",
+        section="連線設定", constraints=("必填",),
     ),
     ElementSpec(
-        id="settings.password", role="text", label="密碼",
-        section="PVE 連線", sensitive=True,
+        id="pve.password", role="text", label="密碼",
+        section="連線設定", sensitive=True,
         help="編輯既有連線時留空表示不變更。",
     ),
     ElementSpec(
-        id="settings.api_timeout", role="number", label="API Timeout（秒）",
-        section="PVE 連線",
+        id="pve.api_timeout", role="number", label="API Timeout（秒）",
+        section="連線設定",
     ),
     ElementSpec(
-        id="settings.verify_ssl", role="toggle", label="驗證 SSL 憑證",
-        section="PVE 連線",
+        id="pve.verify_ssl", role="toggle", label="驗證 SSL 憑證",
+        section="連線設定",
     ),
     ElementSpec(
-        id="settings.ca_cert", role="textarea", label="CA 憑證 PEM",
-        section="PVE 連線", help="編輯既有連線時留空表示不變更。",
+        id="pve.ca_cert", role="textarea", label="CA 憑證 PEM",
+        section="連線設定", help="編輯既有連線時留空表示不變更。",
     ),
     ElementSpec(
-        id="settings.enable_connection", role="toggle", label="啟用此連線",
-        section="PVE 連線",
+        id="pve.enable_connection", role="toggle", label="啟用此連線",
+        section="連線設定",
     ),
     ElementSpec(
-        id="settings.set_default", role="toggle", label="設為預設連線",
-        section="PVE 連線",
+        id="pve.set_default", role="toggle", label="設為預設連線",
+        section="連線設定",
     ),
     ElementSpec(
-        id="settings.save_connection", role="button", label="儲存連線",
-        section="PVE 連線",
+        id="pve.save_connection", role="button", label="儲存連線",
+        section="連線設定",
     ),
     # 此叢集的資源設定
     ElementSpec(
-        id="settings.pool_name", role="text", label="Pool 名稱",
-        section="PVE 連線",
+        id="pve.pool_name", role="text", label="Pool 名稱",
+        section="此叢集的資源設定",
         help="pool、storage 與網段是各叢集獨立的設定；建立於這組連線的 VM / LXC "
              "會套用這裡的值。",
     ),
     ElementSpec(
-        id="settings.task_check_interval", role="number",
-        label="任務檢查間隔（秒）", section="PVE 連線",
+        id="pve.task_check_interval", role="number",
+        label="任務檢查間隔（秒）", section="此叢集的資源設定",
     ),
     ElementSpec(
-        id="settings.local_subnet", role="text", label="內網網段",
-        section="PVE 連線", help="例：192.168.100.0/24。",
+        id="pve.local_subnet", role="text", label="內網網段",
+        section="此叢集的資源設定", help="例：192.168.100.0/24。",
     ),
     ElementSpec(
-        id="settings.default_node", role="text", label="預設節點",
-        section="PVE 連線", help="選填，未指定時優先使用這個節點。",
+        id="pve.default_node", role="text", label="預設節點",
+        section="此叢集的資源設定", help="選填，未指定時優先使用這個節點。",
     ),
-    # 節點管理
+)
+
+# ── 節點管理 ─────────────────────────────────────────────────────────
+_NODES_ELEMENTS: tuple[ElementSpec, ...] = (
     ElementSpec(
-        id="settings.node_enable", role="toggle", label="啟用",
+        id="nodes.enable", role="toggle", label="啟用",
         section="節點管理",
         help="停用後不再接收新 VM，既有 VM 不受影響。",
     ),
     ElementSpec(
-        id="settings.node_edit", role="button", label="編輯",
-        section="節點管理", help="修改這個節點的設定。",
-    ),
-    # 資源排程
-    ElementSpec(
-        id="settings.save_scheduler", role="button", label="儲存排程設定",
-        section="資源排程",
+        id="nodes.edit", role="button", label="編輯",
+        section="節點管理", help="修改這個節點的連線位址、Port 與放置優先度。",
     ),
     ElementSpec(
-        id="settings.scheduled_boot_lead_time", role="number",
-        label="提前開機（分）", section="資源排程",
+        id="nodes.primary", role="readonly", label="主節點",
+        section="節點管理", help="這組 PVE 連線的主要節點。",
     ),
     ElementSpec(
-        id="settings.scheduled_boot_batch_size", role="number",
-        label="開機批次大小", section="資源排程",
+        id="nodes.online", role="readonly", label="在線",
+        section="節點管理", help="同步時 PVE 回報這個節點可連線。",
     ),
     ElementSpec(
-        id="settings.scheduled_boot_batch_interval", role="number",
-        label="批次間隔（秒）", section="資源排程",
+        id="nodes.offline", role="readonly", label="離線",
+        section="節點管理", help="同步時 PVE 回報這個節點連不上。",
+    ),
+)
+
+# ── Storage ─────────────────────────────────────────────────────────
+_STORAGE_ELEMENTS: tuple[ElementSpec, ...] = (
+    ElementSpec(
+        id="storage.speed_tier", role="select", label="速度等級",
+        section="Storage",
+        help="NVMe / SSD / HDD / 未知；放置演算法挑選 Storage 時會把速度等級列入排序。",
     ),
     ElementSpec(
-        id="settings.window_grace_period", role="number",
-        label="時段寬限（分）", section="資源排程",
+        id="storage.user_priority", role="number", label="使用者優先度",
+        section="Storage",
+        help="數字越小越優先；放置演算法在其他條件相同時用它決定選哪個 Storage。",
     ),
     ElementSpec(
-        id="settings.practice_session_hours", role="number",
-        label="練習時段（小時）", section="資源排程",
+        id="storage.enable", role="toggle", label="啟用",
+        section="Storage", help="停用的 Storage 不會被放置演算法選用。",
     ),
     ElementSpec(
-        id="settings.practice_warning_minutes", role="number",
-        label="練習提醒（分）", section="資源排程",
+        id="storage.shared", role="readonly", label="共享",
+        section="Storage",
+        help="共享 Storage 同時掛在多個節點上，這裡的變更會套用到所有掛載節點。",
+    ),
+)
+
+# ── 資源排程 ─────────────────────────────────────────────────────────
+_SCHEDULER_ELEMENTS: tuple[ElementSpec, ...] = (
+    ElementSpec(
+        id="scheduler.cpu_overcommit", role="number", label="CPU 超配比",
+        section="放置與超配",
     ),
     ElementSpec(
-        id="settings.expiry_warning_hours", role="number",
-        label="到期提醒（小時）", section="資源排程",
+        id="scheduler.disk_overcommit", role="number", label="Disk 超配比",
+        section="放置與超配",
     ),
     ElementSpec(
-        id="settings.cpu_overcommit", role="number", label="CPU 超配比",
-        section="資源排程",
+        id="scheduler.peak_cpu_margin", role="number", label="CPU 峰值餘裕",
+        section="資源評估閾值",
     ),
     ElementSpec(
-        id="settings.disk_overcommit", role="number", label="Disk 超配比",
-        section="資源排程",
+        id="scheduler.peak_memory_margin", role="number", label="RAM 峰值餘裕",
+        section="資源評估閾值",
     ),
     ElementSpec(
-        id="settings.resource_weight_cpu", role="number", label="資源權重 CPU",
-        section="資源排程",
+        id="scheduler.loadavg_warn_per_core", role="number",
+        label="LoadAvg 警戒 / 核", section="資源評估閾值",
     ),
     ElementSpec(
-        id="settings.resource_weight_memory", role="number", label="資源權重 RAM",
-        section="資源排程",
+        id="scheduler.loadavg_max_per_core", role="number",
+        label="LoadAvg 上限 / 核", section="資源評估閾值",
     ),
     ElementSpec(
-        id="settings.resource_weight_disk", role="number", label="資源權重 Disk",
-        section="資源排程",
+        id="scheduler.loadavg_penalty_weight", role="number",
+        label="LoadAvg 懲罰權重", section="資源評估閾值",
     ),
     ElementSpec(
-        id="settings.peak_cpu_margin", role="number", label="CPU 峰值餘裕",
-        section="資源排程",
+        id="scheduler.resource_weight_cpu", role="number", label="資源權重 CPU",
+        section="資源評估閾值",
     ),
     ElementSpec(
-        id="settings.peak_memory_margin", role="number", label="RAM 峰值餘裕",
-        section="資源排程",
+        id="scheduler.resource_weight_memory", role="number", label="資源權重 RAM",
+        section="資源評估閾值",
     ),
     ElementSpec(
-        id="settings.loadavg_max_per_core", role="number",
-        label="LoadAvg 上限 / 核", section="資源排程",
+        id="scheduler.resource_weight_disk", role="number", label="資源權重 Disk",
+        section="資源評估閾值",
     ),
     ElementSpec(
-        id="settings.loadavg_warn_per_core", role="number",
-        label="LoadAvg 警戒 / 核", section="資源排程",
+        id="scheduler.scheduled_boot_batch_size", role="number",
+        label="開機批次大小", section="排程開機與時段",
     ),
     ElementSpec(
-        id="settings.loadavg_penalty_weight", role="number",
-        label="LoadAvg 懲罰權重", section="資源排程",
+        id="scheduler.scheduled_boot_batch_interval", role="number",
+        label="批次間隔（秒）", section="排程開機與時段",
     ),
-    # 配額：全域預設上限與個別使用者覆寫
     ElementSpec(
-        id="settings.quota_global", role="list", label="全域預設配額",
-        section="配額",
+        id="scheduler.scheduled_boot_lead_time", role="number",
+        label="提前開機（分）", section="排程開機與時段",
+    ),
+    ElementSpec(
+        id="scheduler.window_grace_period", role="number",
+        label="時段寬限（分）", section="排程開機與時段",
+    ),
+    ElementSpec(
+        id="scheduler.practice_session_hours", role="number",
+        label="練習時段（小時）", section="排程開機與時段",
+    ),
+    ElementSpec(
+        id="scheduler.practice_warning_minutes", role="number",
+        label="練習提醒（分）", section="排程開機與時段",
+    ),
+    ElementSpec(
+        id="scheduler.expiry_warning_hours", role="number",
+        label="到期提醒（小時）", section="排程開機與時段",
+    ),
+    ElementSpec(
+        id="scheduler.save", role="button", label="儲存排程設定",
+        help="一次送出這一頁的全部欄位。",
+    ),
+)
+
+# ── 治理 ─────────────────────────────────────────────────────────────
+_GOVERNANCE_ELEMENTS: tuple[ElementSpec, ...] = (
+    ElementSpec(
+        id="governance.alerts_enabled", role="toggle", label="啟用警告",
+        section="資源警告", help="定期檢查叢集/節點/VM 資源使用率。",
+    ),
+    ElementSpec(
+        id="governance.alert_email_enabled", role="toggle", label="Email 通知",
+        section="資源警告", help="警告建立時寄送 Email 給管理員。",
+    ),
+    ElementSpec(
+        id="governance.alert_cpu_threshold", role="number", label="CPU 閾值（%）",
+        section="資源警告", constraints=("50 到 100",),
+    ),
+    ElementSpec(
+        id="governance.alert_memory_threshold", role="number", label="記憶體閾值（%）",
+        section="資源警告", constraints=("50 到 100",),
+    ),
+    ElementSpec(
+        id="governance.alert_disk_threshold", role="number", label="磁碟閾值（%）",
+        section="資源警告", constraints=("50 到 100",),
+    ),
+    ElementSpec(
+        id="governance.alert_cooldown_minutes", role="number", label="冷卻期（分鐘）",
+        section="資源警告", help="同一目標同一指標在冷卻期內不重發警告。",
+        constraints=("1 到 1440",),
+    ),
+    ElementSpec(
+        id="governance.ttl_enabled", role="toggle", label="啟用 TTL 回收",
+        section="TTL 生命週期", help="依資源到期日自動通知、關機與排入刪除。",
+    ),
+    ElementSpec(
+        id="governance.expiry_warn_days", role="number", label="到期前通知（天）",
+        section="TTL 生命週期", constraints=("1 到 30",),
+    ),
+    ElementSpec(
+        id="governance.expiry_grace_delete_days", role="number", label="刪除寬限期（天）",
+        section="TTL 生命週期", help="到期關機後保留幾天才排入刪除佇列。",
+        constraints=("0 到 90",),
+    ),
+    ElementSpec(
+        id="governance.idle_detection_enabled", role="toggle", label="啟用閒置偵測",
+        section="閒置偵測", help="偵測長期低 CPU 的運行中資源。",
+    ),
+    ElementSpec(
+        id="governance.idle_cpu_threshold_percent", role="number",
+        label="閒置 CPU 閾值（%）", section="閒置偵測", constraints=("0.1 到 20",),
+    ),
+    ElementSpec(
+        id="governance.idle_notify_after_hours", role="number",
+        label="閒置通知（小時）", section="閒置偵測",
+        help="偵測到閒置後持續達此時數才通知擁有者，須小於關機寬限期。",
+        constraints=("1 到 720",),
+    ),
+    ElementSpec(
+        id="governance.idle_grace_hours", role="number",
+        label="關機寬限期（小時）", section="閒置偵測",
+        help="自偵測到閒置起算，持續達此時數仍閒置才自動關機，須大於閒置通知時數。",
+        constraints=("1 到 720",),
+    ),
+    ElementSpec(
+        id="governance.workload_advisor_enabled", role="toggle", label="啟用自動判斷",
+        section="VM / LXC 自動判斷",
+        help="停用後申請表單僅能手動選擇資源類型。",
+    ),
+    ElementSpec(
+        id="governance.mining_detection_enabled", role="toggle", label="啟用挖礦偵測",
+        section="反挖礦偵測", help="定期掃描運行中資源的 CPU 特徵。",
+    ),
+    ElementSpec(
+        id="governance.mining_auto_suspend", role="toggle", label="自動存證並暫停",
+        section="反挖礦偵測",
+        help="關閉後僅建立事件與通知，暫停由管理員手動執行。",
+    ),
+    ElementSpec(
+        id="governance.snapshot_cleanup_enabled", role="toggle", label="啟用快照自動清理",
+        section="快照治理", help="超過保留天數的非保護快照將被排程刪除。",
+    ),
+    ElementSpec(
+        id="governance.snapshot_retention_days", role="number", label="保留天數",
+        section="快照治理", constraints=("1 到 90",),
+    ),
+    ElementSpec(
+        id="governance.student_snapshot_max_count", role="number", label="學生快照上限",
+        section="快照治理", help="不含 skylab-init；達上限需先刪舊快照。",
+        constraints=("1 到 10",),
+    ),
+    ElementSpec(
+        id="governance.provision_max_concurrency", role="number", label="併發上限",
+        section="克隆併發",
+        help="同時執行的 VM/LXC 克隆數上限；變更於下一個排程週期生效。",
+        constraints=("1 到 16",),
+    ),
+    ElementSpec(
+        id="governance.save", role="button", label="儲存治理設定",
+        help="一次送出這一頁的全部欄位。",
+    ),
+)
+
+# ── 配額 ─────────────────────────────────────────────────────────────
+_QUOTAS_ELEMENTS: tuple[ElementSpec, ...] = (
+    ElementSpec(
+        id="quotas.global", role="list", label="全域預設配額",
+        section="全域預設配額",
         help="沒有個人覆寫的使用者一律套用這組上限。調整只影響之後的新增與擴容，"
              "不會回頭處理既有資源。",
     ),
     ElementSpec(
-        id="settings.quota_user", role="select", label="使用者", section="配額",
+        id="quotas.user", role="select", label="使用者", section="個別使用者覆寫",
         help="輸入姓名或 email 搜尋要設定覆寫的對象。",
     ),
     ElementSpec(
-        id="settings.quota_create", role="button", label="新增配額",
-        section="配額",
+        id="quotas.create", role="button", label="新增配額",
+        section="個別使用者覆寫",
         help="欄位會帶入目前的全域預設值，改成這位使用者專屬的上限即可。"
              "勾選「無限制」代表該項目不設上限。",
     ),
     ElementSpec(
-        id="settings.quota_edit", role="button", label="編輯配額",
-        section="配額",
+        id="quotas.edit", role="button", label="編輯配額",
+        section="個別使用者覆寫",
     ),
     ElementSpec(
-        id="settings.quota_delete", role="button", label="刪除配額",
-        section="配額", help="刪除後這位使用者改回套用全域預設值。",
+        id="quotas.delete", role="button", label="刪除配額",
+        section="個別使用者覆寫", help="刪除後這位使用者改回套用全域預設值。",
+    ),
+)
+
+# ── LDAP ─────────────────────────────────────────────────────────────
+_LDAP_ELEMENTS: tuple[ElementSpec, ...] = (
+    ElementSpec(
+        id="ldap.enabled", role="toggle", label="啟用 LDAP 登入",
+        section="LDAP / Active Directory 登入",
+        help="啟用前建議先以「測試連線」驗證設定。",
+    ),
+    ElementSpec(
+        id="ldap.server_uri", role="text", label="伺服器 URI",
+        section="LDAP / Active Directory 登入",
+        help="例：ldap://dc.example.edu:389 或 ldaps://...。", constraints=("必填",),
+    ),
+    ElementSpec(
+        id="ldap.connect_timeout", role="number", label="連線逾時（秒）",
+        section="LDAP / Active Directory 登入", constraints=("1 到 60",),
+    ),
+    ElementSpec(
+        id="ldap.use_starttls", role="toggle", label="使用 StartTLS",
+        section="LDAP / Active Directory 登入",
+        help="在 ldap:// 連線上升級為加密連線（ldaps:// 不需要）。",
+    ),
+    ElementSpec(
+        id="ldap.bind_password", role="text", label="Bind 密碼",
+        section="服務帳號與使用者搜尋", sensitive=True,
+        help="服務帳號的密碼；已設定時留空表示不變更。",
+    ),
+    ElementSpec(
+        id="ldap.user_search_base", role="text", label="使用者搜尋 Base DN",
+        section="服務帳號與使用者搜尋", help="例：OU=Users,DC=example,DC=edu。",
+    ),
+    ElementSpec(
+        id="ldap.user_filter_template", role="text", label="使用者過濾範本",
+        section="服務帳號與使用者搜尋",
+        help="{username} 會代入登入時輸入的帳號，例：(sAMAccountName={username}) 或 (uid={username})。",
+    ),
+    ElementSpec(
+        id="ldap.email_attribute", role="text", label="Email 屬性",
+        section="服務帳號與使用者搜尋", help="例：mail。",
+    ),
+    ElementSpec(
+        id="ldap.name_attribute", role="text", label="姓名屬性",
+        section="服務帳號與使用者搜尋", help="例：displayName。",
+    ),
+    ElementSpec(
+        id="ldap.auto_create_users", role="toggle", label="自動建立帳號",
+        section="帳號建立與角色對映",
+        help="關閉後僅已存在的本地帳號可用 LDAP 登入。",
+    ),
+    ElementSpec(
+        id="ldap.teacher_group_dn", role="text", label="教師群組 DN（選填）",
+        section="帳號建立與角色對映", help="使用者屬於此群組時建立為 teacher 角色。",
+    ),
+    ElementSpec(
+        id="ldap.admin_group_dn", role="text", label="管理員群組 DN（選填）",
+        section="帳號建立與角色對映", help="使用者屬於此群組時建立為 admin 角色。",
+    ),
+    ElementSpec(
+        id="ldap.test_connection", role="button", label="測試連線",
+        help="用目前表單的設定實際連一次 LDAP，不會儲存。",
+    ),
+    ElementSpec(
+        id="ldap.save", role="button", label="儲存 LDAP 設定",
     ),
 )
 
@@ -1410,13 +1621,71 @@ _SURFACES: tuple[SurfaceSpec, ...] = (
         elements=_AUDIT_ELEMENTS,
         access="admin",
     ),
+    # 原「系統設定」的七個分頁，2026-09 各自升格為系統管理底下的獨立頁面
     SurfaceSpec(
-        id="settings",
-        path="/settings",
-        title="系統設定",
-        purpose="管理 Proxmox VE 連線、節點、Storage、資源排程與配額設定。",
-        sections=("PVE 連線", "節點管理", "資源排程", "治理", "配額"),
-        elements=_SETTINGS_ELEMENTS,
+        id="pve-connections",
+        path="/pve-connections",
+        title="PVE 連線",
+        purpose="管理 Proxmox VE 的連線入口，以及每個叢集自己的 pool、Storage 與網段設定。",
+        sections=("PVE 連線清單", "連線設定", "此叢集的資源設定"),
+        elements=_PVE_CONNECTIONS_ELEMENTS,
+        access="admin",
+    ),
+    SurfaceSpec(
+        id="scheduler",
+        path="/scheduler",
+        title="資源排程",
+        purpose="跨叢集共用的放置、超配與排程開機參數。",
+        sections=("放置與超配", "資源評估閾值", "排程開機與時段"),
+        elements=_SCHEDULER_ELEMENTS,
+        access="admin",
+    ),
+    SurfaceSpec(
+        id="governance",
+        path="/governance",
+        title="治理",
+        purpose="資源警告、TTL 回收、閒置與挖礦偵測、快照與克隆併發的治理政策。",
+        sections=(
+            "資源警告", "TTL 生命週期", "閒置偵測", "VM / LXC 自動判斷",
+            "反挖礦偵測", "快照治理", "克隆併發",
+        ),
+        elements=_GOVERNANCE_ELEMENTS,
+        access="admin",
+    ),
+    SurfaceSpec(
+        id="quotas",
+        path="/quotas",
+        title="配額",
+        purpose="全域預設的資源上限，以及個別使用者的覆寫。",
+        sections=("全域預設配額", "個別使用者覆寫"),
+        elements=_QUOTAS_ELEMENTS,
+        access="admin",
+    ),
+    SurfaceSpec(
+        id="ldap",
+        path="/ldap",
+        title="LDAP",
+        purpose="LDAP / Active Directory 登入的連線、服務帳號與角色對映。",
+        sections=("LDAP / Active Directory 登入", "服務帳號與使用者搜尋", "帳號建立與角色對映"),
+        elements=_LDAP_ELEMENTS,
+        access="admin",
+    ),
+    SurfaceSpec(
+        id="nodes",
+        path="/nodes",
+        title="節點管理",
+        purpose="各 PVE 節點的啟用狀態、連線位址與放置優先度。",
+        sections=("節點管理",),
+        elements=_NODES_ELEMENTS,
+        access="admin",
+    ),
+    SurfaceSpec(
+        id="storage",
+        path="/storage",
+        title="Storage",
+        purpose="各 Storage 的速度等級、使用者優先度與啟用狀態，放置時據此挑選磁碟。",
+        sections=("Storage",),
+        elements=_STORAGE_ELEMENTS,
         access="admin",
     ),
     SurfaceSpec(
