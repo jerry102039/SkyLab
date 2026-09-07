@@ -14,6 +14,7 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeRubricAnalysis,
     TeacherJudgeSessionCreateRequest,
     TeacherJudgeSessionMessageCreateRequest,
+    TeacherJudgeSessionUpdateRequest,
 )
 from app.api.routes import teacher_judge_sessions
 from app.models.teacher_judge_file import TeacherJudgeFile
@@ -347,12 +348,17 @@ async def test_message_without_rubric_is_saved_and_uses_general_chat(
 ) -> None:
     db = _session()
     class_id = uuid.uuid4()
-    item = TeacherJudgeSession(teaching_class_id=class_id, title="Chat first")
+    item = TeacherJudgeSession(
+        teaching_class_id=class_id,
+        title="Chat first",
+        summary="先前已確認要保留 Python 檢查。",
+    )
     db.add(item)
     db.commit()
     db.refresh(item)
 
     async def fake_chat(messages, rubric_context, **kwargs):
+        assert "保留 Python 檢查" in messages[0].content
         assert messages[-1].content == "先討論檢查需求"
         assert rubric_context == "{}"
         assert kwargs["is_refine"] is False
@@ -511,6 +517,61 @@ async def test_message_rejects_stale_rubric_revision_before_ai_call(
     assert db.exec(select(TeacherJudgeSessionMessage)).all() == []
 
 
+@pytest.mark.asyncio
+async def test_chat_does_not_save_old_answer_after_source_switch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _session()
+    class_id = uuid.uuid4()
+    first_file = _file(db, class_id)
+    second_file = TeacherJudgeFile(
+        teaching_class_id=class_id,
+        original_filename="new-rubric.pdf",
+        file_hash="c" * 64,
+        template_key="linux",
+        analysis_json={"items": []},
+    )
+    db.add(second_file)
+    db.commit()
+    db.refresh(second_file)
+    item = TeacherJudgeSession(
+        teaching_class_id=class_id,
+        title="Concurrent source",
+        selected_file_id=first_file.id,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
+    monkeypatch.setattr(
+        teacher_judge_sessions,
+        "get_enabled_template_commands",
+        lambda *args, **kwargs: [],
+    )
+
+    async def fake_chat(*args, **kwargs):
+        session_service.clear_session_messages(db, item)
+        item.selected_file_id = second_file.id
+        db.add(item)
+        db.commit()
+        return "不應保存的舊回答", None, {}
+
+    monkeypatch.setattr(teacher_judge_sessions, "chat_with_rubric", fake_chat)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await teacher_judge_sessions.create_message(
+            class_id,
+            item.id,
+            TeacherJudgeSessionMessageCreateRequest(content="舊來源問題"),
+            db,
+            SimpleNamespace(id=uuid.uuid4()),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "teacher_judge_context_changed"
+    assert db.exec(select(TeacherJudgeSessionMessage)).all() == []
+
+
 def test_message_content_redacts_common_secrets() -> None:
     content = session_service.redact_message_content(
         "token=abc123 password: hunter2\n"
@@ -550,6 +611,231 @@ def test_bounded_history_keeps_latest_messages_in_stable_order() -> None:
     assert len(history) == session_service.HISTORY_MESSAGE_LIMIT
     assert history[0].content == "message-05"
     assert history[-1].content == "message-24"
+
+
+def test_bounded_history_includes_summary_before_newer_messages() -> None:
+    db = _session()
+    item = TeacherJudgeSession(
+        teaching_class_id=uuid.uuid4(),
+        title="History summary",
+        summary="老師已決定只檢查 Python 執行結果。",
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    db.add_all(
+        [
+            TeacherJudgeSessionMessage(
+                session_id=item.id,
+                role=TeacherJudgeMessageRole.user,
+                content="請保留這個方向",
+                created_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
+            ),
+            TeacherJudgeSessionMessage(
+                session_id=item.id,
+                role=TeacherJudgeMessageRole.assistant,
+                content="好的，會保留。",
+                created_at=datetime(2026, 8, 2, 0, 0, 1, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db.commit()
+
+    history = session_service.bounded_history(db, item.id, summary=item.summary)
+
+    assert history[0].role == "assistant"
+    assert "只檢查 Python 執行結果" in history[0].content
+    assert history[-1].content == "好的，會保留。"
+
+
+def test_summary_persistence_is_monotonic_for_out_of_order_workers() -> None:
+    db = _session()
+    item = TeacherJudgeSession(teaching_class_id=uuid.uuid4(), title="Summary race")
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    started_at = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    messages: list[TeacherJudgeSessionMessage] = []
+    for index in range(20):
+        message = TeacherJudgeSessionMessage(
+            session_id=item.id,
+            role=TeacherJudgeMessageRole.assistant,
+            content=f"assistant-{index}",
+            created_at=started_at + timedelta(seconds=index),
+        )
+        messages.append(message)
+        db.add(message)
+    db.commit()
+    for message in messages:
+        db.refresh(message)
+
+    older = session_service._prepare_summary_job(
+        db,
+        session_id=item.id,
+        boundary_message_id=messages[9].id,
+        assistant_count=10,
+        selected_file_id=None,
+        analysis_revision=None,
+    )
+    newer = session_service._prepare_summary_job(
+        db,
+        session_id=item.id,
+        boundary_message_id=messages[19].id,
+        assistant_count=20,
+        selected_file_id=None,
+        analysis_revision=None,
+    )
+    assert older is not None and newer is not None
+
+    assert session_service._persist_summary_if_current(db, newer, "第 20 輪摘要")
+    assert not session_service._persist_summary_if_current(db, older, "第 10 輪摘要")
+    db.refresh(item)
+    assert item.summary == "第 20 輪摘要"
+    assert item.summary_through_message_id == messages[19].id
+    assert item.summary_through_assistant_count == 20
+
+
+def test_source_switch_clears_old_conversation_and_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _session()
+    class_id = uuid.uuid4()
+    first_file = _file(db, class_id)
+    second_file = TeacherJudgeFile(
+        teaching_class_id=class_id,
+        original_filename="rubric-second.pdf",
+        file_hash="b" * 64,
+        template_key="linux",
+        analysis_json={"items": [], "summary": "second"},
+    )
+    db.add(second_file)
+    db.commit()
+    db.refresh(second_file)
+    item = TeacherJudgeSession(
+        teaching_class_id=class_id,
+        title="Switch source",
+        selected_file_id=first_file.id,
+        summary="不要帶到新來源",
+        summary_through_assistant_count=10,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    db.add(
+        TeacherJudgeSessionMessage(
+            session_id=item.id,
+            role=TeacherJudgeMessageRole.assistant,
+            content="舊來源決定",
+        )
+    )
+    db.commit()
+    monkeypatch.setattr(teacher_judge_sessions, "_access", lambda *args: None)
+
+    result = teacher_judge_sessions.update_session(
+        class_id,
+        item.id,
+        TeacherJudgeSessionUpdateRequest(selected_file_id=second_file.id),
+        db,
+        SimpleNamespace(id=uuid.uuid4()),
+    )
+
+    assert result.selected_file_id == str(second_file.id)
+    refreshed = db.get(TeacherJudgeSession, item.id)
+    assert refreshed is not None
+    assert refreshed.summary == ""
+    assert refreshed.summary_through_message_id is None
+    assert refreshed.summary_through_assistant_count == 0
+    assert db.exec(select(TeacherJudgeSessionMessage)).all() == []
+
+
+def test_schedule_summary_uses_stable_task_id_without_waiting_for_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _session()
+    item = TeacherJudgeSession(teaching_class_id=uuid.uuid4(), title="Schedule")
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    messages = [
+        TeacherJudgeSessionMessage(
+            session_id=item.id,
+            role=TeacherJudgeMessageRole.assistant,
+            content=f"answer-{index}",
+        )
+        for index in range(10)
+    ]
+    db.add_all(messages)
+    db.commit()
+    for message in messages:
+        db.refresh(message)
+    captured: dict[str, object] = {}
+
+    def fake_submit(coro, **kwargs):
+        captured.update(kwargs)
+        coro.close()
+        return "summary-task"
+
+    monkeypatch.setattr(session_service, "submit", fake_submit)
+
+    task_id = session_service.schedule_summary(
+        db, item, boundary_message_id=messages[-1].id
+    )
+
+    assert task_id == "summary-task"
+    assert captured["name"] == "teacher-judge-summary"
+    assert str(messages[-1].id) in str(captured["task_id"])
+
+
+@pytest.mark.asyncio
+async def test_summary_worker_uses_fresh_session_for_model_and_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker_engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(worker_engine)
+    monkeypatch.setattr(session_service, "engine", worker_engine)
+    with Session(worker_engine) as db:
+        item = TeacherJudgeSession(
+            teaching_class_id=uuid.uuid4(),
+            title="Worker summary",
+        )
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        messages = [
+            TeacherJudgeSessionMessage(
+                session_id=item.id,
+                role=TeacherJudgeMessageRole.assistant,
+                content=f"worker-answer-{index}",
+                created_at=datetime(2026, 8, 3, 0, 0, index, tzinfo=timezone.utc),
+            )
+            for index in range(10)
+        ]
+        db.add_all(messages)
+        db.commit()
+        for message in messages:
+            db.refresh(message)
+        session_id = item.id
+        boundary_id = messages[-1].id
+
+    async def fake_summary(messages, previous_summary=""):
+        assert messages[-1].content == "worker-answer-9"
+        return "背景摘要已保存", {}
+
+    monkeypatch.setattr(session_service, "summarize_conversation", fake_summary)
+    await session_service.run_summary_job(
+        session_id,
+        boundary_id,
+        10,
+        None,
+        None,
+    )
+
+    with Session(worker_engine) as db:
+        saved = db.get(TeacherJudgeSession, session_id)
+        assert saved is not None
+        assert saved.summary == "背景摘要已保存"
+        assert saved.summary_through_message_id == boundary_id
+        assert saved.summary_through_assistant_count == 10
 
 
 def test_session_public_many_matches_single_session_contract() -> None:
@@ -625,15 +911,12 @@ async def test_summary_runs_only_on_tenth_completed_turn(
     db.refresh(item)
     calls = 0
 
-    async def fake_chat(*args, **kwargs):
+    async def fake_summary(*args, **kwargs):
         nonlocal calls
         calls += 1
-        return "new summary", None, {}
+        return "new summary", {}
 
-    monkeypatch.setattr(session_service, "chat_with_rubric", fake_chat)
-    monkeypatch.setattr(
-        session_service, "get_enabled_template_commands", lambda *args, **kwargs: []
-    )
+    monkeypatch.setattr(session_service, "summarize_conversation", fake_summary)
 
     for index in range(9):
         db.add(
@@ -688,13 +971,10 @@ async def test_summary_failure_preserves_previous_value(
         )
     db.commit()
 
-    async def fail_chat(*args, **kwargs):
+    async def fail_summary(*args, **kwargs):
         raise RuntimeError("model unavailable")
 
-    monkeypatch.setattr(session_service, "chat_with_rubric", fail_chat)
-    monkeypatch.setattr(
-        session_service, "get_enabled_template_commands", lambda *args, **kwargs: []
-    )
+    monkeypatch.setattr(session_service, "summarize_conversation", fail_summary)
     await session_service.maybe_summarize(db, item, rubric_file)
 
     assert item.summary == "keep me"

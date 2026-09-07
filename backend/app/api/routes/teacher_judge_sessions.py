@@ -45,13 +45,14 @@ from app.ai.teacher_judge.session_service import (
     delete_session_data,
     ensure_active,
     ensure_selected_file_available,
+    finalize_cleared_attachments,
     fork_session_data,
     get_session,
-    maybe_summarize,
     message_attachments_by_message_ids,
     message_public,
     redact_message_content,
     require_selected_file,
+    schedule_summary,
     selected_file_for_chat,
     session_public,
     session_public_many,
@@ -244,6 +245,7 @@ def update_session(
     if "teaching_class_week_id" in changes:
         _validate_week(session, teaching_class_id, payload.teaching_class_week_id)
         item.teaching_class_week_id = payload.teaching_class_week_id
+    cleared_attachments: list[TeacherJudgeSessionAttachment] = []
     if "selected_file_id" in changes:
         validate_selected_file(session, teaching_class_id, payload.selected_file_id)
         if payload.selected_file_id is not None:
@@ -251,6 +253,10 @@ def update_session(
                 session,
                 payload.selected_file_id,
                 exclude_session_id=item.id,
+            )
+        if payload.selected_file_id != item.selected_file_id:
+            cleared_attachments = clear_session_messages(
+                session, item, commit=False
             )
         item.selected_file_id = payload.selected_file_id
     from app.models.base import get_datetime_utc
@@ -277,6 +283,8 @@ def update_session(
             raise
         raise _selected_file_conflict() from exc
     session.refresh(item)
+    if cleared_attachments:
+        finalize_cleared_attachments(cleared_attachments)
     return session_public(session, item)
 
 
@@ -489,6 +497,7 @@ async def create_message(
                 session,
                 item.id,
                 exclude_attachments_for_message_id=user_message.id,
+                summary=item.summary,
             ),
             json.dumps(file.analysis_json, ensure_ascii=False) if file else "{}",
             is_refine=payload.is_refine,
@@ -527,6 +536,29 @@ async def create_message(
         session.add(assistant)
         session.commit()
         raise
+    # Source changes clear the conversation while this request may still be
+    # waiting on the model.  Revalidate before saving the generated answer so
+    # an old response cannot be attached to the new rubric context.
+    session.refresh(item)
+    ensure_active(item)
+    current_file = selected_file_for_chat(session, item)
+    if current_file is not None:
+        session.refresh(current_file)
+        current_file = selected_file_for_chat(session, item)
+    if (
+        (current_file.id if current_file else None) != (file.id if file else None)
+        or (current_file.analysis_revision if current_file else None) != base_revision
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "teacher_judge_context_changed",
+                "message": t("teacherJudgeSessions.analysisRevisionConflict"),
+                "analysis_revision": current_file.analysis_revision
+                if current_file
+                else None,
+            },
+        )
     from app.models.base import get_datetime_utc
 
     item.last_activity_at = get_datetime_utc()
@@ -534,7 +566,7 @@ async def create_message(
     session.add_all([assistant, item])
     session.commit()
     session.refresh(assistant)
-    await maybe_summarize(session, item, file, template_commands=template_commands)
+    schedule_summary(session, item, boundary_message_id=assistant.id)
     return TeacherJudgeSessionChatResponse(
         user_message=message_public(user_message, attachments),
         assistant_message=message_public(assistant),

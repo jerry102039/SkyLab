@@ -44,16 +44,11 @@ def _extract_first_json_object(text: str) -> str | None:
     if start < 0:
         return None
 
-    depth = 0
-    for idx in range(start, len(text)):
-        char = text[idx]
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : idx + 1]
-    return None
+    try:
+        _, end = json.JSONDecoder().raw_decode(text, start)
+    except json.JSONDecodeError:
+        return None
+    return text[start:end]
 
 
 def _clamp_confidence(value: Any) -> float:
@@ -379,6 +374,8 @@ async def resolve_navigation(
             timeout=_DEFAULT_TIMEOUT_SECONDS,
         )
         metrics = _usage_metrics(response_data, perf_counter() - started)
+        if response_data["choices"][0].get("finish_reason") == "length":
+            raise ValueError("Navigation model output was truncated")
         content = str(response_data["choices"][0]["message"]["content"] or "")
         normalized_text = strip_think_tags(content)
         raw_json = _extract_first_json_object(normalized_text)

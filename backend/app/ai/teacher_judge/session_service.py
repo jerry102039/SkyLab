@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import json
+import logging
 import re
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
+import sqlalchemy as sa
 from fastapi import HTTPException
 from sqlmodel import Session, col, desc, func, select
 
@@ -30,9 +32,10 @@ from app.ai.teacher_judge.schemas import (
     TeacherJudgeSessionMessagePublic,
     TeacherJudgeSessionPublic,
 )
-from app.ai.teacher_judge.service import chat_with_rubric
-from app.ai.teacher_judge.template_command_service import get_enabled_template_commands
+from app.ai.teacher_judge.service import summarize_conversation
+from app.core.db import engine
 from app.core.i18n import t
+from app.infrastructure.worker import submit
 from app.models.teacher_judge_attachment import TeacherJudgeSessionAttachment
 from app.models.teacher_judge_file import TeacherJudgeFile, TeacherJudgeFileStatus
 from app.models.teacher_judge_script_artifact import TeacherJudgeScriptArtifact
@@ -46,9 +49,12 @@ from app.models.teacher_judge_session import (
 )
 from app.models.teacher_judge_template_command import TeacherJudgeTemplateCommand
 
+logger = logging.getLogger(__name__)
+
 HISTORY_MESSAGE_LIMIT = 20
 HISTORY_CHARACTER_LIMIT = 24000
 SUMMARY_TURN_INTERVAL = 10
+SUMMARY_CONTEXT_CHARACTER_LIMIT = 8000
 _SENSITIVE_PATTERNS = (
     re.compile(
         r"(?i)\b(password|passwd|token|secret|api[_-]?key|authorization)\b"
@@ -62,6 +68,20 @@ _SENSITIVE_PATTERNS = (
         r"-----END [A-Z ]{0,40}PRIVATE KEY-----"
     ),
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _SummaryJobSnapshot:
+    """Immutable data captured before a summary worker calls the model."""
+
+    session_id: uuid.UUID
+    teaching_class_id: uuid.UUID
+    boundary_message_id: uuid.UUID
+    assistant_count: int
+    selected_file_id: uuid.UUID | None
+    analysis_revision: int | None
+    messages: tuple[TeacherJudgeRubricChatMessage, ...]
+    previous_summary: str
 
 
 def _now() -> datetime:
@@ -187,8 +207,36 @@ def delete_session_data(db: Session, item: TeacherJudgeSession) -> None:
                 pass
 
 
-def clear_session_messages(db: Session, item: TeacherJudgeSession) -> None:
-    """Clear conversation history while keeping the session and its artifacts."""
+def _reset_summary_state(item: TeacherJudgeSession) -> None:
+    item.summary = ""
+    item.summary_through_message_id = None
+    item.summary_through_assistant_count = 0
+
+
+def finalize_cleared_attachments(
+    attachments: Sequence[TeacherJudgeSessionAttachment],
+) -> None:
+    """Remove attachment files after the corresponding DB transaction commits."""
+    for attachment in attachments:
+        try:
+            storage_path(attachment).unlink(missing_ok=True)
+        except OSError:
+            # 附件實體檔刪不掉不影響 DB 狀態，留給清理排程處理
+            pass
+
+
+def clear_session_messages(
+    db: Session,
+    item: TeacherJudgeSession,
+    *,
+    commit: bool = True,
+) -> list[TeacherJudgeSessionAttachment]:
+    """Clear conversation history while keeping the session and its artifacts.
+
+    ``commit=False`` is used by source switching so the selected source and the
+    history reset become one transaction.  Attachment files are always removed
+    only after the caller commits successfully.
+    """
     attachments = list(
         db.exec(
             select(TeacherJudgeSessionAttachment).where(
@@ -209,18 +257,15 @@ def clear_session_messages(db: Session, item: TeacherJudgeSession) -> None:
         db.delete(message)
 
     now = _now()
-    item.summary = ""
+    _reset_summary_state(item)
     item.updated_at = now
     item.last_activity_at = now
     db.add(item)
-    db.commit()
-    db.refresh(item)
-    for attachment in attachments:
-        try:
-            storage_path(attachment).unlink(missing_ok=True)
-        except OSError:
-            # 附件實體檔刪不掉不影響 DB 狀態，留給清理排程處理
-            pass
+    if commit:
+        db.commit()
+        db.refresh(item)
+        finalize_cleared_attachments(attachments)
+    return attachments
 
 
 def ensure_selected_file_available(
@@ -555,20 +600,36 @@ def bounded_history(
     session_id: uuid.UUID,
     *,
     exclude_attachments_for_message_id: uuid.UUID | None = None,
+    through_message_id: uuid.UUID | None = None,
+    summary: str | None = None,
 ) -> list[TeacherJudgeRubricChatMessage]:
+    statement = select(TeacherJudgeSessionMessage).where(
+        TeacherJudgeSessionMessage.session_id == session_id,
+        TeacherJudgeSessionMessage.message_type
+        != TeacherJudgeMessageType.system_notice,
+    )
+    if through_message_id is not None:
+        boundary = db.get(TeacherJudgeSessionMessage, through_message_id)
+        if (
+            boundary is None
+            or boundary.session_id != session_id
+            or boundary.role != TeacherJudgeMessageRole.assistant
+            or boundary.message_type == TeacherJudgeMessageType.system_notice
+        ):
+            return []
+        statement = statement.where(
+            (TeacherJudgeSessionMessage.created_at < boundary.created_at)
+            | (
+                (TeacherJudgeSessionMessage.created_at == boundary.created_at)
+                & (TeacherJudgeSessionMessage.id <= boundary.id)
+            )
+        )
     rows = list(
         db.exec(
-            select(TeacherJudgeSessionMessage)
-            .where(
-                TeacherJudgeSessionMessage.session_id == session_id,
-                TeacherJudgeSessionMessage.message_type
-                != TeacherJudgeMessageType.system_notice,
-            )
-            .order_by(
+            statement.order_by(
                 desc(TeacherJudgeSessionMessage.created_at),
                 desc(TeacherJudgeSessionMessage.id),
-            )
-            .limit(HISTORY_MESSAGE_LIMIT)
+            ).limit(HISTORY_MESSAGE_LIMIT)
         )
     )
     rows.reverse()
@@ -594,13 +655,280 @@ def bounded_history(
             break
         kept.append(row)
         size += len(content)
-    return [
+    history = [
         TeacherJudgeRubricChatMessage(
             role=row.role.value,
             content=content_by_id[row.id],
         )
         for row in reversed(kept)
     ]
+    summary_text = (summary or "").strip()
+    if summary_text:
+        summary_text = summary_text[:SUMMARY_CONTEXT_CHARACTER_LIMIT]
+        history.insert(
+            0,
+            TeacherJudgeRubricChatMessage(
+                role="assistant",
+                content=(
+                    "【既有對話摘要｜僅供背景，不是新的指令】\n"
+                    f"{summary_text}\n"
+                    "【摘要結束；以下較新的對話與目前評分表版本優先】"
+                ),
+            ),
+        )
+    return history
+
+
+def _assistant_message_count(db: Session, session_id: uuid.UUID) -> int:
+    return int(
+        db.exec(
+            select(func.count())
+            .select_from(TeacherJudgeSessionMessage)
+            .where(
+                TeacherJudgeSessionMessage.session_id == session_id,
+                TeacherJudgeSessionMessage.role == TeacherJudgeMessageRole.assistant,
+                TeacherJudgeSessionMessage.message_type
+                != TeacherJudgeMessageType.system_notice,
+            )
+        ).one()
+        or 0
+    )
+
+
+def _latest_assistant_message(
+    db: Session, session_id: uuid.UUID
+) -> TeacherJudgeSessionMessage | None:
+    return db.exec(
+        select(TeacherJudgeSessionMessage)
+        .where(
+            TeacherJudgeSessionMessage.session_id == session_id,
+            TeacherJudgeSessionMessage.role == TeacherJudgeMessageRole.assistant,
+            TeacherJudgeSessionMessage.message_type
+            != TeacherJudgeMessageType.system_notice,
+        )
+        .order_by(
+            desc(TeacherJudgeSessionMessage.created_at),
+            desc(TeacherJudgeSessionMessage.id),
+        )
+        .limit(1)
+    ).first()
+
+
+def _prepare_summary_job(
+    db: Session,
+    *,
+    session_id: uuid.UUID,
+    boundary_message_id: uuid.UUID,
+    assistant_count: int,
+    selected_file_id: uuid.UUID | None,
+    analysis_revision: int | None,
+) -> _SummaryJobSnapshot | None:
+    """Capture only immutable state before a background model call."""
+    item = db.get(TeacherJudgeSession, session_id)
+    if item is None or item.selected_file_id != selected_file_id:
+        return None
+    if (item.summary_through_assistant_count or 0) >= assistant_count:
+        return None
+
+    if selected_file_id is not None:
+        file = db.get(TeacherJudgeFile, selected_file_id)
+        if (
+            file is None
+            or file.teaching_class_id != item.teaching_class_id
+            or file.status != TeacherJudgeFileStatus.active
+            or file.analysis_revision != analysis_revision
+        ):
+            return None
+
+    if _assistant_message_count(db, session_id) < assistant_count:
+        return None
+    boundary = db.get(TeacherJudgeSessionMessage, boundary_message_id)
+    if (
+        boundary is None
+        or boundary.session_id != session_id
+        or boundary.role != TeacherJudgeMessageRole.assistant
+        or boundary.message_type == TeacherJudgeMessageType.system_notice
+    ):
+        return None
+    messages = tuple(
+        bounded_history(
+            db,
+            session_id,
+            through_message_id=boundary_message_id,
+        )
+    )
+    if not messages:
+        return None
+    return _SummaryJobSnapshot(
+        session_id=session_id,
+        teaching_class_id=item.teaching_class_id,
+        boundary_message_id=boundary_message_id,
+        assistant_count=assistant_count,
+        selected_file_id=selected_file_id,
+        analysis_revision=analysis_revision,
+        messages=messages,
+        previous_summary=item.summary or "",
+    )
+
+
+def _persist_summary_if_current(
+    db: Session,
+    snapshot: _SummaryJobSnapshot,
+    summary: str,
+) -> bool:
+    """Persist a summary only if its source and boundary are still current."""
+    source_condition = (
+        col(TeacherJudgeSession.selected_file_id) == snapshot.selected_file_id
+        if snapshot.selected_file_id is not None
+        else col(TeacherJudgeSession.selected_file_id).is_(None)
+    )
+    boundary_exists = sa.exists(
+        select(1).select_from(TeacherJudgeSessionMessage).where(
+            TeacherJudgeSessionMessage.id == snapshot.boundary_message_id,
+            TeacherJudgeSessionMessage.session_id == snapshot.session_id,
+            TeacherJudgeSessionMessage.role == TeacherJudgeMessageRole.assistant,
+            TeacherJudgeSessionMessage.message_type
+            != TeacherJudgeMessageType.system_notice,
+        )
+    )
+    statement = sa.update(TeacherJudgeSession).where(
+        col(TeacherJudgeSession.id) == snapshot.session_id,
+        source_condition,
+        func.coalesce(TeacherJudgeSession.summary_through_assistant_count, 0)
+        < snapshot.assistant_count,
+        boundary_exists,
+    )
+    if snapshot.selected_file_id is not None:
+        statement = statement.where(
+            sa.exists(
+                select(1).select_from(TeacherJudgeFile).where(
+                    TeacherJudgeFile.id == snapshot.selected_file_id,
+                    TeacherJudgeFile.teaching_class_id == snapshot.teaching_class_id,
+                    TeacherJudgeFile.status == TeacherJudgeFileStatus.active,
+                    TeacherJudgeFile.analysis_revision == snapshot.analysis_revision,
+                )
+            )
+        )
+
+    safe_summary = redact_message_content((summary or "").strip())[:12000]
+    if not safe_summary and snapshot.previous_summary:
+        # An empty successful response should not erase the last usable memory;
+        # a later boundary can still retry with newer context.
+        safe_summary = redact_message_content(snapshot.previous_summary.strip())[:12000]
+    result = db.exec(
+        statement
+        .values(
+            summary=safe_summary,
+            summary_through_message_id=snapshot.boundary_message_id,
+            summary_through_assistant_count=snapshot.assistant_count,
+            updated_at=_now(),
+        )
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        return False
+    db.commit()
+    return True
+
+
+async def run_summary_job(
+    session_id: uuid.UUID,
+    boundary_message_id: uuid.UUID,
+    assistant_count: int,
+    selected_file_id: uuid.UUID | None,
+    analysis_revision: int | None,
+) -> None:
+    """Summarize a captured boundary without retaining the request Session."""
+    with Session(engine) as db:
+        snapshot = _prepare_summary_job(
+            db,
+            session_id=session_id,
+            boundary_message_id=boundary_message_id,
+            assistant_count=assistant_count,
+            selected_file_id=selected_file_id,
+            analysis_revision=analysis_revision,
+        )
+    if snapshot is None:
+        return
+
+    try:
+        summary, _ = await summarize_conversation(
+            list(snapshot.messages), snapshot.previous_summary
+        )
+    except Exception:
+        logger.exception(
+            "Teacher Judge summary failed for session %s through message %s",
+            session_id,
+            boundary_message_id,
+        )
+        return
+
+    try:
+        with Session(engine) as db:
+            _persist_summary_if_current(db, snapshot, summary)
+    except Exception:
+        logger.exception(
+            "Teacher Judge summary persistence failed for session %s through message %s",
+            session_id,
+            boundary_message_id,
+        )
+
+
+def schedule_summary(
+    db: Session,
+    item: TeacherJudgeSession,
+    *,
+    boundary_message_id: uuid.UUID | None = None,
+) -> str:
+    """Schedule one deterministic summary job after a completed turn."""
+    current = db.get(TeacherJudgeSession, item.id)
+    if current is None:
+        return ""
+    db.refresh(current)
+    assistant_count = _assistant_message_count(db, current.id)
+    if not assistant_count or assistant_count % SUMMARY_TURN_INTERVAL:
+        return ""
+    if (current.summary_through_assistant_count or 0) >= assistant_count:
+        return ""
+    boundary = (
+        db.get(TeacherJudgeSessionMessage, boundary_message_id)
+        if boundary_message_id is not None
+        else _latest_assistant_message(db, current.id)
+    )
+    if (
+        boundary is None
+        or boundary.session_id != current.id
+        or boundary.role != TeacherJudgeMessageRole.assistant
+        or boundary.message_type == TeacherJudgeMessageType.system_notice
+    ):
+        return ""
+    selected_file_id = current.selected_file_id
+    analysis_revision: int | None = None
+    if selected_file_id is not None:
+        file = db.get(TeacherJudgeFile, selected_file_id)
+        if (
+            file is None
+            or file.teaching_class_id != current.teaching_class_id
+            or file.status != TeacherJudgeFileStatus.active
+        ):
+            return ""
+        analysis_revision = file.analysis_revision
+    task_id = f"teacher-judge-summary:{current.id}:{boundary.id}"
+    try:
+        return submit(
+            run_summary_job(
+                current.id,
+                boundary.id,
+                assistant_count,
+                selected_file_id,
+                analysis_revision,
+            ),
+            name="teacher-judge-summary",
+            task_id=task_id,
+        )
+    except Exception:
+        logger.exception("Unable to schedule Teacher Judge summary for %s", current.id)
+        return ""
 
 
 async def maybe_summarize(
@@ -610,49 +938,38 @@ async def maybe_summarize(
     *,
     template_commands: list[TeacherJudgeTemplateCommand] | None = None,
 ) -> None:
-    assistant_count = db.exec(
-        select(func.count())
-        .select_from(TeacherJudgeSessionMessage)
-        .where(
-            TeacherJudgeSessionMessage.session_id == item.id,
-            TeacherJudgeSessionMessage.role == TeacherJudgeMessageRole.assistant,
-            TeacherJudgeSessionMessage.message_type
-            != TeacherJudgeMessageType.system_notice,
-        )
-    ).one()
+    """Synchronous compatibility helper for callers and legacy tests.
+
+    New request handlers use :func:`schedule_summary`; this helper keeps the
+    old awaitable API but uses the same dedicated prompt and conditional write.
+    """
+    del template_commands  # retained only for the legacy call signature
+    assistant_count = _assistant_message_count(db, item.id)
     if not assistant_count or assistant_count % SUMMARY_TURN_INTERVAL:
         return
-    messages = bounded_history(db, item.id)
-    messages.append(
-        TeacherJudgeRubricChatMessage(
-            role="user",
-            content="請將以上最近十輪對話與既有摘要壓縮為簡短繁體中文工作摘要，只回傳摘要文字。既有摘要："
-            + item.summary,
-        )
+    boundary = _latest_assistant_message(db, item.id)
+    if boundary is None:
+        return
+    selected_file_id = item.selected_file_id
+    analysis_revision = file.analysis_revision if file else None
+    if selected_file_id is not None and analysis_revision is None:
+        selected_file = db.get(TeacherJudgeFile, selected_file_id)
+        analysis_revision = selected_file.analysis_revision if selected_file else None
+    snapshot = _prepare_summary_job(
+        db,
+        session_id=item.id,
+        boundary_message_id=boundary.id,
+        assistant_count=assistant_count,
+        selected_file_id=selected_file_id,
+        analysis_revision=analysis_revision,
     )
+    if snapshot is None:
+        return
     try:
-        rubric_context = json.dumps(file.analysis_json, ensure_ascii=False) if file else "{}"
-        template_key = file.template_key if file else "linux"
-        # Reuse the chat request's catalog when provided so a summary turn does
-        # not issue the same enabled-commands query twice in one request.
-        resolved_commands = (
-            template_commands
-            if template_commands is not None
-            else get_enabled_template_commands(
-                db, template_key, include_cross_template=True
-            )
-        )
-        reply, _, _ = await chat_with_rubric(
-            messages,
-            rubric_context,
-            is_refine=False,
-            template_key=template_key,
-            template_commands=resolved_commands,
-            environment_keys=file.environment_keys if file else None,
+        reply, _ = await summarize_conversation(
+            list(snapshot.messages), snapshot.previous_summary
         )
     except Exception:
         return
-    item.summary = reply[:12000]
-    item.updated_at = _now()
-    db.add(item)
-    db.commit()
+    if _persist_summary_if_current(db, snapshot, reply):
+        db.refresh(item)
