@@ -34,6 +34,10 @@ from sqlmodel import Session
 
 from app.ai.pve_log.collector import PveToolContext, collect_snapshot  # noqa: F401
 from app.ai.pve_log.config import settings
+from app.ai.pve_log.history import (
+    PveHistoryValidationError,
+    merge_pve_messages,
+)
 from app.ai.pve_log.schemas import ChatResponse, SystemSnapshot, ToolCallRecord
 from app.ai.pve_template.command_policy import is_known_read_command
 from app.core.i18n import t
@@ -220,6 +224,16 @@ _TOOLS: list[dict[str, Any]] = [
         },
     },
 ]
+
+_ALLOWED_TOOL_NAMES = frozenset(
+    tool.get("function", {}).get("name")
+    for tool in _TOOLS
+    if isinstance(tool.get("function"), dict)
+)
+_SCOPE_PROMPT = (
+    "本次對話僅可讀取與操作指定範圍內的 VM/LXC，"
+    "不得查詢或操作範圍外的 VMID。"
+)
 
 # ---------------------------------------------------------------------------
 # Tool 執行器
@@ -424,7 +438,7 @@ def _deferred_ssh_result(args: dict[str, Any]) -> dict[str, Any]:
 
 def _next_deferred_ssh_call(
     messages: list[dict[str, Any]],
-) -> tuple[int, dict[str, Any]] | None:
+) -> tuple[int, str, dict[str, Any]] | None:
     """Find the next server-deferred SSH call in an existing tool-call round."""
     for message_index, message in enumerate(messages):
         if message.get("role") != "tool":
@@ -446,7 +460,7 @@ def _next_deferred_ssh_call(
                 function = tool_call.get("function") or {}
                 if function.get("name") != "ssh_exec":
                     return None
-                return message_index, _parse_tool_arguments(
+                return message_index, str(tool_call_id), _parse_tool_arguments(
                     function.get("arguments") or "{}"
                 )
     return None
@@ -529,6 +543,215 @@ def _normalize_assistant_message(message: dict[str, Any]) -> dict[str, Any]:
     cleaned = re.sub(r"<tool_call>.*?</tool_call>", "", cleaned, flags=re.DOTALL)
     cleaned = re.sub(r"<\|[^>]*\|>", "", cleaned)
     return {**assistant_msg, "content": cleaned.strip() or None}
+
+
+def _canonicalize_model_tool_calls(
+    message: dict[str, Any],
+    *,
+    reserved_ids: set[str],
+) -> dict[str, Any]:
+    """Give every model tool call a unique id before adding it to history."""
+    raw_calls = message.get("tool_calls")
+    if not raw_calls:
+        return message
+    if not isinstance(raw_calls, list):
+        return message
+
+    calls: list[dict[str, Any]] = []
+    used_ids = set(reserved_ids)
+    for raw_call in raw_calls:
+        if not isinstance(raw_call, dict):
+            continue
+        call = dict(raw_call)
+        raw_id = call.get("id")
+        call_id = raw_id.strip() if isinstance(raw_id, str) else ""
+        while not call_id or call_id in used_ids:
+            call_id = f"call_{uuid.uuid4().hex[:8]}"
+        call["id"] = call_id
+        call["type"] = "function"
+        function = call.get("function")
+        if isinstance(function, dict):
+            call["function"] = dict(function)
+        used_ids.add(call_id)
+        calls.append(call)
+    return {**message, "tool_calls": calls}
+
+
+def _validate_confirmation_history(
+    messages: list[dict[str, Any]],
+    *,
+    requester_id: uuid.UUID | None,
+    scope_type: str | None,
+    scope_id: uuid.UUID | None,
+    allowed_vmids: set[int] | None,
+) -> None:
+    """Validate and consume server-owned SSH results in a resumed history."""
+    from app.ai.pve_log.ssh_exec import (
+        consume_completed_confirmation,
+        find_completed_confirmation_by_tool_call,
+        peek_completed_confirmation,
+    )
+
+    tool_calls: dict[str, tuple[str, dict[str, Any]]] = {}
+    for item in messages:
+        if item.get("role") != "assistant":
+            continue
+        for tool_call in item.get("tool_calls") or []:
+            if not isinstance(tool_call, dict):
+                continue
+            call_id = tool_call.get("id")
+            function = tool_call.get("function")
+            if isinstance(call_id, str) and isinstance(function, dict):
+                tool_calls[call_id] = (
+                    str(function.get("name") or ""),
+                    _parse_tool_arguments(function.get("arguments") or "{}"),
+                )
+
+    tokens: list[str] = []
+
+    def _validate_record(
+        item: dict[str, Any],
+        content: dict[str, Any],
+        record: dict[str, Any],
+        *,
+        token_present: bool,
+    ) -> dict[str, Any]:
+        tool_call_id = item.get("tool_call_id")
+        if not isinstance(tool_call_id, str):
+            raise PveHistoryValidationError(
+                "PVE confirmation result 缺少有效的 tool_call_id"
+            )
+        if (
+            record.get("requester_id") != requester_id
+            or record.get("scope_type") != scope_type
+            or record.get("scope_id") != scope_id
+        ):
+            raise PveHistoryValidationError("PVE confirmation token 與目前 scope 不符")
+        stored_vmids = record.get("allowed_vmids")
+        if (
+            (allowed_vmids is None) != (stored_vmids is None)
+            or (
+                allowed_vmids is not None
+                and stored_vmids is not None
+                and set(allowed_vmids) != set(stored_vmids)
+            )
+        ):
+            raise PveHistoryValidationError("PVE confirmation token 與目前 VM scope 不符")
+        if record.get("tool_call_id") != tool_call_id:
+            raise PveHistoryValidationError(
+                "PVE confirmation token 與 assistant tool-call 不符"
+            )
+
+        call = tool_calls.get(tool_call_id)
+        request = record.get("request")
+        if (
+            call is None
+            or call[0] != "ssh_exec"
+            or request is None
+            or not hasattr(request, "vmid")
+            or not hasattr(request, "command")
+        ):
+            raise PveHistoryValidationError(
+                "PVE confirmation result 缺少對應的 ssh_exec tool-call"
+            )
+        call_args = call[1]
+        if (
+            call_args.get("vmid") != request.vmid
+            or call_args.get("command") != request.command
+            or call_args.get("ssh_user", "root")
+            != getattr(request, "ssh_user", "root")
+            or call_args.get("ssh_port", 22)
+            != getattr(request, "ssh_port", 22)
+        ):
+            raise PveHistoryValidationError(
+                "PVE confirmation result 與原始 ssh_exec 參數不符"
+            )
+
+        expected = record.get("result")
+        if not isinstance(expected, dict):
+            raise PveHistoryValidationError("PVE confirmation result server state 無效")
+        candidate = dict(content)
+        candidate.pop("confirmation_token", None)
+        candidate.pop("confirmation_decision", None)
+        allowed_extra = {"reason"}
+        if set(candidate) - set(expected) - allowed_extra:
+            raise PveHistoryValidationError("PVE confirmation result 含有未授權欄位")
+        if any(candidate.get(key) != value for key, value in expected.items()):
+            raise PveHistoryValidationError("PVE confirmation result 與 server result 不符")
+
+        if (
+            not token_present
+            and not record.get("consumed")
+            and record.get("scope_type") not in {"template", "template_batch"}
+        ):
+            raise PveHistoryValidationError(
+                "一般 PVE confirmation result 必須帶 server confirmation token"
+            )
+        return candidate
+
+    for item in messages:
+        if item.get("role") != "tool":
+            continue
+        try:
+            content = json.loads(str(item.get("content", "")))
+        except (TypeError, json.JSONDecodeError):
+            continue
+        tool_call_id = item.get("tool_call_id")
+        if not isinstance(content, dict):
+            if isinstance(tool_call_id, str) and find_completed_confirmation_by_tool_call(
+                tool_call_id
+            ):
+                raise PveHistoryValidationError(
+                    "PVE confirmation result 必須是 server 產生的 JSON object"
+                )
+            continue
+
+        token_present = "confirmation_token" in content
+        if token_present:
+            token = content.get("confirmation_token")
+            record = (
+                peek_completed_confirmation(str(token))
+                if isinstance(token, str) and token
+                else None
+            )
+            if record is None or record.get("consumed"):
+                raise PveHistoryValidationError(
+                    "PVE 對話 history 的 confirmation token 無效、已過期或已重放"
+                )
+            candidate = _validate_record(
+                item,
+                content,
+                record,
+                token_present=True,
+            )
+            item["content"] = json.dumps(
+                candidate,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            tokens.append(str(token))
+            continue
+
+        if not isinstance(tool_call_id, str):
+            continue
+        record = find_completed_confirmation_by_tool_call(tool_call_id)
+        if record is None:
+            continue
+        candidate = _validate_record(
+            item,
+            content,
+            record,
+            token_present=False,
+        )
+        if not record.get("consumed"):
+            token = record.get("token")
+            if not isinstance(token, str):
+                raise PveHistoryValidationError("PVE confirmation server state 缺少 token")
+            tokens.append(token)
+
+    for token in tokens:
+        if consume_completed_confirmation(token) is None:
+            raise PveHistoryValidationError("PVE confirmation result 已被其他請求使用")
 
 
 def _parse_tool_arguments(value: Any) -> dict[str, Any]:
@@ -663,58 +886,32 @@ async def chat(
     resume_deferred_ssh: bool = False,
 ) -> ChatResponse:
     """執行有限步數的 AI agent 對話，支援 tool calling、確認中斷及接續。"""
+    effective_system_prompt = system_prompt or _SYSTEM_PROMPT
+    messages = merge_pve_messages(
+        message=message,
+        history=history,
+        server_system_prompt=effective_system_prompt,
+        scope_prompt=_SCOPE_PROMPT if allowed_vmids is not None else None,
+        allowed_tool_names=_ALLOWED_TOOL_NAMES,
+        allow_deferred=resume_deferred_ssh,
+    )
+    _validate_confirmation_history(
+        messages,
+        requester_id=requester_id,
+        scope_type=scope_type,
+        scope_id=scope_id,
+        allowed_vmids=allowed_vmids,
+    )
     if not settings.VLLM_BASE_URL or not settings.VLLM_MODEL_NAME:
         return ChatResponse(
             reply="",
             error=t("pveLog.vllmNotConfigured"),
         )
 
-    effective_system_prompt = system_prompt or _SYSTEM_PROMPT
-    if history:
-        if system_prompt is not None:
-            messages = [
-                dict(item)
-                for item in history
-                if isinstance(item, dict) and item.get("role") != "system"
-            ]
-            messages.insert(
-                0,
-                {"role": "system", "content": effective_system_prompt},
-            )
-            if allowed_vmids is not None:
-                messages.insert(
-                    1,
-                    {
-                        "role": "system",
-                        "content": (
-                            "本次對話僅可讀取與操作指定範圍內的 VM/LXC，"
-                            "不得查詢或操作範圍外的 VMID。"
-                        ),
-                    },
-                )
-            if message:
-                messages.append({"role": "user", "content": message})
-        else:
-            messages = [dict(item) for item in history]
-    else:
-        messages = [{"role": "system", "content": effective_system_prompt}]
-        if allowed_vmids is not None:
-            messages.append(
-                {
-                    "role": "system",
-                    "content": (
-                        "本次對話僅可讀取與操作指定範圍內的 VM/LXC，"
-                        "不得查詢或操作範圍外的 VMID。"
-                    ),
-                }
-            )
-        if message:
-            messages.append({"role": "user", "content": message})
-
     tools_called: list[ToolCallRecord] = []
     if resume_deferred_ssh:
         while deferred_call := _next_deferred_ssh_call(messages):
-            message_index, func_args = deferred_call
+            message_index, tool_call_id, func_args = deferred_call
             try:
                 result = await _execute_ssh_tool(
                     func_args,
@@ -736,8 +933,20 @@ async def chat(
                 ensure_ascii=False,
                 default=str,
             )
+            if result_dict.get("pending") and result_dict.get("confirm_token"):
+                from app.ai.pve_log.ssh_exec import bind_pending_tool_call
+
+                bind_pending_tool_call(
+                    str(result_dict["confirm_token"]),
+                    tool_call_id,
+                )
             tools_called.append(
-                ToolCallRecord(name="ssh_exec", args=func_args, result=result_dict)
+                ToolCallRecord(
+                    name="ssh_exec",
+                    args=func_args,
+                    result=result_dict,
+                    tool_call_id=tool_call_id,
+                )
             )
             if result_dict.get("pending"):
                 return ChatResponse(
@@ -806,6 +1015,17 @@ async def chat(
             assistant_msg,
             allowed_vmids=allowed_vmids,
             template_key=single_template_key,
+        )
+        reserved_tool_call_ids = {
+            str(item.get("id"))
+            for item in messages
+            if item.get("role") == "assistant"
+            for tool_call in item.get("tool_calls") or []
+            if isinstance(tool_call, dict) and tool_call.get("id")
+        }
+        assistant_msg = _canonicalize_model_tool_calls(
+            assistant_msg,
+            reserved_ids=reserved_tool_call_ids,
         )
         messages.append(assistant_msg)
         tool_calls = assistant_msg.get("tool_calls") or []
@@ -933,24 +1153,39 @@ async def chat(
                 )
                 pending_issued = pending_issued or bool(result_dict.get("pending"))
                 tool_content = json.dumps(result, ensure_ascii=False, default=str)
+                tool_call_id = str(tc.get("id") or "")
+                if result_dict.get("pending") and result_dict.get("confirm_token"):
+                    from app.ai.pve_log.ssh_exec import bind_pending_tool_call
+
+                    bind_pending_tool_call(
+                        str(result_dict["confirm_token"]),
+                        tool_call_id,
+                    )
                 tools_called.append(
-                    ToolCallRecord(name=func_name, args=func_args, result=result_dict)
+                    ToolCallRecord(
+                        name=func_name,
+                        args=func_args,
+                        result=result_dict,
+                        tool_call_id=tool_call_id,
+                    )
                 )
             except Exception as exc:
                 logger.error("工具 %s 執行失敗：%s", func_name, exc)
                 tool_content = json.dumps({"error": str(exc)}, ensure_ascii=False)
+                tool_call_id = str(tc.get("id") or "")
                 tools_called.append(
                     ToolCallRecord(
                         name=func_name,
                         args=func_args,
                         result={"error": str(exc)},
+                        tool_call_id=tool_call_id,
                     )
                 )
 
             messages.append(
                 {
                     "role": "tool",
-                    "tool_call_id": tc.get("id") or f"call_{uuid.uuid4().hex[:8]}",
+                    "tool_call_id": tool_call_id,
                     "content": tool_content,
                 }
             )

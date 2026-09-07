@@ -59,6 +59,7 @@ _SENSITIVE_OUTPUT_PATTERNS = (
     ),
 )
 _pending_store: dict[str, dict[str, Any]] = {}  # token → {request, created_at}
+_completed_store: dict[str, dict[str, Any]] = {}
 
 
 def _store_pending(
@@ -94,6 +95,62 @@ def _peek_pending(token: str) -> dict[str, Any] | None:
     return _pending_store.get(token)
 
 
+def bind_pending_tool_call(token: str, tool_call_id: str) -> bool:
+    """Bind a pending confirmation token to the assistant tool-call id."""
+    entry = _peek_pending(token)
+    if entry is None or not tool_call_id:
+        return False
+    entry["tool_call_id"] = tool_call_id
+    return True
+
+
+def _store_completed(
+    token: str,
+    *,
+    entry: dict[str, Any],
+    result: SSHExecResult,
+) -> None:
+    _completed_store[token] = {
+        "token": token,
+        "created_at": time.monotonic(),
+        "request": entry.get("request"),
+        "tool_call_id": entry.get("tool_call_id"),
+        "requester_id": entry.get("requester_id"),
+        "scope_type": entry.get("scope_type"),
+        "scope_id": entry.get("scope_id"),
+        "allowed_vmids": entry.get("allowed_vmids"),
+        "result": result.model_dump(mode="json"),
+        "consumed": False,
+    }
+
+
+def peek_completed_confirmation(token: str) -> dict[str, Any] | None:
+    """Read a just-consumed confirmation result for one history continuation."""
+    _cleanup_expired()
+    return _completed_store.get(token)
+
+
+def consume_completed_confirmation(token: str) -> dict[str, Any] | None:
+    """Mark a confirmation result as consumed after history validation."""
+    _cleanup_expired()
+    entry = _completed_store.get(token)
+    if entry is None or entry.get("consumed"):
+        return None
+    entry["consumed"] = True
+    return entry
+
+
+def find_completed_confirmation_by_tool_call(
+    tool_call_id: str,
+) -> dict[str, Any] | None:
+    """Find a confirmation record by its immutable assistant tool-call id."""
+    _cleanup_expired()
+    for entry in _completed_store.values():
+        if entry.get("tool_call_id") == tool_call_id:
+            return entry
+    return None
+
+
 def peek_pending_scope(token: str) -> tuple[str | None, uuid.UUID | None]:
     """Read token scope without consuming it."""
     entry = _peek_pending(token)
@@ -116,6 +173,12 @@ def _cleanup_expired() -> None:
     expired = [k for k, v in _pending_store.items() if now - v["created_at"] > _PENDING_TTL]
     for k in expired:
         _pending_store.pop(k, None)
+    completed_expired = [
+        k for k, v in _completed_store.items()
+        if now - v["created_at"] > _PENDING_TTL
+    ]
+    for k in completed_expired:
+        _completed_store.pop(k, None)
 
 
 # ---------------------------------------------------------------------------
@@ -420,15 +483,19 @@ async def confirm_exec(
         )
     allowed_vmids = stored_vmids
 
+    def _completed(result: SSHExecResult) -> SSHExecResult:
+        _store_completed(token, entry=entry, result=result)
+        return result
+
     if not confirm_req.approved:
         logger.info("使用者拒絕執行 vmid=%d cmd=%r", req.vmid, req.command)
-        return SSHExecResult(
+        return _completed(SSHExecResult(
             vmid=req.vmid,
             host="",
             ssh_user=req.ssh_user,
             command=req.command,
             error=t("pveLog.userRejected"),
-        )
+        ))
 
     override_command = (confirm_req.command or "").strip()
     if override_command:
@@ -440,17 +507,18 @@ async def confirm_exec(
                 override_command,
                 guard.reason,
             )
-            return SSHExecResult(
+            return _completed(SSHExecResult(
                 vmid=req.vmid,
                 host="",
                 ssh_user=req.ssh_user,
                 command=override_command,
                 blocked=True,
                 block_reason=guard.reason,
-            )
+            ))
         req = req.model_copy(update={"command": override_command})
 
-    return await _do_exec(req, session=session, allowed_vmids=allowed_vmids)
+    result = await _do_exec(req, session=session, allowed_vmids=allowed_vmids)
+    return _completed(result)
 
 
 async def _do_exec(

@@ -245,15 +245,82 @@ GPU cache 只有 `cached_items` 非空才命中，成功取得空列表仍會每
 
 **驗收**：有效選中項排在二十一名、GPU 排在十一名、名字相近但環境不同、老師 application template／裸 OS 區別、最新否定需求、來源失敗及無權限候選。保留 VM/LXC 與排程、GPU 的既有手動選擇及後端核准流程。
 
-### F11：PVE history 必須有明確的續聊契約
+### F11：PVE history 與最新訊息必須遵守明確的續聊契約
 
-**證據（S）**：[pve_log/chat.py](../backend/app/ai/pve_log/chat.py) `chat`（630 行附近）在 `history` 存在且 `system_prompt is None` 的分支，直接複製 history，不加入獨立 `message`，也不重新插入 server system prompt。一般 PVE log route 正是未傳自訂 system_prompt 的入口。
+**證據（S）**：目前 `message` 與 `messages` 都是可選欄位，[`ChatRequest`](../backend/app/ai/pve_log/schemas.py) 沒有要求兩者互斥，也沒有驗證 history 的 role、tool-call 配對或長度；[ai_pve_log.py](../backend/app/api/routes/ai_pve_log.py) 只把兩個欄位原樣轉交給 `pve_log/chat.py`。
 
-若 client 已把新 user turn 放入 history，現在行為可以正常；若送「舊 history + 新 message」，新問題就被忽略。因此不能未核對 consumer 就直接 append，否則另一種 caller 會重複輸入。Template 分支已移除 client system messages 並重建固定 prompt，兩路行為不一致。
+目前 `pve_log/chat.py` `chat`（650 行附近）的組合結果如下：
 
-**方向**：定義並驗證「新 message 與 history 是否包含當前 turn」；保留 confirmation 的 server pending state，不能把任意 client tool message 當成已执行事實。history 壓縮應以完整 assistant tool-call／tool-result 組為單位，確認中的組不得截斷。對相同無進展的 tool 呼叫可先記錄簽章，但不能任意禁止使用者明確要求重新查詢的唯讀操作。
+| 請求形狀 | 目前組合行為 | 風險／結論 |
+| --- | --- | --- |
+| 只有 `{message}` | 建立 server system prompt，必要時加入 VMID scope，再追加一個 user turn | 第一輪可用；這是一般前端的冷啟動路徑 |
+| 只有 `{messages}`、未傳 `system_prompt` | 逐筆 shallow copy history；不追加 `message`，也不重新插入 server system prompt | 前端追問可用，前提是 history 已經含本輪 user turn；client 提供的 system／tool 內容也會原樣進模型 |
+| `{messages, message}`、未傳 `system_prompt` | 直接採用 history，`message` 被忽略 | 舊 history + 新問題會遺失最新問題 |
+| `{messages, message}`、有 `system_prompt`（目前 template 內部路徑） | 移除 client 的 system turn、插入 server prompt／scope，再追加 `message` | 若 history 已含本輪 user turn 會重複輸入；與一般 PVE route 行為不一致 |
+| 兩者皆無（或只有空白／空清單） | 可能只送 system prompt 後呼叫模型 | 沒有可回答的當前 turn，應在邊界拒絕 |
 
-**驗收**：首次、追問、message + history、只有 history、確認同意／拒絕／deferred resume、偽造 system turn、缺失或重複 tool_call_id；保留 hard-deny、scope、逐筆確認順序。
+實際 consumer 也已確認這個差異：
+
+- [AiPveChat.jsx](../frontend/src/components/AiPveChat/AiPveChat.jsx) 第一輪送 `{ message }`；收到回應後以 `response.messages` 作為 canonical history，後續先把新 user turn push 進該陣列，再只送 `{ messages }`（84–99 行）。因此一般前端目前採「history 已含當前 turn」語意。
+- 同一元件的確認流程先呼叫 `/ssh/confirm`，再在本地以 token 搜尋 pending tool message、替換其 `content`，最後只送 `{ messages: updatedHistory }`（124–166 行）。若 token 找不到，仍可能把未完成的 pending result 送回模型；目前沒有 server-side 對該替換做配對驗證。
+- [pve_template/service.py](../backend/app/ai/pve_template/service.py) 會把 pending 對話快照存於 `_PendingContext`，以 `_replace_pending_tool_result` 寫入實際 `SSHExecResult`，再以 `resume_deferred_ssh=True` 依原順序處理 deferred 指令；這條路徑的 server state 比一般 PVE route 完整，但仍共用同一個 `chat` history 組合器。
+
+**F11 目標契約（修正後應以此作為 source of truth）**：
+
+1. **欄位語意固定**：
+   - `message` 代表「一個尚未放入 transcript 的新 user turn」，不是用來覆寫或修補 history。
+   - `messages` 代表「可重播的完整 canonical transcript」，其最後一個當前 user turn（若本輪是新問題）已經包含在陣列內。它可以包含 server system、user、assistant tool-call 及對應 tool result，但不能把可見 UI 的 `messages` 陣列當成替代品。
+   - `ChatResponse.messages` 是下一次請求唯一應回送的 history 來源；呼叫端不得另外從 `reply` 或 `tools_called` 自行重建 tool round。
+
+2. **輸入模式互斥，禁止猜測**：
+
+   | 模式 | 合併結果 | 允許的 consumer |
+   | --- | --- | --- |
+   | `message` only（非空字串） | 由 server 建立 `[server system, optional scope, user(message)]` | 新對話／沒有既有 transcript 的第一輪 |
+   | `messages` only（非空 canonical transcript） | 驗證、移除 client system、重建 server system／scope；**不再追加任何 user turn** | 一般前端追問、確認結果回送、template deferred resume |
+   | `message + messages` | 邊界回 `422`（`message` 與 `messages` 互斥）；不得採 precedence，也不得用字串相等猜是否重複 | 僅可由 migration adapter 轉成上列其中一種模式後再呼叫核心 service |
+   | 兩者皆無／內容為空 | 邊界回 `422` | 不允許空請求觸發模型 |
+
+   這個規則與目前前端的實際用法相容，也消除了「舊 history + 新 message」與「history 已含新 turn 又再 append」的雙重歧義。若仍有 legacy caller 必須分開持有舊 history 與新 message，應在該 caller 邊界明確執行 `canonical_history = old_history + [{"role": "user", "content": message}]`，然後只傳 `messages=canonical_history`；不要在共用 `chat` 內以最後一則文字相等與否推斷意圖。這是相容轉接，不是新增第三種核心模式。
+
+   `messages` only 不是「重播最後一個已完成 assistant 回覆」的 retry 介面：其尾端必須是本輪 user turn，或是 server-owned confirmation／deferred continuation 狀態。若尾端已是沒有 tool-call 的 final assistant，且沒有待處理的 server state，應拒絕重播並要求新的 user turn，避免同一回答被無意間再次生成。
+
+3. **固定的 server-side 合併／驗證順序**：
+
+   ```text
+   normalize non-empty message/history
+   -> enforce exactly one input mode
+   -> validate each history item and tool-call round
+   -> remove every client-provided role=system
+   -> prepend exactly one server-owned system prompt (+ scope guard when applicable)
+   -> message-only: append the one new user turn
+   -> messages-only: append nothing
+   -> reject unresolved confirmation barrier or invalid tool pairing
+   -> apply context budget without splitting a tool-call/tool-result group
+   ```
+
+   `role=system`、允許的 tool name、tool arguments object、`tool_call_id` 唯一性與 assistant/tool 順序都由 server 驗證；未知 role、孤立 tool result、重複／不存在的 `tool_call_id` 應拒絕，不應靜默刪除後繼續呼叫模型。template 的 DB role description 是資料，不得透過 client history 取代固定安全 prompt。
+
+4. **工具結果不是 client 聲明的事實**：history 中的 read-only PVE 結果只能作為先前觀測的上下文，不代表目前 runtime 狀態，也不代表授權。最新問題若要求「現在」狀態，仍依工具政策重新查詢；不能因為歷史中有相同 tool signature 就任意禁止使用者明確要求的唯讀重查。
+
+   `ssh_exec` 的 `pending` result 更嚴格：只有 server pending store 內與 requester、scope、VMID、command 對應的 token 才能被替換成執行結果。`deferred` result 沒有讓 client 自行填寫的權限，必須由 server 保存的 continuation context 依 assistant tool-call 原順序推進；不能把 deferred placeholder 當成已完成結果。client 不能藉由修改任意 tool message 的 JSON、插入假的 `exit_code` 或刪掉 pending／deferred flag 讓模型把未執行指令當成完成。token 過期、重放、跨使用者／scope 或找不到對應 assistant tool-call 時，應停止續聊並回傳可辨識的錯誤。
+
+5. **確認與續跑順序固定**：
+
+   - 一般 PVE route：模型產生 pending tool-call 後先回傳；`/ssh/confirm` 消費一次性 token 並產生 server-owned `SSHExecResult`。續聊請以該 tool-call 的 `tool_call_id`（及 server token 關聯）替換原 pending result，回送 `messages` only；不可同時帶新的 `message`，也不可在尚有 pending tool 時接受新的 user turn。
+   - template route：沿用 `_PendingContext` 的 immutable messages snapshot；確認結果寫回對應 pending tool 後，`resume_deferred_ssh=True` 必須先依 assistant tool-call 原順序執行下一個 deferred 指令。下一筆仍需確認就再次暫停；所有 pending／deferred 都處理完成後，才可再次呼叫模型做總結。拒絕結果要保留 `confirmation_decision=rejected` 與實際錯誤，不得把拒絕轉成成功，也不得自動重試相同或等價指令。
+
+6. **history 壓縮與回傳**：只可在完整的 assistant tool-call／其全部 tool result 組之間截斷；server system、最新 user turn、尚待確認或 deferred 的整組不得丟棄。若在保留這些必要組後仍超出 F08 的 context budget，應回傳明確的 history-too-large／需重新開始訊息，不可只刪掉最新問題或 pending result 後假裝成功。每次 `ChatResponse.messages` 必須是實際送給模型且可供下一次重播的 canonical 版本。
+
+**最小實作順序**：先在 `ChatRequest` 與 template request 的邊界加上 mutually-exclusive validation，再抽出一個純函式合併／驗證 canonical messages；一般 route 與 template route 共用此函式，但由 template service 保留 server pending context 與 `resume_deferred_ssh`。前端只需維持目前的第一輪 `{message}`、後續 `{messages}` 形式，並把 confirmation 的 pending message 定位從「在 JSON 文字搜尋 token」改成 server 回傳的 `tool_call_id` 關聯。這不改變 hard-deny、scope、逐筆確認或 runtime revalidation。
+
+**驗收**：
+
+- 第一輪 `{message}`、一般前端追問的 `{messages}`、空 history、兩欄同送、兩欄皆空，確認 payload 的角色順序與拒絕狀態碼。
+- history 已含最新 user turn 時不得重複；舊 history + 新 message 只能在 migration adapter 先明確 append 後通過；核心 `chat` 不可忽略 `message` 或猜測 caller 意圖。
+- 偽造／重複／孤立 system、assistant tool-call、tool result、`tool_call_id`、非 object arguments、未知 tool name；server system 與 scope 必須重新插入且不可被 client 覆蓋。
+- 一般 SSH 同意／拒絕／過期／重放／錯 scope，及 template VM 102 → 107 → 115 的逐筆 deferred resume；所有待確認指令處理前不得產生完成摘要。
+- 相同唯讀查詢的明確重查、最新 user turn 保留、長 history 的完整 tool round 壓縮，以及 F08 context budget 不足時的明確失敗；保留 hard-deny、scope、逐筆確認順序與既有回應欄位。
 
 ### F12：觀測缺口及 usage logging 的交易耦合
 
