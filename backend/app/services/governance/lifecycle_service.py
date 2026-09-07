@@ -14,6 +14,7 @@ from typing import Any, Literal
 from sqlmodel import Session
 
 from app.core.db import engine
+from app.infrastructure.proxmox.rrd import timeframe_for_window
 from app.models import Resource
 from app.repositories import governance as governance_repo
 from app.repositories import resource as resource_repo
@@ -23,7 +24,6 @@ from app.services.governance.lifecycle_policy import (
     average_cpu_percent,
     decide_idle_action,
     decide_ttl_action,
-    rrd_timeframe_for_window,
 )
 from app.services.proxmox import proxmox_service
 from app.utils import send_email
@@ -221,7 +221,7 @@ def _fetch_avg_cpu(
     )
     if not node:
         return None
-    timeframe = rrd_timeframe_for_window(window_hours)
+    timeframe = timeframe_for_window(window_hours)
     try:
         rrd = proxmox_service.get_rrd_data(node, resource.vmid, rtype, timeframe)
     except Exception:

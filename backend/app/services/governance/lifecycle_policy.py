@@ -65,24 +65,6 @@ def decide_ttl_action(
     return TtlAction.none
 
 
-def rrd_timeframe_for_window(window_hours: int) -> str:
-    """依觀察視窗挑選能完整涵蓋它的最短 PVE ``rrddata`` timeframe。
-
-    PVE 各 timeframe 的涵蓋範圍（傳統 70 點 RRA）：hour ≈ 70 分鐘、
-    day ≈ 35 小時、week ≈ 8.75 天、month ≈ 35 天。這裡保守以整數單位為界，
-    避免視窗設 48 小時卻只拿到 day 框那 30 幾小時的資料。
-    """
-    if window_hours <= 1:
-        return "hour"
-    if window_hours <= 24:
-        return "day"
-    if window_hours <= 24 * 7:
-        return "week"
-    if window_hours <= 24 * 30:
-        return "month"
-    return "year"
-
-
 def average_cpu_percent(
     rrd: list[dict[str, Any]], *, window_hours: int, now: datetime
 ) -> float | None:
@@ -128,7 +110,8 @@ def decide_idle_action(
             seconds=uptime_seconds
         ):
             return IdleAction.clear
-        # 開機時間還沒蓋滿觀察視窗：RRD 內混有關機期間的 0% 資料，不可判斷。
+        # 開機時間還沒蓋滿觀察視窗：關機期間 RRD 沒有 cpu 值，平均只代表
+        # 這段短暫開機時間，不構成「長期」閒置，不判斷。
         if uptime_seconds < window_hours * 3600:
             return IdleAction.none
 

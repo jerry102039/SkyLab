@@ -8,7 +8,6 @@ from app.services.governance.lifecycle_policy import (
     average_cpu_percent,
     decide_idle_action,
     decide_ttl_action,
-    rrd_timeframe_for_window,
 )
 
 NOW = datetime(2026, 7, 4, 12, 0, 0, tzinfo=timezone.utc)
@@ -110,20 +109,6 @@ class TestAverageCpuPercent:
         assert average_cpu_percent(rrd, window_hours=2, now=NOW) is None
 
 
-class TestRrdTimeframeForWindow:
-    def test_boundaries(self) -> None:
-        assert rrd_timeframe_for_window(1) == "hour"
-        assert rrd_timeframe_for_window(2) == "day"
-        assert rrd_timeframe_for_window(24) == "day"
-        # 預設 48h 視窗超過 day 框涵蓋範圍，必須升到 week
-        assert rrd_timeframe_for_window(25) == "week"
-        assert rrd_timeframe_for_window(48) == "week"
-        assert rrd_timeframe_for_window(24 * 7) == "week"
-        assert rrd_timeframe_for_window(24 * 7 + 1) == "month"
-        assert rrd_timeframe_for_window(24 * 30) == "month"
-        assert rrd_timeframe_for_window(24 * 30 + 1) == "year"
-
-
 class TestDecideIdleAction:
     THRESHOLD = 1.0
     NOTIFY_HOURS = 12
@@ -218,7 +203,7 @@ class TestDecideIdleAction:
         )
 
     def test_uptime_shorter_than_window_skips(self) -> None:
-        # 開機未滿觀察視窗：RRD 混有關機期間資料，不標記也不清除
+        # 開機未滿觀察視窗：平均只代表短暫開機時間，不標記也不清除
         assert self._idle(avg=0.5, uptime=47 * 3600) is IdleAction.none
         assert (
             self._idle(avg=0.5, idle_since=NOW - timedelta(hours=2), uptime=47 * 3600)
