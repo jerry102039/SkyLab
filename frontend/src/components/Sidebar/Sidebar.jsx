@@ -73,7 +73,14 @@ const navGroups = [
       { key: "ip-management", labelKey: "Sidebar.itemIpManagement",    icon: "lan", adminOnly: true },
       { key: "domain",        labelKey: "Sidebar.itemDomain",   icon: "domain", adminOnly: true },
       { key: "gateway",       labelKey: "Sidebar.itemGateway",    icon: "dns", adminOnly: true },
-      { key: "settings",      labelKey: "Sidebar.itemSettings",   icon: "settings", adminOnly: true },
+      /* 原「系統設定」的七個分頁，2026-09 各自升格為獨立頁面 */
+      { key: "pve-connections", labelKey: "Sidebar.itemPveConnections", icon: "device_hub", adminOnly: true },
+      { key: "scheduler",     labelKey: "Sidebar.itemScheduler",  icon: "settings_input_component", adminOnly: true },
+      { key: "governance",    labelKey: "Sidebar.itemGovernance", icon: "policy", adminOnly: true },
+      { key: "quotas",        labelKey: "Sidebar.itemQuotas",     icon: "data_usage", adminOnly: true },
+      { key: "ldap",          labelKey: "Sidebar.itemLdap",       icon: "badge", adminOnly: true },
+      { key: "nodes",         labelKey: "Sidebar.itemNodes",      icon: "lock", adminOnly: true },
+      { key: "storage",       labelKey: "Sidebar.itemStorage",    icon: "storage", adminOnly: true },
     ],
   },
   {

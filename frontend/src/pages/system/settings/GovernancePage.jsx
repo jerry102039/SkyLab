@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import styles from "./SettingsPage.module.scss";
+import styles from "./settings.module.scss";
 import LoadingState from "../../../components/LoadingState/LoadingState";
+import PageHeader from "../../../components/PageHeader/PageHeader";
 import { GovernanceService } from "../../../services/governance";
 import { useToast } from "../../../hooks/useToast";
 
 /**
- * 治理設定分頁：閾值警告 / TTL 回收 / 閒置偵測 / 自動判斷 /
+ * 治理設定（系統管理 → 治理）：閾值警告 / TTL 回收 / 閒置偵測 / 自動判斷 /
  * 反挖礦 / 快照治理 / 克隆併發。單一儲存鍵送出全部欄位。
+ * 2026-09 從「系統設定」的分頁拆成獨立頁面。
  */
 
 function useSections(t) {
@@ -93,7 +95,7 @@ function useSections(t) {
   ], [t]);
 }
 
-export default function GovernanceTab() {
+function GovernanceForm() {
   const { t } = useTranslation("system");
   const toast = useToast();
   const SECTIONS = useSections(t);
@@ -187,5 +189,18 @@ export default function GovernanceTab() {
         </button>
       </div>
     </form>
+  );
+}
+
+/* ── Page ──────────────────────────────────────────── */
+export default function GovernancePage() {
+  const { t } = useTranslation("system");
+  return (
+    <div className={styles.page}>
+      <PageHeader title={t("SettingsPage.governanceTitle")} subtitle={t("SettingsPage.governanceSubtitle")} />
+      <div className={styles.content}>
+        <GovernanceForm />
+      </div>
+    </div>
   );
 }
