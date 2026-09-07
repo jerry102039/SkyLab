@@ -389,5 +389,7 @@
   "TemplatesPage.deleteConfirmDesc": "PVE 側のテンプレートディスクも合わせて削除され、この操作は元に戻せません。このテンプレートからリンククローンされたマシンが残っている場合、削除は拒否されます。",
   "TemplatesPage.cancel": "キャンセル",
   "TemplatesPage.deleting": "削除中…",
-  "TemplatesPage.confirmDelete": "削除を確認"
+  "TemplatesPage.confirmDelete": "削除を確認",
+  "RequestReviewPage.specChangeExpiry": "有効期限 {{from}} → {{to}}",
+  "RequestReviewPage.expiryUnlimited": "無期限"
 }

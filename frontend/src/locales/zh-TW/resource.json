@@ -389,5 +389,7 @@
   "TemplatesPage.deleteConfirmDesc": "PVE 端的範本磁碟會一併刪除，動作無法復原。如果還有從此範本克隆出的機器（linked clone），系統會拒絕刪除。",
   "TemplatesPage.cancel": "取消",
   "TemplatesPage.deleting": "刪除中…",
-  "TemplatesPage.confirmDelete": "確認刪除"
+  "TemplatesPage.confirmDelete": "確認刪除",
+  "RequestReviewPage.specChangeExpiry": "到期日 {{from}} → {{to}}",
+  "RequestReviewPage.expiryUnlimited": "不限期"
 }

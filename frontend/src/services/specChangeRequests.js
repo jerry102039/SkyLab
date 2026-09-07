@@ -9,7 +9,7 @@ import { apiGet, apiPost } from "./api";
  *   ready | applying | applied | failed | interrupted
  */
 export const SpecChangeRequestsService = {
-  /** 送出規格變更申請（body: { vmid, change_type, reason, requested_cpu?, requested_memory? }） */
+  /** 送出規格變更申請（body: { vmid, change_type, reason, requested_cpu?, requested_memory?, requested_disk?, requested_expiry_date? }） */
   create(body) {
     return apiPost("/api/v1/spec-change-requests/", body);
   },
@@ -124,5 +124,18 @@ export function specRequestChangeLabel(req, t) {
   if (req?.requested_disk != null) {
     parts.push(t("SpecRequest.changeDisk", { from: req.current_disk ?? "—", to: req.requested_disk }));
   }
+  if (req?.requested_expiry_date != null) {
+    parts.push(
+      t("SpecRequest.changeExpiry", {
+        from: req.current_expiry_date ?? t("SpecRequest.expiryUnlimited"),
+        to: req.requested_expiry_date,
+      }),
+    );
+  }
   return parts.join(" / ") || "—";
+}
+
+/** 延長到期日的申請（核准即生效，不需要再按「套用」） */
+export function isExpirySpecRequest(req) {
+  return req?.change_type === "expiry";
 }

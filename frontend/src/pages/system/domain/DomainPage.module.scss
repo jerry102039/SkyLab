@@ -223,6 +223,46 @@
 .badge_muted   { background: var(--color-hover); color: var(--color-status-neutral); }
 
 /* ── 工作台雙欄 ── */
+/* ── Tabs（DNS 紀錄 / 對外網址） ── */
+.tabs {
+  display: flex;
+  gap: $spacing-4;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px $spacing-16;
+  border-radius: $radius-pill;
+  font-size: $font-size-14;
+  color: var(--color-text-secondary);
+  transition: background $transition-base, color $transition-base;
+
+  &:hover {
+    background: var(--color-hover);
+  }
+}
+
+.tabActive {
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-weight: $font-weight-500;
+
+  &:hover {
+    background: var(--color-text);
+  }
+}
+
+.tabBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  @include flex-column;
+}
+
 .workbench {
   display: grid;
   grid-template-columns: 1fr;

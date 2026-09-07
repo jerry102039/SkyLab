@@ -2,7 +2,7 @@
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
 import sqlalchemy as sa
@@ -28,6 +28,7 @@ class SpecChangeType(str, enum.Enum):
     memory = "memory"
     disk = "disk"
     combined = "combined"  # 同時調整多項
+    expiry = "expiry"  # 延長到期日：核准即生效，不需要申請人再套用
 
 
 class SpecChangeRequest(SQLModel, table=True):
@@ -64,6 +65,14 @@ class SpecChangeRequest(SQLModel, table=True):
     requested_cpu: int | None = Field(default=None, description="請求CPU核心數")
     requested_memory: int | None = Field(default=None, description="請求記憶體 (MB)")
     requested_disk: int | None = Field(default=None, description="請求磁碟大小 (GB)")
+
+    # 到期日延長（change_type=expiry）
+    current_expiry_date: date | None = Field(
+        default=None, description="申請當下的到期日（None 代表原本不限期）"
+    )
+    requested_expiry_date: date | None = Field(
+        default=None, description="希望延長到的到期日"
+    )
 
     # 審核狀態
     status: SpecChangeRequestStatus = Field(
