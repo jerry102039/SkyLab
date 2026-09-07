@@ -1744,12 +1744,14 @@ function RubricsTab({ classId, judgeSession, onSessionUpdated, onScriptCreated, 
   return (
     <div className={styles.tabBody}>
       {isCreatingScript && (
-        <div className={styles.noticeInfo}>
-          <p>
-             <strong>正在生成受管檢查腳本</strong>
+        <div className={`${styles.noticeInfo} ${styles.noticeProgress}`} role="status" aria-live="polite">
+          <p className={styles.noticeProgressTitle}>
+            <MIcon name="autorenew" size={16} />
+            <strong>正在製作檢查腳本</strong>
           </p>
           <p>
-            AI 正在依目前檢查項目產生收集腳本，完成後系統會接著進行安全規則檢查與 AI 複核。
+            AI 正在依目前檢查項目產生收集腳本，完成後會接著進行安全規則檢查與 AI 複核；
+            <strong className={styles.noticeProgressHighlight}>可以離開此頁面，稍後回到「腳本總覽」查看結果。</strong>
           </p>
         </div>
       )}
