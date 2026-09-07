@@ -184,12 +184,12 @@ AI_REVIEWER_SYSTEM_PROMPT = """
 - 檢查 bare except / except Exception 後是否有將錯誤記錄到 errors。
 
 只輸出 JSON：
-{{
+{
   "approved": true,
   "risk_level": "low | medium | high",
   "issues": [],
   "suggested_fix": null
-}}
+}
 """.strip()
 
 
@@ -228,7 +228,13 @@ def _now() -> datetime:
 
 
 def _normalize_ai_review(payload: Any) -> AIReviewResult:
-    if not isinstance(payload, dict):
+    if (
+        not isinstance(payload, dict)
+        or type(payload.get("approved")) is not bool
+        or not isinstance(payload.get("risk_level"), str)
+        or payload.get("risk_level") not in {"low", "medium", "high"}
+        or not isinstance(payload.get("issues"), list)
+    ):
         return {
             "approved": False,
             "risk_level": "high",
@@ -236,15 +242,9 @@ def _normalize_ai_review(payload: Any) -> AIReviewResult:
             "suggested_fix": "請重新生成腳本",
         }
 
-    approved = payload.get("approved") is True
-    risk_level_raw = str(payload.get("risk_level") or ("low" if approved else "high"))
-    if risk_level_raw not in {"low", "medium", "high"}:
-        risk_level_raw = "high"
-    risk_level = cast(Literal["low", "medium", "high"], risk_level_raw)
-
-    issues = payload.get("issues")
-    if not isinstance(issues, list):
-        issues = []
+    approved = payload.get("approved") is True and not payload["issues"]
+    risk_level = cast(Literal["low", "medium", "high"], payload["risk_level"])
+    issues = payload["issues"]
 
     return {
         "approved": approved,
@@ -648,7 +648,9 @@ async def generate_script_content(
             status_code=502, detail=t("artifact.generation_not_json")
         ) from exc
 
-    script_content = str(parsed.get("script_content") or "").strip()
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("script_content"), str):
+        raise HTTPException(status_code=502, detail=t("artifact.generation_not_json"))
+    script_content = parsed["script_content"].strip()
     if not script_content:
         raise HTTPException(status_code=502, detail=t("artifact.no_script_content"))
     return script_content, dict(metrics)
@@ -802,6 +804,8 @@ async def fix_script_content(
             status_code=502, detail=t("artifact.fix_not_json")
         ) from exc
 
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=502, detail=t("artifact.fix_not_json"))
     logger.info(
         "Teacher Judge script patch response: replacements=%s summary=%s",
         _line_replacement_log_summary(parsed.get("line_replacements")),

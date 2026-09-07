@@ -126,10 +126,10 @@ CHAT_SYSTEM_TEMPLATE = """
 
 # 輸出
 只輸出合法 JSON，不要 markdown：
-{{
+{
   "reply": "親切、專業、精簡的繁體中文回覆；不提技術欄位名稱，也不逐項重述差異",
   "updated_items": null
-}}
+}
 """.strip()
 
 

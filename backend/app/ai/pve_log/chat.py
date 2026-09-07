@@ -232,6 +232,25 @@ def _execute_tool_sync(
     *,
     allowed_vmids: set[int] | None = None,
 ) -> Any:
+    result = _snapshot_tool_data(snapshot, name, args, allowed_vmids=allowed_vmids)
+    if snapshot.errors:
+        # Preserve successful fields, but never let an empty/partial snapshot
+        # look like evidence that the cluster is healthy or a resource is absent.
+        # Raw collection errors may mention resources outside the caller's scope.
+        warning = "部分快照資料未能取得；缺少資料不代表資源正常或不存在。"
+        if isinstance(result, dict):
+            return {**result, "error": result.get("error") or warning}
+        return {"data": result, "error": warning}
+    return result
+
+
+def _snapshot_tool_data(
+    snapshot: SystemSnapshot,
+    name: str,
+    args: dict[str, Any],
+    *,
+    allowed_vmids: set[int] | None = None,
+) -> Any:
     """使用已收集好的 snapshot 執行工具，同步版本（供 asyncio.to_thread 包裝）。"""
     if name == "get_nodes":
         return [n.model_dump(mode="json") for n in snapshot.nodes]

@@ -162,7 +162,7 @@ def _extract_context_item_count(rubric_context: str) -> int:
         parsed = json.loads(rubric_context or "{}")
     except json.JSONDecodeError:
         return 0
-    items = parsed.get("items")
+    items = parsed.get("items") if isinstance(parsed, dict) else None
     return len(items) if isinstance(items, list) else 0
 
 
@@ -194,7 +194,10 @@ async def _call_vllm(
             f"vLLM call successful: {total_tokens} tokens in {elapsed:.2f}s ({tps:.1f} t/s)"
         )
 
-        content = data["choices"][0]["message"]["content"] or ""
+        choice = data["choices"][0]
+        if choice.get("finish_reason") == "length":
+            raise ValueError("Model output was truncated before completion")
+        content = choice["message"]["content"] or ""
         content = strip_think_tags(content)
         metrics = {
             "prompt_tokens": prompt_tokens,
@@ -272,7 +275,9 @@ async def analyze_rubric(
             status_code=502, detail=t("service.json_parse_failed", exc=exc)
         ) from exc
 
-    items_raw = data.get("items") or []
+    if not isinstance(data, dict) or not isinstance(data.get("items"), list):
+        raise HTTPException(status_code=502, detail=t("analysis.invalid_format"))
+    items_raw = data["items"]
     items = _normalize_rubric_items(
         items_raw,
         template_key=template_key,
@@ -398,6 +403,8 @@ async def chat_with_rubric(
     updated_items: list[dict[str, Any]] | None = None
     try:
         parsed = json.loads(content)
+        if not isinstance(parsed, dict):
+            return reply_text, None, metrics
         reply_text = str(parsed.get("reply") or content)
         raw_updated = parsed.get("updated_items")
         normalized_updated = _normalize_rubric_items(
