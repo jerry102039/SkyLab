@@ -10,7 +10,8 @@
   5. AI 產生最終回答後回傳 ChatResponse
 
 設計重點：
-  - 一次 chat 請求只收集一次 PVE 快照（lazy），多個 tool_calls 共用同一份快照。
+  - 一次 chat 請求使用 request-local lazy PveToolContext；各工具只取所需資料，
+    已取得的 node／storage／resource detail 在同一 request 內重用。
   - 工具可連續呼叫多輪，但有固定上限，避免模型陷入無限工具迴圈。
   - 一般 ssh_exec 需要確認；template 僅允許伺服器列出的唯讀指令自動執行。
   - 若呼叫端提供 VMID 範圍，工具輸出與 SSH 執行都只允許該範圍。
@@ -31,7 +32,7 @@ from typing import Any
 import httpx
 from sqlmodel import Session
 
-from app.ai.pve_log.collector import collect_snapshot
+from app.ai.pve_log.collector import PveToolContext, collect_snapshot  # noqa: F401
 from app.ai.pve_log.config import settings
 from app.ai.pve_log.schemas import ChatResponse, SystemSnapshot, ToolCallRecord
 from app.ai.pve_template.command_policy import is_known_read_command
@@ -226,6 +227,28 @@ _TOOLS: list[dict[str, Any]] = [
 
 
 def _execute_tool_sync(
+    snapshot: SystemSnapshot | PveToolContext,
+    name: str,
+    args: dict[str, Any],
+    *,
+    allowed_vmids: set[int] | None = None,
+) -> Any:
+    if isinstance(snapshot, PveToolContext):
+        result = snapshot.execute(name, args, allowed_vmids=allowed_vmids)
+    else:
+        result = _snapshot_tool_data(snapshot, name, args, allowed_vmids=allowed_vmids)
+    if snapshot.errors:
+        # Preserve successful fields, but never let an empty/partial snapshot
+        # look like evidence that the cluster is healthy or a resource is absent.
+        # Raw collection errors may mention resources outside the caller's scope.
+        warning = "部分快照資料未能取得；缺少資料不代表資源正常或不存在。"
+        if isinstance(result, dict):
+            return {**result, "error": result.get("error") or warning}
+        return {"data": result, "error": warning}
+    return result
+
+
+def _snapshot_tool_data(
     snapshot: SystemSnapshot,
     name: str,
     args: dict[str, Any],
@@ -723,7 +746,7 @@ async def chat(
                     needs_confirmation=True,
                     messages=messages,
                 )
-    _snapshot: SystemSnapshot | None = None  # lazy，只有工具真的被呼叫時才收集
+    _tool_context: PveToolContext | None = None
 
     for tool_round in range(_MAX_TOOL_ROUNDS + 1):
         payload: dict[str, Any] = {
@@ -802,20 +825,13 @@ async def chat(
                 error=t("pveLog.tooManyToolRounds"),
             )
 
-        needs_snapshot = any(
+        needs_pve_tool = any(
             tc.get("function", {}).get("name") != "ssh_exec" for tc in tool_calls
         )
-        if needs_snapshot and _snapshot is None:
-            try:
-                _snapshot = await asyncio.to_thread(collect_snapshot)
-            except Exception as exc:
-                logger.error("收集 PVE 快照失敗：%s", exc)
-                return ChatResponse(
-                    reply="",
-                    tools_called=tools_called,
-                    messages=messages,
-                    error=t("pveLog.snapshotCollectFailed", error=exc),
-                )
+        if needs_pve_tool and _tool_context is None:
+            # Context 只在本 request 第一次需要 PVE API tool 時建立；真正的
+            # network I/O 在 _execute_tool_sync 的 worker thread 內執行。
+            _tool_context = PveToolContext()
 
         parsed_calls = [
             (
@@ -902,10 +918,11 @@ async def chat(
                         auto_execute_known_ssh=auto_execute_known_ssh,
                     )
                 else:
-                    if _snapshot is None:
-                        raise RuntimeError("PVE snapshot 尚未完成收集")
-                    result = _execute_tool_sync(
-                        _snapshot,
+                    if _tool_context is None:
+                        raise RuntimeError("PVE tool context 尚未建立")
+                    result = await asyncio.to_thread(
+                        _execute_tool_sync,
+                        _tool_context,
                         func_name,
                         func_args,
                         allowed_vmids=allowed_vmids,
