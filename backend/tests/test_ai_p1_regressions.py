@@ -76,6 +76,34 @@ async def test_non_object_rubric_and_script_outputs_fail_cleanly(monkeypatch, co
     assert proposal is None
 
 
+async def test_teacher_judge_summary_uses_dedicated_low_budget_prompt(monkeypatch):
+    monkeypatch.setattr(system_ai_env, "vllm_model_name", "test-model")
+    captured = {}
+
+    async def fake_call(payload, timeout=60.0):
+        captured["payload"] = payload
+        captured["timeout"] = timeout
+        return "  已確認只保留 Python 檢查。  ", {}
+
+    monkeypatch.setattr(service, "_call_vllm", fake_call)
+    summary, metrics = await service.summarize_conversation(
+        [
+            TeacherJudgeRubricChatMessage(role="user", content="保留 Python 檢查"),
+            TeacherJudgeRubricChatMessage(role="assistant", content="好的"),
+        ],
+        previous_summary="舊方向",
+    )
+
+    payload = captured["payload"]
+    assert summary == "已確認只保留 Python 檢查。"
+    assert metrics == {}
+    assert payload["max_tokens"] <= 768
+    assert "response_format" not in payload
+    assert "不要新增、刪除或修改任何評分項目" in payload["messages"][0]["content"]
+    assert "舊方向" in payload["messages"][1]["content"]
+    assert payload["messages"][-1]["role"] == "user"
+
+
 async def test_truncated_model_output_is_not_accepted_as_complete_json(monkeypatch):
     async def fake_completion(*args, **kwargs):
         return {

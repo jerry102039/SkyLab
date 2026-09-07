@@ -1320,7 +1320,7 @@ function RubricsTab({ classId, judgeSession, onSessionUpdated, onScriptCreated, 
     return () => {
       cancelled = true;
     };
-  }, [classId, judgeSession?.id, toast]);
+  }, [classId, judgeSession?.id, judgeSession?.selected_file_id, toast]);
 
   useEffect(() => {
     function clearSelectedSourceState() {

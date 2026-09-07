@@ -2,17 +2,19 @@
 
 檢查日期：2026-09-07。檢查基準：`6393c1a7`，開始檢查時工作樹乾淨。
 
-本報告先記錄檢查結果；本輪已完成 F01～F05 的 P1 修正，未修改資料庫、模型設定或部署。P2／P3 仍屬後續候選。「不影響原有功能」以既有 focused tests、邊界回歸與保留原有權限／確認流程作為驗收條件，不能僅靠修改提示詞就保證達成。
+本報告先記錄檢查結果；本輪已完成 F01～F07 的最小修正，新增 F07 的摘要記憶邊界 migration，未執行資料庫 migration、未修改模型設定或部署。其餘 P2／P3 仍屬後續候選。「不影響原有功能」以既有 focused tests、邊界回歸與保留原有權限／確認流程作為驗收條件，不能僅靠修改提示詞就保證達成。
 
-## 本輪 P1 實作狀態
+## 本輪實作狀態
 
 - **F01 executor event loop**：將 SSH／同步資料庫讀寫與進度保存移入 worker thread；AI judgement 保留在原 event loop，取消時會等待 worker 收尾，避免背景執行緒繼續使用已關閉的 Session。
 - **F02 分析併發取消**：改用可取消的非阻塞 semaphore polling，避免取消後遺留執行緒稍後取得名額；HTTP 失敗仍會釋放名額。
 - **F03 PVE collector**：讓 endpoint 例外真正到達 retry；區分可重試的暫時錯誤與 4xx，並將部分快照錯誤傳到對話工具，避免缺資料被解讀成正常狀態。
 - **F04 JSON 契約**：修正 prompt JSON 範例、navigation 使用 `JSONDecoder.raw_decode`、辨識 `finish_reason=length`，並對 rubric／script／judgement 回應做頂層型別、必要欄位、ID 與 evidence 驗證。
 - **F05 rubric 對齊**：結果分析會核對所有 rubric item、check ID、`evidence_refs` 與 status；未知／跳過不會被當成通過，未覆蓋的 rubric item 會拒絕該次 AI 結果。
+- **F06 PVE 按需收集**：以 request-local `PveToolContext` 分開載入 cluster、nodes、storage、resource summary 與指定 guest detail；同一 request 內重用已取得資料，完整 `collect_snapshot()` 仍保留給需要完整快照的 consumer。
+- **F07 摘要記憶回路**：一般對話注入既有摘要；摘要改用專用低 token prompt，並由 background runner 以新的 Session 非同步產生；持久化以消息邊界、assistant 次數、來源與 revision 條件寫入，避免舊 worker 覆蓋新摘要。
 
-本輪程式修改集中於 `backend/app/ai/navigation`、`backend/app/ai/pve_log`、`backend/app/ai/teacher_judge`，並新增 `backend/tests/test_ai_p1_regressions.py` 回歸測試；未改變既有 public API、資料 schema、手動 target 選擇或 executor 的 runtime revalidation。
+本輪程式修改集中於 `backend/app/ai/navigation`、`backend/app/ai/pve_log`、`backend/app/ai/teacher_judge`，並新增 `backend/tests/test_ai_p1_regressions.py`、Teacher Judge session 邊界回歸案例與 `tjsum01_summary_boundaries` migration；未改變既有 public API、手動 target 選擇或 executor 的 runtime revalidation。F07 的資料 schema 變更僅新增摘要覆蓋邊界欄位，既有 `summary` API 欄位保持不變。
 
 ## 1. 結論與建議順序
 
@@ -33,8 +35,8 @@
 | F03 | P1 | 讓 collector 重試與錯誤傳遞真正生效 | R | 避免收集失敗被解讀為正常／空清單 | 中：保留部分成功回應 |
 | F04 | P1 | 修正 JSON 範例、JSON 擷取與結構驗證 | R／S | 減少不必要 fallback、解析錯誤與生成重試 | 低至中 |
 | F05 | P1 | 補足 rubric 與執行證據的對齊驗證 | S／E | 防止有效 JSON 卻評錯項目或引用不存在證據 | 中：評分語意 |
-| F06 | P2 | PVE 依工具需求取資料，保留 request 內重用 | S | 簡單查詢不再收集全部 guest 細節 | 中：snapshot 契約 |
-| F07 | P2 | 接通對話摘要，移除摘要在回覆關鍵路徑上的等待 | S | 改善長對話記憶及每十輪的延遲突增 | 中：順序與版本 |
+| F06 | P2 | PVE 依工具需求取資料，保留 request 內重用（本輪已完成最小修正） | S／R | 簡單查詢不再收集全部 guest 細節 | 中：snapshot 契約 |
+| F07 | P2 | 接通對話摘要，移除摘要在回覆關鍵路徑上的等待（本輪已完成最小修正） | S | 改善長對話記憶及每十輪的延遲突增 | 中：順序與版本 |
 | F08 | P2 | 依任務管理輸入／輸出預算及截斷狀態 | S／E | 降低 context overflow、全表遺漏與截斷 JSON | 中：完整性 |
 | F09 | P2 | 修正推薦冷快取阻塞、空值快取及重複刷新 | S | 降低冷啟動與 PVE 空資源時的重複成本 | 中：快取新鮮度 |
 | F10 | P2 | 推薦候選先保留選中項與相關項，再限量 | S／E | 減少有效來源因排在清單後方而無法被選擇 | 中：推薦品質 |
@@ -168,25 +170,41 @@ Python 文件說明 coroutine 取消時應以 finally 清理；已開始執行�
 
 ### F06：簡單 PVE 工具不需要完整 guest snapshot
 
-**證據（S）**：[pve_log/chat.py](../backend/app/ai/pve_log/chat.py) 在任何非 SSH tool 首次出現時呼叫完整 `collect_snapshot()`（810 行附近），不是只呼叫對應 fetch。即使模型正確選了 `get_storage`，也會讀取 cluster、nodes、VM/LXC summary，以及設定啟用時的所有 config／running status／LXC interfaces。
+**修正前證據（S）**：[pve_log/chat.py](../backend/app/ai/pve_log/chat.py) 在任何非 SSH tool 首次出現時呼叫完整 `collect_snapshot()`，不是只呼叫對應 fetch。即使模型正確選了 `get_storage`，也會讀取 cluster、nodes、VM/LXC summary，以及設定啟用時的所有 config／running status／LXC interfaces。
 
-以目前收集流程估算、不計重試，主要 PVE API 呼叫數約為：`3 + N + R + C + L`。N 為 node 數、R 為 running guest 數、C 為啟用 config 收集時的非 template guest 數、L 為啟用 interfaces 時的 running LXC 數。前三個為 cluster status、nodes、cluster resources。這是程式推導，不是線上量測。
+以修正前收集流程估算、不計重試，主要 PVE API 呼叫數約為：`3 + N + R + C + L`。N 為 node 數、R 為 running guest 數、C 為啟用 config 收集時的非 template guest 數、L 為啟用 interfaces 時的 running LXC 數。前三個為 cluster status、nodes、cluster resources。這是程式推導，不是線上量測。
 
-**方向**：先讓 chat 依工具載入對應資料並在 request 內記憶結果；`get_resource_detail(vmid)` 才取該目標的 status／config／interfaces。保留完整 `collect_snapshot` 給真正需要完整資料的 consumer，不直接刪其欄位。scope 應盡量在讀取前限縮，不只在回傳時过滤；cluster／node 層可見性須遵守現有權限。
+**已完成的最小修正**：`collector.PveToolContext` 是單一 chat request 的 lazy context，不跨 request 或建立 TTL cache。
 
-目前 collector 每個階段已有 ThreadPoolExecutor，PVE template 也已有最多三個唯讀 SSH 平行執行。優先降低總呼叫數，不先擴大 thread 數或跨過 confirmation barrier。
+- `get_cluster` 只讀 cluster status；`get_nodes` 只讀 node list。
+- `get_storage` 先讀 node list 做既有 node 可見性驗證，再只讀尚未快取的指定 node storage；未指定 node 時才讀所有 node storage。
+- `get_resources` 只讀一次 `cluster.resources(type=vm)`；篩選與 `allowed_vmids` 仍在伺服器端套用。
+- `get_resource_detail(vmid)` 先重用 resource summary，再只對該 VM/LXC 讀 status、設定與適用的 running LXC interfaces；同一 request 再次查詢會重用欄位。
+- PVE I/O 透過 `asyncio.to_thread` 執行，避免把新的同步 API 等待放回 event loop。完整 `collect_snapshot()` 與 `SystemSnapshot` 工具相容路徑保留，不刪除其欄位或改變其他 consumer。
 
-**驗收**：mock API call count 證明 storage-only 不讀 guest config；多 tool 重用；allowed VMID 不擴張；真實 PVE 上再量測 p50／p95。跨 request TTL cache 會引入新鮮度與範圍問題，應晚於 request 內按需收集。
+目前 collector 每個批次已有 ThreadPoolExecutor，PVE template 也已有最多三個唯讀 SSH 平行執行；本次優先降低不必要的 API 呼叫，不調高既有 worker 上限、不跨過 confirmation barrier，也不引入跨 request 的資料新鮮度風險。
+
+**驗收**：`test_ai_pve_log_f06.py` 以 mock API call count 證明 storage-only 不讀 guest summary/detail，指定 node 只讀該 node，後續 tool call 會重用 request cache，detail 只讀選中 VM/LXC；既有 focused suite 仍驗證 `allowed_vmids` 與部分錯誤的安全語意。尚未在真實 PVE 量測 p50／p95、重試後實際流量或多 replica 行為。
 
 ### F07：摘要已生成，但一般對話未使用
 
-**證據（S）**：[session_service.py](../backend/app/ai/teacher_judge/session_service.py) `maybe_summarize`（606 行）每十個 assistant messages 呼叫一次 `chat_with_rubric`，將前次 summary 放進摘要請求。一般 [create_message](../backend/app/api/routes/teacher_judge_sessions.py) 只把 `bounded_history`、file analysis、attachments 傳進模型，沒有把 `item.summary` 帶回一般對話。
+**修正前證據（S）**：[session_service.py](../backend/app/ai/teacher_judge/session_service.py) `maybe_summarize`（修正前約 606 行）每十個 assistant messages 呼叫一次 `chat_with_rubric`，將前次 summary 放進摘要請求。一般 [create_message](../backend/app/api/routes/teacher_judge_sessions.py) 只把 `bounded_history`、file analysis、attachments 傳進模型，沒有把 `item.summary` 帶回一般對話。
 
-route 在 assistant 已 commit 後仍 `await maybe_summarize`（537 行），因此摘要會額外延遲本次 HTTP 回覆。摘要又使用 rubric 編輯 prompt 與 4096 token 上限，卻只需要精簡記憶。這是「已有摘要欄位但記憶回路未接通」，不是完全沒有摘要能力。
+修正前 route 在 assistant 已 commit 後仍 `await maybe_summarize`（約 537 行），因此摘要會額外延遲本次 HTTP 回覆。摘要又使用 rubric 編輯 prompt 與 4096 token 上限，卻只需要精簡記憶。這是「已有摘要欄位但記憶回路未接通」，不是完全沒有摘要能力。
 
 **方向**：保留 summary 欄位及 API；一般 chat 加入較舊摘要並以最新消息／rubric revision 為準。摘要使用單一用途 prompt，明確不產生 rubric 修改。將摘要移出回覆關鍵路徑時沿用既有 background runner，在 worker 內新建 Session，以 session ID + 已涵蓋消息邊界避免重複摘要或舊結果覆寫新結果。不能把 request Session 延後使用。
 
 **驗收**：第十一輪仍記得已滑出 history 的決定；本輪改口優先於舊摘要；同 session 並發不覆寫新摘要；清空對話／來源切換後不帶入舊內容；摘要失敗不影響已保存的回答。
+
+**已完成的最小修正**：
+
+- `bounded_history(..., summary=item.summary)` 以明確的「僅供背景」assistant turn 注入摘要；`CHAT_SYSTEM_TEMPLATE` 同時要求較新教師訊息與目前 rubric revision 優先，避免把舊摘要當成修改指令。
+- `summarize_conversation` 使用獨立摘要 prompt，移除 rubric chat 的 JSON／`updated_items` 契約，並將摘要輸出上限限制為 768 tokens；模型失敗只記 log，不影響已 commit 的教師回答。
+- `schedule_summary` 在 assistant 回覆提交後才排入既有 background runner；`run_summary_job` 只接收 session／boundary／assistant count／source revision 等 immutable 值，worker 先開新 Session 取資料，模型呼叫完成後再以另一個新 Session 寫回。
+- `summary_through_message_id` 與 `summary_through_assistant_count` 由 `tjsum01_summary_boundaries` 建立；條件式更新同時核對來源、active file、`analysis_revision` 與 boundary message，使 count 20 完成後的摘要不能被 count 10 的晚到 worker 覆蓋。清空對話與切換來源會清除訊息、摘要及覆蓋邊界。
+- 生成回答在 commit 前再次核對 session source／rubric revision；若等待模型期間來源已切換或 rubric 已更新，拒絕把舊回答寫入新上下文。
+
+這次沒有改變既有 `summary` response 欄位或手動 rubric 編輯流程；migration 只新增可回復欄位，尚未對任何 production／未知資料庫執行。
 
 ### F08：現有數量／字元上限不足以代表模型 context 預算
 
@@ -331,15 +349,26 @@ P1 完成後重新執行原本兩組 focused tests，共 **264 passed**，有一
 
 另執行包含新增回歸案例的 P1 focused suite，共 **163 passed**；`ruff` 對本輪修改檔案全部通過，針對 8 個 AI source files 的 `mypy --ignore-missing-imports` 也通過。新增案例涵蓋 JSON 字串括號、截斷輸出、collector retry／部分錯誤、取消後 semaphore、rubric／evidence 對齊，以及 executor worker／Session／late failure 邊界。
 
+本輪 F06 另於 `backend/` 執行 `tests/test_ai_pve_log_f06.py`、PVE collector、P1 regression 與 template focused suite，共 **66 passed**；`ruff check app/ai/pve_log/collector.py app/ai/pve_log/chat.py tests/test_ai_pve_log_f06.py` 通過。直接執行未加 `--ignore-missing-imports` 的 mypy 時，僅剩既有 `proxmoxer` 缺少 type stubs／`py.typed` marker 的 import-untyped 訊息，F06 新增的型別錯誤已修正。
+
+本輪 F07 於 `backend/` 執行 Teacher Judge session 與 AI regression focused suite，共 **68 passed**；涵蓋摘要注入順序、專用 prompt／768-token 上限、背景 task ID、worker 新 Session、並發摘要的單調邊界寫入、來源切換清理、等待模型期間的來源重驗證與既有摘要失敗保留。F07 修改檔案的 `ruff check` 已通過；`uv run alembic heads` 顯示 `tjsum01_summary_boundaries` 為新 head，但 `uv run alembic current` 仍因目前資料庫引用缺失 revision `adv01_shares_expiry` 而無法讀取，未嘗試以 migration 修復或對該資料庫寫入。
+
+前端 `AiJudgePanel.test.jsx` 以 `bun run test -- src/pages/course-operations/class-workspace/AiJudgePanel.test.jsx` 驗證，共 **21 passed**；涵蓋切換來源後重新載入 session messages 的 effect 相依性未破壞既有 workspace 行為。
+
 執行位置為 `backend/`：
 
 ```powershell
 uv run python -m pytest --noconftest tests/test_vllm_client.py tests/test_ai_utils.py tests/test_ai_navigation_service.py tests/test_ai_contextual_help.py tests/test_ai_pve_log_collector.py tests/test_ai_pve_template.py tests/test_teacher_judge_script_quality_validator.py tests/test_teacher_judge_script_artifacts.py tests/test_template_intent_flags.py tests/test_template_recommendation_form_context.py -q
 
 uv run python -m pytest --noconftest tests/test_teacher_judge_sessions.py tests/test_teacher_judge_files.py tests/test_teacher_judge_attachments.py tests/test_teacher_judge_boundaries.py tests/test_rubric_template_commands.py tests/test_ai_navigation_intake.py tests/test_ai_navigation_catalog.py tests/test_ai_pve_log_ssh_exec_scope.py tests/test_ai_pve_log_ssh_host_key_policy.py tests/test_ai_pve_log_ssh_exec_ip_resolution.py tests/api/routes/test_ai_pve_log_session_forwarding.py -q
+
+uv run python -m pytest --noconftest tests/test_teacher_judge_sessions.py tests/test_ai_p1_regressions.py -q  # 68 passed
+
+cd ..\frontend
+bun run test -- src/pages/course-operations/class-workspace/AiJudgePanel.test.jsx
 ```
 
-使用 `--noconftest` 的具體原因：[tests/conftest.py](../backend/tests/conftest.py) 的 autouse `_seed_first_superuser` 會 `init_db` 並可能更新既有帳號密碼；它與一般 `db` fixture 的 target guard 分開。上述所選測試使用自身 mock／記憶體 SQLite 等隔離依賴，不需要這個外部 DB seed。未修改測試、未設定 `PYTEST_ALLOW_NON_TEST_DB`、未啟用 DB cleanup。這些結果不能取代含 app lifespan、登入與真實 PostgreSQL 的整合測試。
+使用 `--noconftest` 的具體原因：[tests/conftest.py](../backend/tests/conftest.py) 的 autouse `_seed_first_superuser` 會 `init_db` 並可能更新既有帳號密碼；它與一般 `db` fixture 的 target guard 分開。上述所選測試使用自身 mock／記憶體 SQLite 等隔離依賴，不需要這個外部 DB seed。未為了讓測試通過而刪改既有有效斷言、未設定 `PYTEST_ALLOW_NON_TEST_DB`、未啟用 DB cleanup。這些結果不能取代含 app lifespan、登入與真實 PostgreSQL 的整合測試。
 
 另外用 AST 擷取目前原始碼函式、注入最小 stub 在記憶體執行：
 
@@ -362,13 +391,13 @@ uv run python -m pytest --noconftest tests/test_teacher_judge_sessions.py tests/
 
 ## 7. 後續最小實作批次與驗收門檻
 
-### 第一批：P1 已完成，後續以實際環境驗收
+### 第一批：P1、F06、F07 已完成，後續以實際環境驗收
 
-F01～F05 已在本輪各自補上最小 regression 並完成 focused validation。後續仍需在具備實際模型、PVE／SSH 與登入流程的環境執行整合與語意驗收；本報告不把本地測試結果當成 live E2E。
+F01～F05 已在本輪各自補上最小 regression 並完成 focused validation；F06、F07 也已補上 request-local／摘要邊界 regression。後續仍需在具備實際模型、PVE／SSH 與登入流程的環境執行整合與語意驗收；本報告不把本地測試結果當成 live E2E。
 
 ### 第二批：減少實際浪費的資料與等待
 
-F06 按需收集、F07 摘要、F08 prompt projection、F09 cache refresh、F12 呼叫觀測。先建立 baseline，再比較相同輸入與相同基礎設施下的 API calls、prompt tokens、event-loop lag、p50／p95 與 fallback rate。
+F06、F07 的程式修正已完成；仍需在真實 PVE 與模型服務建立按工具／按 VMID 的 API-call、摘要 prompt tokens、背景排隊與 fallback baseline，再與 F08 prompt projection、F09 cache refresh、F12 呼叫觀測一起比較相同輸入與相同基礎設施下的 API calls、prompt tokens、event-loop lag、p50／p95 與 fallback rate。
 
 ### 第三批：需要模型語意評估的改善
 
