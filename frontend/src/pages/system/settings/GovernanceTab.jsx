@@ -46,7 +46,8 @@ function useSections(t) {
       ],
       fields: [
         { key: "idle_cpu_threshold_percent", label: t("GovernanceTab.idleCpuThresholdPercent"), min: 0.1, max: 20, step: 0.1 },
-        { key: "idle_window_hours", label: t("GovernanceTab.idleWindowHours"), min: 1, max: 720 },
+        { key: "idle_window_hours", label: t("GovernanceTab.idleWindowHours"), min: 1, max: 720, hint: t("GovernanceTab.idleWindowHoursHint") },
+        { key: "idle_notify_after_hours", label: t("GovernanceTab.idleNotifyAfterHours"), min: 1, max: 720, hint: t("GovernanceTab.idleNotifyAfterHoursHint") },
         { key: "idle_grace_hours", label: t("GovernanceTab.idleGraceHours"), min: 1, max: 720, hint: t("GovernanceTab.idleGraceHoursHint") },
         { key: "idle_scan_batch_size", label: t("GovernanceTab.idleScanBatchSize"), min: 1, max: 200 },
       ],
