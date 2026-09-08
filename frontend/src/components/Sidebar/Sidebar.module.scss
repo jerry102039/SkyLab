@@ -335,24 +335,16 @@
   position: relative;
 }
 
+/* portal 到 body，位置由 usePopupPosition 以 inline style 決定
+   （側欄 overflow 裁切 + 收合時 72px 寬，彈窗留在側欄內必破版） */
 .appearancePopup {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  right: 0;
+  position: fixed;
   @include glass-surface($shadow: var(--shadow-md));
   border-radius: $radius-12;
   padding: $spacing-4;
   @include flex-column;
   gap: 2px;
   z-index: 200;
-
-  .collapsed & {
-    left: 50%;
-    right: auto;
-    translate: -50% 0;
-    width: max-content;
-  }
 }
 
 .optionFlag {
@@ -411,22 +403,13 @@
 }
 
 /* ===== User Popup ===== */
+/* portal 到 body，定位同 .appearancePopup 的說明 */
 .userPopup {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  right: 0;
+  position: fixed;
   @include glass-surface($shadow: var(--shadow-md));
   border-radius: $radius-12;
   padding: $spacing-4;
   z-index: 200;
-
-  .collapsed & {
-    left: 50%;
-    right: auto;
-    translate: -50% 0;
-    width: max-content;
-  }
 }
 
 /* 液態玻璃的折射濾鏡會讓彈窗被背後的側欄文字干擾，

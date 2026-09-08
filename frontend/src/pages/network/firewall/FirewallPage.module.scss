@@ -65,6 +65,8 @@
   display: flex;
   min-height: 0;
   overflow: hidden;
+  /* 細項 RulesPanel 以絕對定位浮在畫布上，高度以此為界 */
+  position: relative;
 
   :global(.react-flow) { background: transparent; }
   :global(.react-flow) svg { max-width: none; }

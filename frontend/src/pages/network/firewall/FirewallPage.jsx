@@ -69,6 +69,8 @@ export default function FirewallPage() {
   const [showMiniMap,  setShowMiniMap]  = useState(true);
   const connDialog    = useDialogPresence(showDialog);
   const deleteConfirm = useDialogPresence(deleteEdge);
+  /* 關閉細項面板時先播 0.22s 滑出動畫再卸載，時長需與 SCSS 的 panelOut 一致 */
+  const rulesPanel    = useDialogPresence(selectedNode, 220);
   const rfInstance = useRef(null);
   const saveTimer  = useRef(null);
 
@@ -238,7 +240,9 @@ export default function FirewallPage() {
       {/* ── Content ── */}
       <div className={styles.content}>
         {loading && !topology && (
-          <LoadingState fullPage text={t("FirewallPage.loadingTopology")} />
+          <div className={styles.centerState}>
+            <LoadingState text={t("FirewallPage.loadingTopology")} />
+          </div>
         )}
 
         {error && (
@@ -323,9 +327,10 @@ export default function FirewallPage() {
               </Panel>
             </ReactFlow>
 
-            {selectedNode && (
+            {rulesPanel.open && (
               <RulesPanel
-                node={{ vmid: Number(selectedNode.id), name: selectedNode.data.name }}
+                node={{ vmid: Number(rulesPanel.item.id), name: rulesPanel.item.data.name }}
+                closing={rulesPanel.closing}
                 onClose={() => setSelectedNode(null)}
               />
             )}

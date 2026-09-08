@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth }  from "../../contexts/AuthContext";
@@ -217,9 +218,36 @@ function usePopup(DURATION = 150) {
   return { open, closing, toggle, close };
 }
 
+/* 側欄有 overflow 裁切，彈窗一律 portal 到 body 再依觸發鈕定位：
+   展開時蓋在觸發鈕上方同寬，收合時貼著側欄右緣飛出、底部對齊觸發鈕 */
+function usePopupPosition(triggerRef, collapsed) {
+  const [pos, setPos] = useState(null);
+
+  const updatePos = useCallback(() => {
+    const btn = triggerRef?.current;
+    const rect = btn?.getBoundingClientRect();
+    if (!rect) return;
+    if (collapsed) {
+      const anchorRight = btn.closest("aside")?.getBoundingClientRect().right ?? rect.right;
+      setPos({ left: anchorRight + 8, bottom: window.innerHeight - rect.bottom, width: "max-content", minWidth: 190 });
+    } else {
+      setPos({ left: rect.left, bottom: window.innerHeight - rect.top + 8, width: rect.width });
+    }
+  }, [collapsed, triggerRef]);
+
+  useLayoutEffect(() => {
+    updatePos();
+    window.addEventListener("resize", updatePos);
+    return () => window.removeEventListener("resize", updatePos);
+  }, [updatePos]);
+
+  return pos;
+}
+
 /** 通用彈出選單，供外觀與語言共用 */
-function SelectPopup({ options, value, onSelect, onClose, triggerRef, closing }) {
+function SelectPopup({ options, value, onSelect, onClose, triggerRef, closing, collapsed }) {
   const ref = useRef(null);
+  const pos = usePopupPosition(triggerRef, collapsed);
 
   useEffect(() => {
     const handler = (e) => {
@@ -231,8 +259,9 @@ function SelectPopup({ options, value, onSelect, onClose, triggerRef, closing })
     return () => document.removeEventListener("mousedown", handler);
   }, [onClose, triggerRef]);
 
-  return (
-    <div className={`${styles.appearancePopup} ${closing ? styles.popupClosing : styles.popupOpening}`} ref={ref}>
+  if (!pos) return null;
+  return createPortal(
+    <div className={`${styles.appearancePopup} ${closing ? styles.popupClosing : styles.popupOpening}`} ref={ref} style={pos}>
       {options.map((opt) => (
         <button
           key={opt.key}
@@ -249,13 +278,15 @@ function SelectPopup({ options, value, onSelect, onClose, triggerRef, closing })
           {opt.hint && <span className={styles.optionHint}>{opt.hint}</span>}
         </button>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
 
-function UserPopup({ user, onLogout, onSettings, onClose, triggerRef, closing }) {
+function UserPopup({ user, onLogout, onSettings, onClose, triggerRef, closing, collapsed }) {
   const { t } = useTranslation("common");
   const ref = useRef(null);
+  const pos = usePopupPosition(triggerRef, collapsed);
 
   useEffect(() => {
     const handler = (e) => {
@@ -267,8 +298,9 @@ function UserPopup({ user, onLogout, onSettings, onClose, triggerRef, closing })
     return () => document.removeEventListener("mousedown", handler);
   }, [onClose, triggerRef]);
 
-  return (
-    <div className={`${styles.userPopup} ${closing ? styles.popupClosing : styles.popupOpening}`} ref={ref}>
+  if (!pos) return null;
+  return createPortal(
+    <div className={`${styles.userPopup} ${closing ? styles.popupClosing : styles.popupOpening}`} ref={ref} style={pos}>
       <div className={styles.userPopupHeader}>
         <Avatar user={user} size={32} />
         <div className={styles.userPopupInfo}>
@@ -289,7 +321,8 @@ function UserPopup({ user, onLogout, onSettings, onClose, triggerRef, closing })
         <MIcon name="logout" size={18} />
         <span>{t("Sidebar.logOut")}</span>
       </button>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -347,6 +380,13 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
     navigate(`/${key}`);
     onClose?.();
   };
+
+  /* 收合／展開有寬度動畫，portal 彈窗的定位會跑掉，切換時直接收起 */
+  useEffect(() => {
+    if (langPopup.open) langPopup.close();
+    if (userPopup.open) userPopup.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapsed]);
 
   return (
     <aside className={cls}>
@@ -434,6 +474,7 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
               onClose={langPopup.close}
               triggerRef={langBtnRef}
               closing={langPopup.closing}
+              collapsed={collapsed}
             />
           )}
           <button
@@ -461,6 +502,7 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
               onClose={userPopup.close}
               triggerRef={userBtnRef}
               closing={userPopup.closing}
+              collapsed={collapsed}
             />
           )}
           <button
