@@ -295,7 +295,6 @@
   "CourseTemplateEditorPage.deleteConnectionBtn": "Delete connection",
   "CourseTemplateEditorPage.sourceCustomSpec": "Custom spec",
   "CourseTemplateEditorPage.fieldName": "Name",
-  "CourseTemplateEditorPage.fieldRole": "Role",
   "CourseTemplateEditorPage.removeNodeBtn": "Remove node",
   "CourseTemplateEditorPage.emptyNodesTitle": "Add a node first, then set up connections between machines.",
   "CourseTemplateEditorPage.needNameReason": "Please enter an environment name first",

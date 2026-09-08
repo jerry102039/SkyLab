@@ -295,7 +295,6 @@
   "CourseTemplateEditorPage.deleteConnectionBtn": "接続を削除",
   "CourseTemplateEditorPage.sourceCustomSpec": "カスタム仕様",
   "CourseTemplateEditorPage.fieldName": "名前",
-  "CourseTemplateEditorPage.fieldRole": "役割",
   "CourseTemplateEditorPage.removeNodeBtn": "ノードを削除",
   "CourseTemplateEditorPage.emptyNodesTitle": "まずノードを追加してから、マシン間の接続を設定してください。",
   "CourseTemplateEditorPage.needNameReason": "まず環境名を入力してください",

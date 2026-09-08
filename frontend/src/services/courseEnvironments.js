@@ -77,7 +77,7 @@ export function environmentPayload(item) {
       custom_username: node.sourceType === "custom" && String(node.type).toLowerCase() !== "lxc" ? (node.customUsername || "student") : null,
       custom_unprivileged: node.sourceType === "custom" ? node.customUnprivileged !== false : true,
       name: node.name.trim(),
-      role: node.role.trim(),
+      role: (node.role ?? "").trim() || node.name.trim(),
       resource_type: String(node.type).toLowerCase() === "lxc" ? "lxc" : "qemu",
       cpu: Number(node.cpu),
       memory_mb: Number(node.memory) * 1024,
