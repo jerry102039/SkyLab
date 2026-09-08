@@ -97,7 +97,6 @@
 .workspaceTabs { padding-bottom: 8px; border-bottom: 1px solid var(--color-border); }
 .workspaceTabs button.workspaceTabActive { color: var(--color-surface); background: var(--color-text); }
 
-.inlineMessage { margin: 0 16px 16px; padding: 9px 12px; border-radius: $radius-8; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 8%, transparent); font-size: $font-size-12; }
 .errorMessage { margin: 0; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--color-danger) 30%, var(--color-border)); border-radius: $radius-8; color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 7%, var(--color-surface)); font-size: $font-size-14; }
 
 .memberPageHeader { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 54px; }
@@ -425,17 +424,26 @@
 .machineAddBar .btnPrimary { flex: 0 0 auto; min-width: 138px; }
 
 .topologyWorkspace { display: grid; grid-template-columns: minmax(0, 1fr) 312px; gap: 16px; padding: 16px 22px 22px; }
-.topologyCanvas { height: 420px; overflow: hidden; border: 1px solid var(--color-border); border-radius: $radius-12; background: color-mix(in srgb, var(--color-hover) 24%, var(--color-surface)); }
+/* 畫布底色比照防火牆頁的 flow token。不加 backdrop-filter：
+   拖曳節點經過 backdrop-filter 表面時 Chromium 會重繪閃爍 */
+.topologyCanvas { height: 420px; overflow: hidden; border: 1px solid var(--color-flow-border); border-radius: $radius-12; background: var(--color-flow-bg); box-shadow: 0 4px 24px var(--color-flow-shadow); }
+/* 自訂節點已畫自己的選中外圈，壓掉 xyflow 預設在 wrapper 上的那層 2px 框 */
+.topologyCanvas :global(.react-flow__node.selected),
+.topologyCanvas :global(.react-flow__node:focus),
+.topologyCanvas :global(.react-flow__node:focus-visible) { outline: none !important; box-shadow: none !important; }
 .topologyCanvas :global(.react-flow) { background: transparent; }
 .topologyCanvas :global(.react-flow) svg { max-width: none; }
 .topologyCanvas :global(.react-flow__edge path) { stroke-opacity: 1 !important; }
 .topologyCanvas :global(.react-flow__node.selected) { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 35%, transparent); }
 .topologyCanvas :global(.react-flow__edge.selected path) { stroke: var(--color-primary); }
-.flowMachineNode { position: relative; display: grid; width: 210px; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 9px; box-sizing: border-box; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--color-primary) 55%, var(--color-border)); border-radius: $radius-12; background: var(--color-surface); box-shadow: 0 5px 18px color-mix(in srgb, var(--color-primary) 8%, transparent); }
-.flowMachineNodeSelected { border-color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 16%, transparent), 0 6px 20px color-mix(in srgb, var(--color-primary) 10%, transparent); }
-.flowMachineNode :global(.react-flow__handle) { width: 12px; height: 12px; border: 2px solid var(--color-surface); background: var(--color-primary); }
-.flowMachineNode :global(.react-flow__handle-left) { left: -7px; }
-.flowMachineNode :global(.react-flow__handle-right) { right: -7px; }
+/* 節點外觀對齊防火牆頁的 .vmNode：flow token 邊框陰影、grab 游標、
+   選中 3px 主色外圈；把手同防火牆＝入口主色、出口綠色 */
+.flowMachineNode { position: relative; display: grid; width: 210px; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 9px; box-sizing: border-box; padding: 12px 14px; border: 1.5px solid var(--color-flow-border); border-radius: $radius-12; background: var(--color-surface); box-shadow: 0 2px 12px var(--color-flow-shadow); transition: border-color $transition-base, box-shadow $transition-base; cursor: grab; }
+.flowMachineNode:active { cursor: grabbing; }
+.flowMachineNodeSelected { border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 20%, transparent); }
+.flowMachineNode :global(.react-flow__handle) { width: 12px; height: 12px; }
+.flowMachineNode :global(.react-flow__handle-left) { left: -7px; border-color: var(--color-primary); background: var(--color-primary); }
+.flowMachineNode :global(.react-flow__handle-right) { right: -7px; border-color: var(--color-success); background: var(--color-success); }
 .flowNodeIcon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: $radius-8; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface)); }
 .flowNodeLabel { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 3px 1px; text-align: left; }
 .flowNodeLabel strong { overflow: hidden; color: var(--color-text-primary); font-size: $font-size-12; text-overflow: ellipsis; white-space: nowrap; }
@@ -474,7 +482,9 @@
 .audienceClassItem input { width: auto; margin-top: 2px; }
 .audienceClassItem span { display: flex; min-width: 0; flex-direction: column; gap: 2px; font-size: $font-size-14; }
 .audienceClassItem small { color: var(--color-text-muted); font-size: $font-size-10; }
-.inspectorDanger { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 5px; margin-top: auto; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--color-danger) 35%, var(--color-border)); border-radius: $radius-8; color: var(--color-danger); background: var(--color-surface); cursor: pointer; }
+.inspectorDanger { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 5px; margin-top: auto; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--color-danger) 35%, var(--color-border)); border-radius: $radius-8; color: var(--color-danger); background: var(--color-surface); cursor: pointer; transition: background $transition-base, border-color $transition-base; }
+.inspectorDanger:hover:not(:disabled) { background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface)); border-color: var(--color-danger-dark); }
+.inspectorDanger:disabled { opacity: 0.5; cursor: not-allowed; }
 .table { min-width: 720px; }
 
 .jobGrid span { color: var(--color-text-muted); font-size: $font-size-10; }
@@ -603,3 +613,39 @@
 
 /* 送出時未填的欄位：紅框標示並被聚焦（雙類名壓過 .field input 這類巢狀選擇器） */
 .fieldInvalid.fieldInvalid { @include form-control-invalid; }
+
+/* ── 學習環境列表：篩選與搜尋比照「申請審核」、表格比照「我的申請」 ── */
+.envControls { display: flex; align-items: center; gap: $spacing-16; flex-wrap: wrap; }
+.envTabs {
+  height: 38px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.envTabs::-webkit-scrollbar { display: none; }
+.envSearch {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 38px; padding: 0 $spacing-8 0 10px;
+  border: 1px solid var(--color-border); border-radius: $radius-8;
+  background: var(--color-surface); color: var(--color-text-muted);
+  flex: 0 1 280px; min-width: 200px; box-shadow: var(--shadow-sm);
+}
+.envSearch:focus-within { border-color: var(--color-primary); }
+.envSearch input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--color-text-primary); font: inherit; font-size: $font-size-14; }
+.envSearch input::placeholder { color: var(--color-text-muted); }
+.envTableWrap { @include table-wrap; }
+.envTable { @include table-base; min-width: 880px; }
+.envTable th { @include table-th; }
+.envTable td { @include table-td; padding-block: 12px; }
+.envTable tbody tr { @include table-tr; cursor: pointer; }
+.envTable tbody tr:hover { background: var(--color-hover); }
+.envTable td strong { color: var(--color-text-primary); font-weight: $font-weight-500; }
+.envTable td small { display: block; max-width: 420px; margin-top: 3px; color: var(--color-text-muted); font-size: $font-size-12; line-height: 1.35; }
+
+/* ── 列表 ↔ 編輯頁換頁動畫（比照「我的申請」的表單開合） ── */
+@keyframes envSlideInRight  { from { opacity: 0; transform: translateX(40px); }  to { opacity: 1; transform: translateX(0); } }
+@keyframes envSlideOutRight { from { opacity: 1; transform: translateX(0); }     to { opacity: 0; transform: translateX(40px); } }
+@keyframes envSlideInLeft   { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: translateX(0); } }
+.animSlideInRight  { animation: envSlideInRight  0.22s cubic-bezier(0.25, 0.8, 0.25, 1) both; }
+.animSlideOutRight { animation: envSlideOutRight 0.18s ease both; }
+.animSlideInLeft   { animation: envSlideInLeft   0.22s cubic-bezier(0.25, 0.8, 0.25, 1) both; }

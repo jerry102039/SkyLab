@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Background,
   Handle,
@@ -14,6 +14,8 @@ import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
 import { CourseEnvironmentsService } from "../../../services/courseEnvironments";
 import { TeachingClassesService } from "../../../services/teachingClasses";
 import { apiGet } from "../../../services/api";
+import { focusInvalidField } from "../../../utils/focusField";
+import { useToast } from "../../../hooks/useToast";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import { TemplatesService } from "../../../services/templates";
 import ConnectionEdge from "../../network/firewall/edges/ConnectionEdge";
@@ -37,7 +39,7 @@ function TopologyMachineNode({ data, selected, isConnectable }) {
   const node = data.node;
   return <div className={`${styles.flowMachineNode} ${selected ? styles.flowMachineNodeSelected : ""}`}>
     <Handle type="target" position={Position.Left} isConnectable={isConnectable} />
-    <div className={styles.flowNodeIcon}><MIcon name={node.type === "lxc" ? "deployed_code" : "dns"} size={18} /></div>
+    <div className={styles.flowNodeIcon}><MIcon name={node.type === "lxc" ? "terminal" : "dns"} size={18} /></div>
     <div className={styles.flowNodeLabel}>
       <strong>{node.name}</strong>
       <span>{node.sourceType === "custom" ? t("CourseTemplateEditorPage.sourceCustomShort") : t("CourseTemplateEditorPage.sourceTemplateShort")} · {node.type === "lxc" ? t("CourseTemplateEditorPage.typeContainerLxc") : t("CourseTemplateEditorPage.typeVm")}</span>
@@ -50,7 +52,7 @@ function TopologyMachineNode({ data, selected, isConnectable }) {
 const TOPOLOGY_NODE_TYPES = { courseMachine: TopologyMachineNode };
 const TOPOLOGY_EDGE_TYPES = { connection: ConnectionEdge };
 
-function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vmImages, lxcImages, sourceNotice, locked = false }) {
+function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vmImages, lxcImages, sourceNotice, locked = false, actions = null }) {
   const { t } = useTranslation("teaching");
   const [sourceMode, setSourceMode] = useState("template");
   const [sourceId, setSourceId] = useState("");
@@ -231,6 +233,7 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
           </aside>
         </div>
       </> : <EmptyState icon="dns" title={t("CourseTemplateEditorPage.emptyNodesTitle")} />}
+      {actions && <div className={styles.actionFooter}>{actions}</div>}
   </section>;
 }
 
@@ -250,6 +253,7 @@ function sanitizeReturnTo(value) {
 export default function CourseTemplateEditorPage() {
   const { t } = useTranslation("teaching");
   const confirm = useConfirm();
+  const toast = useToast();
   const { templateId } = useParams();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -266,7 +270,16 @@ export default function CourseTemplateEditorPage() {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(Boolean(templateId));
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  /* 返回時先播離場動畫再導航，比照「我的申請」的表單開合 */
+  const [closing, setClosing] = useState(false);
+  /* 儲存檢查：未填欄位反紅＋聚焦 */
+  const [invalidField, setInvalidField] = useState("");
+  const nameRef = useRef(null);
+  const audienceRef = useRef(null);
+  function leaveTo(path) {
+    setClosing(true);
+    setTimeout(() => navigate(path, { state: { returning: true } }), 180);
+  }
   const isNew = !templateId;
   const locked = template.status !== "draft";
   const invalidTopology = (template.edges ?? []).some((edge) => (
@@ -276,27 +289,43 @@ export default function CourseTemplateEditorPage() {
   const offersPractice = template.usageScope === "quick_practice" || template.usageScope === "both";
   const audience = template.audience ?? "class";
   const missingAudienceClass = offersPractice && audience === "class" && (template.audienceClassIds ?? []).length === 0;
-  const saveBlockReason = !template.name.trim()
-    ? t("CourseTemplateEditorPage.needNameReason")
-    : missingAudienceClass
-      ? t("CourseTemplateEditorPage.needAudienceClassReason")
-      : template.nodes.length === 0
-        ? t("CourseTemplateEditorPage.needAtLeastOneMachineReason")
-        : template.nodes.length > 3
-          ? t("CourseTemplateEditorPage.maxThreeMachinesReason")
-          : invalidTopology
-            ? t("CourseTemplateEditorPage.fixPortReason")
-            : "";
+  /* 不小心跳離（點側欄、重新整理）時保留未儲存的編輯：
+     每次編輯寫入 sessionStorage，進頁還原，成功儲存／發布才清除 */
+  const draftKey = `courseTemplateEditorDraft:${templateId ?? "new"}`;
+  function readDraft() {
+    try { const raw = sessionStorage.getItem(draftKey); return raw ? JSON.parse(raw) : null; }
+    catch { return null; }
+  }
+  function clearDraft() {
+    try { sessionStorage.removeItem(draftKey); } catch { /* sessionStorage 不可用就不保留 */ }
+  }
+
   useEffect(() => {
-    if (!templateId) { setTemplate(makeEmptyTemplate()); setLoading(false); return undefined; }
+    const draft = readDraft();
+    if (!templateId) {
+      setTemplate(draft ?? makeEmptyTemplate());
+      if (draft) toast.success(t("CourseTemplateEditorPage.draftRestoredMsg"));
+      setLoading(false);
+      return undefined;
+    }
     let active = true;
     setLoading(true);
     CourseEnvironmentsService.get(templateId)
-      .then((result) => active && setTemplate(result))
-      .catch((reason) => active && setMessage(reason?.message ?? t("CourseTemplateEditorPage.loadTemplateFailed")))
+      .then((result) => {
+        if (!active) return;
+        /* 只有草稿可編輯；已發布版本忽略殘留草稿 */
+        if (draft && result.status === "draft") {
+          setTemplate(draft);
+          toast.success(t("CourseTemplateEditorPage.draftRestoredMsg"));
+        } else {
+          setTemplate(result);
+        }
+      })
+      .catch((reason) => active && toast.error(reason?.message ?? t("CourseTemplateEditorPage.loadTemplateFailed")))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [templateId, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId, toast, t]);
   useEffect(() => {
     let active = true;
     TeachingClassesService.list()
@@ -322,10 +351,10 @@ export default function CourseTemplateEditorPage() {
         }
       })
       .catch((reason) => {
-        if (active) setSourceNotice(reason?.message ?? t("CourseTemplateEditorPage.loadTemplatesFailedFallback"));
+        if (active) toast.error(reason?.message ?? t("CourseTemplateEditorPage.loadTemplatesFailedFallback"));
       });
     return () => { active = false; };
-  }, [t]);
+  }, [toast, t]);
   useEffect(() => {
     let active = true;
     Promise.all([apiGet("/api/v1/vm/templates"), apiGet("/api/v1/lxc/templates")])
@@ -335,64 +364,95 @@ export default function CourseTemplateEditorPage() {
         setLxcImages((lxcs ?? []).map((item) => ({ value: item.volid, label: item.volid.split("/").pop() ?? item.volid })));
       })
       .catch((reason) => {
-        if (active) setSourceNotice(reason?.message ?? t("CourseTemplateEditorPage.loadImagesFailed"));
+        if (active) toast.error(reason?.message ?? t("CourseTemplateEditorPage.loadImagesFailed"));
       });
     return () => { active = false; };
-  }, [t]);
-  function update(patch) { setTemplate((current) => ({ ...current, ...patch })); }
+  }, [toast, t]);
+  function update(patch) {
+    setTemplate((current) => {
+      const next = { ...current, ...patch };
+      if (!locked) {
+        try { sessionStorage.setItem(draftKey, JSON.stringify(next)); } catch { /* 空間不足等狀況：放棄保留即可 */ }
+      }
+      return next;
+    });
+  }
   function changeTab(nextTab) { setParams(returnTo ? { tab: nextTab, returnTo } : { tab: nextTab }); }
+
+  /* 儲存前檢查：欄位類問題直接反紅＋聚焦（比照 ClassSetupPage），
+     機器配置類問題切到該分頁並 toast 說明 */
+  function validateBeforeSave() {
+    if (!template.name.trim()) {
+      setInvalidField("name");
+      changeTab("basic");
+      setTimeout(() => focusInvalidField(nameRef.current), 60);
+      return false;
+    }
+    if (missingAudienceClass) {
+      setInvalidField("audienceClasses");
+      changeTab("basic");
+      setTimeout(() => focusInvalidField(audienceRef.current), 60);
+      return false;
+    }
+    if (template.nodes.length === 0) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.needAtLeastOneMachineReason")); return false; }
+    if (template.nodes.length > 3) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.maxThreeMachinesReason")); return false; }
+    if (invalidTopology) { changeTab("machines"); toast.error(t("CourseTemplateEditorPage.fixPortReason")); return false; }
+    return true;
+  }
+
   async function save() {
-    setSaving(true); setMessage("");
+    if (!validateBeforeSave()) return;
+    setSaving(true);
     try {
       const saved = isNew
         ? await CourseEnvironmentsService.create(template)
         : await CourseEnvironmentsService.update(template.id, template);
+      clearDraft();
       setTemplate(saved);
       if (isNew) navigate(`/course-template-management/${saved.id}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`, { replace: true });
-      else setMessage(t("CourseTemplateEditorPage.draftSavedMsg"));
-    } catch (reason) { setMessage(reason?.message ?? t("CourseTemplateEditorPage.saveFailed")); }
+      else toast.success(t("CourseTemplateEditorPage.draftSavedMsg"));
+    } catch (reason) { toast.error(reason?.message ?? t("CourseTemplateEditorPage.saveFailed")); }
     finally { setSaving(false); }
   }
   async function publish() {
+    if (!validateBeforeSave()) return;
     const ok = await confirm({
       title: t("CourseTemplateEditorPage.publishConfirmTitle"),
       message: t("CourseTemplateEditorPage.publishConfirmMessage"),
       confirmText: t("CourseTemplateEditorPage.publishLabel"),
     });
     if (!ok) return;
-    setSaving(true); setMessage("");
+    setSaving(true);
     try {
       await CourseEnvironmentsService.update(template.id, template);
       const published = await CourseEnvironmentsService.publish(template.id);
+      clearDraft();
       setTemplate(published);
       const destination = template.usageScope === "quick_practice"
         ? t("CourseTemplateEditorPage.destQuickPractice")
         : template.usageScope === "both"
           ? t("CourseTemplateEditorPage.destBoth")
           : t("CourseTemplateEditorPage.destClassManagement");
-      setMessage(t("CourseTemplateEditorPage.publishedMsg", { destination }));
+      toast.success(t("CourseTemplateEditorPage.publishedMsg", { destination }));
       if (returnTo) navigate(returnTo, { state: { createdTemplateId: published.id } });
-    } catch (reason) { setMessage(reason?.message ?? t("CourseTemplateEditorPage.publishFailed")); }
+    } catch (reason) { toast.error(reason?.message ?? t("CourseTemplateEditorPage.publishFailed")); }
     finally { setSaving(false); }
   }
   async function newVersion() {
-    setSaving(true); setMessage("");
+    setSaving(true);
     try { setTemplate(await CourseEnvironmentsService.createVersion(template.id)); }
-    catch (reason) { setMessage(reason?.message ?? t("CourseTemplateEditorPage.newVersionFailed")); }
+    catch (reason) { toast.error(reason?.message ?? t("CourseTemplateEditorPage.newVersionFailed")); }
     finally { setSaving(false); }
   }
   if (loading) return <LoadingState fullPage text={t("CourseTemplateEditorPage.loadingTemplateText")} />;
-  return <div className={styles.page}>
-    <button type="button" className={styles.backLink} onClick={() => navigate(returnTo ?? "/course-template-management")}><MIcon name="arrow_back" size={18} />{returnTo ? t("CourseTemplateEditorPage.backToClassEnv") : t("CourseTemplateEditorPage.backToTemplateList")}</button>
-    <PageHeader title={isNew ? t("CourseTemplateEditorPage.createTemplateTitle") : template.name} subtitle={isNew ? t("CourseTemplateEditorPage.createTemplateSubtitle") : `v${template.version} · ${template.updatedAt}`}><div className={styles.pageActions}><button type="button" className={styles.btnSecondary} onClick={() => navigate(returnTo ?? "/course-template-management")}>{t("CourseTemplateEditorPage.backBtn")}</button>{locked ? <button type="button" className={styles.btnPrimary} disabled={saving} onClick={newVersion}><MIcon name="content_copy" size={16} />{t("CourseTemplateEditorPage.createNewVersionBtn")}</button> : <><button type="button" className={styles.btnSecondary} disabled={saving || !template.name.trim() || missingAudienceClass || template.nodes.length === 0 || template.nodes.length > 3 || invalidTopology} onClick={save}><MIcon name="save" size={16} />{saving ? t("CourseTemplateEditorPage.savingEllipsis") : t("CourseTemplateEditorPage.saveDraftBtn")}</button><button type="button" className={styles.btnPrimary} disabled={isNew || saving || !template.name.trim() || missingAudienceClass || template.nodes.length === 0 || template.nodes.length > 3 || invalidTopology} onClick={publish}><MIcon name="publish" size={16} />{t("CourseTemplateEditorPage.publishLabel")}</button></>}</div></PageHeader>
+  return <div className={`${styles.page} ${closing ? styles.animSlideOutRight : styles.animSlideInRight}`}>
+    <PageHeader title={isNew ? t("CourseTemplateEditorPage.createTemplateTitle") : template.name} subtitle={isNew ? t("CourseTemplateEditorPage.createTemplateSubtitle") : `v${template.version} · ${template.updatedAt}`}><div className={styles.pageActions}>{locked && <button type="button" className={styles.btnPrimary} disabled={saving} onClick={newVersion}><MIcon name="content_copy" size={16} />{t("CourseTemplateEditorPage.createNewVersionBtn")}</button>}<button type="button" className={`${styles.btnSecondary} ${styles.backBtn}`} onClick={() => leaveTo(returnTo ?? "/course-template-management")}><MIcon name="arrow_back" size={18} />{t("CourseTemplateEditorPage.backBtn")}</button></div></PageHeader>
     {returnTo && <p className={styles.persistentFeedback}><MIcon name="bookmark_added" size={17} /><span><strong>{t("CourseTemplateEditorPage.classDraftSavedTitle")}</strong>{t("CourseTemplateEditorPage.classDraftSavedDesc")}</span></p>}
-    {message && <p className={styles.persistentFeedback}><MIcon name="info" size={17} />{message}</p>}
-    {!locked && saveBlockReason && <p className={styles.persistentFeedback}><MIcon name="info" size={17} />{t("CourseTemplateEditorPage.cannotSaveYet", { reason: saveBlockReason })}</p>}
     <section className={styles.stepTabsBar}>
       <nav className={styles.stepTabs}>{TABS.map(([key, labelKey], index) => <button type="button" key={key} className={tab === key ? styles.stepActive : ""} onClick={() => changeTab(key)}><span>{index + 1}</span><strong>{t(labelKey)}</strong></button>)}</nav>
       <div className={styles.stepTabsAside}><span>{t("CourseTemplateEditorPage.machineCountLabel")}</span><strong>{t("CourseTemplateEditorPage.machineCountValue", { count: template.nodes.length })}</strong></div>
     </section>
-    {tab === "basic" && <section className={styles.card}><div className={styles.cardHeader}><div><h2>{t("CourseTemplateEditorPage.tabBasicLabel")}</h2><p>{locked ? t("CourseTemplateEditorPage.lockedVersionNote") : t("CourseTemplateEditorPage.reusableEnvNote")}</p></div></div><div className={styles.formGrid}><label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldEnvName")}</span><input disabled={locked} value={template.name} onChange={(event) => update({ name: event.target.value })} placeholder={t("CourseTemplateEditorPage.envNamePlaceholder")} /></label><label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldUsageScope")}</span><select disabled={locked} value={template.usageScope ?? "course"} onChange={(event) => update({ usageScope: event.target.value })}><option value="course">{t("CourseTemplateEditorPage.usageScopeCourseOnly")}</option><option value="quick_practice">{t("CourseTemplateEditorPage.usageScopeQuickPracticeOnly")}</option><option value="both">{t("CourseTemplateEditorPage.usageScopeBoth")}</option></select></label>{offersPractice && <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldMaxConcurrent")}</span><input disabled={locked} type="number" min={1} max={500} placeholder={t("CourseTemplateEditorPage.maxConcurrentPlaceholder")} value={template.maxConcurrentSessions ?? ""} onChange={(event) => update({ maxConcurrentSessions: event.target.value === "" ? null : Number(event.target.value) })} /></label>}{offersPractice && <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldAudience")}</span><select disabled={locked} value={audience} onChange={(event) => update({ audience: event.target.value })}><option value="class">{t("CourseTemplateEditorPage.audienceOptClass")}</option><option value="campus">{t("CourseTemplateEditorPage.audienceOptCampus")}</option><option value="owner">{t("CourseTemplateEditorPage.audienceOptOwner")}</option></select></label>}{offersPractice && audience === "class" && <div className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldAudienceClasses")}</span>{classes.length === 0 ? <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.noClassesHint")}</p> : <div className={styles.audienceClassList}>{classes.map((item) => <label key={item.id} className={styles.audienceClassItem}><input type="checkbox" disabled={locked} checked={(template.audienceClassIds ?? []).includes(String(item.id))} onChange={(event) => update({ audienceClassIds: event.target.checked ? [...(template.audienceClassIds ?? []), String(item.id)] : (template.audienceClassIds ?? []).filter((id) => id !== String(item.id)) })} /><span>{item.name}<small>{item.code} · {item.term}</small></span></label>)}</div>}</div>}<label className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldEnvDescription")}</span><textarea disabled={locked} rows={3} value={template.description ?? ""} onChange={(event) => update({ description: event.target.value })} /></label></div><div className={styles.actionFooter}><button type="button" className={styles.btnPrimary} onClick={() => changeTab("machines")}>{t("CourseTemplateEditorPage.viewMachineConfigBtn")}<MIcon name="arrow_forward" size={16} /></button></div></section>}
-    {tab === "machines" && <MachineEditor value={template.nodes} edges={template.edges ?? []} onChange={(nodes) => update({ nodes })} onEdgesChange={(edges) => update({ edges })} pveTemplates={pveTemplates} vmImages={vmImages} lxcImages={lxcImages} sourceNotice={sourceNotice} locked={locked} />}
+    {tab === "basic" && <section className={styles.card}><div className={styles.cardHeader}><div><h2>{t("CourseTemplateEditorPage.tabBasicLabel")}</h2><p>{locked ? t("CourseTemplateEditorPage.lockedVersionNote") : t("CourseTemplateEditorPage.reusableEnvNote")}</p></div></div><div className={styles.formGrid}><label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldEnvName")}</span><input ref={nameRef} className={invalidField === "name" ? styles.fieldInvalid : undefined} aria-invalid={invalidField === "name"} disabled={locked} value={template.name} onChange={(event) => { update({ name: event.target.value }); if (invalidField === "name") setInvalidField(""); }} placeholder={t("CourseTemplateEditorPage.envNamePlaceholder")} /></label><label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldUsageScope")}</span><select disabled={locked} value={template.usageScope ?? "course"} onChange={(event) => update({ usageScope: event.target.value })}><option value="course">{t("CourseTemplateEditorPage.usageScopeCourseOnly")}</option><option value="quick_practice">{t("CourseTemplateEditorPage.usageScopeQuickPracticeOnly")}</option><option value="both">{t("CourseTemplateEditorPage.usageScopeBoth")}</option></select></label>{offersPractice && <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldMaxConcurrent")}</span><input disabled={locked} type="number" min={1} max={500} placeholder={t("CourseTemplateEditorPage.maxConcurrentPlaceholder")} value={template.maxConcurrentSessions ?? ""} onChange={(event) => update({ maxConcurrentSessions: event.target.value === "" ? null : Number(event.target.value) })} /></label>}{offersPractice && <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldAudience")}</span><select disabled={locked} value={audience} onChange={(event) => update({ audience: event.target.value })}><option value="class">{t("CourseTemplateEditorPage.audienceOptClass")}</option><option value="campus">{t("CourseTemplateEditorPage.audienceOptCampus")}</option><option value="owner">{t("CourseTemplateEditorPage.audienceOptOwner")}</option></select></label>}{offersPractice && audience === "class" && <div ref={audienceRef} tabIndex={-1} className={`${styles.field} ${styles.fieldFull} ${invalidField === "audienceClasses" ? styles.fieldInvalid : ""}`}><span>{t("CourseTemplateEditorPage.fieldAudienceClasses")}</span>{classes.length === 0 ? <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.noClassesHint")}</p> : <div className={styles.audienceClassList}>{classes.map((item) => <label key={item.id} className={styles.audienceClassItem}><input type="checkbox" disabled={locked} checked={(template.audienceClassIds ?? []).includes(String(item.id))} onChange={(event) => { update({ audienceClassIds: event.target.checked ? [...(template.audienceClassIds ?? []), String(item.id)] : (template.audienceClassIds ?? []).filter((id) => id !== String(item.id)) }); if (invalidField === "audienceClasses") setInvalidField(""); }} /><span>{item.name}<small>{item.code} · {item.term}</small></span></label>)}</div>}</div>}<label className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldEnvDescription")}</span><textarea disabled={locked} rows={3} value={template.description ?? ""} onChange={(event) => update({ description: event.target.value })} /></label></div><div className={styles.actionFooter}><button type="button" className={styles.btnPrimary} onClick={() => changeTab("machines")}>{t("CourseTemplateEditorPage.viewMachineConfigBtn")}<MIcon name="arrow_forward" size={16} /></button></div></section>}
+    {tab === "machines" && <MachineEditor value={template.nodes} edges={template.edges ?? []} onChange={(nodes) => update({ nodes })} onEdgesChange={(edges) => update({ edges })} pveTemplates={pveTemplates} vmImages={vmImages} lxcImages={lxcImages} sourceNotice={sourceNotice} locked={locked} actions={!locked && <><button type="button" className={styles.btnSecondary} disabled={saving} onClick={save}><MIcon name="save" size={16} />{saving ? t("CourseTemplateEditorPage.savingEllipsis") : t("CourseTemplateEditorPage.saveDraftBtn")}</button><button type="button" className={styles.btnPrimary} disabled={isNew || saving} onClick={publish}><MIcon name="publish" size={16} />{t("CourseTemplateEditorPage.publishLabel")}</button></>} />}
   </div>;
 }
