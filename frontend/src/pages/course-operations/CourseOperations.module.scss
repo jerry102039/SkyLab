@@ -435,7 +435,7 @@
 .flowMachineNode :global(.react-flow__handle-right) { right: -7px; }
 .flowNodeIcon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: $radius-8; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface)); }
 .flowNodeLabel { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 3px 1px; text-align: left; }
-.flowNodeLabel strong { display: -webkit-box; overflow: hidden; color: var(--color-text-primary); -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: $font-size-12; line-height: 1.35; overflow-wrap: anywhere; }
+.flowNodeLabel strong { display: -webkit-box; overflow: hidden; color: var(--color-text-primary); -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: $font-size-12; line-height: 1.35; overflow-wrap: break-word; }
 .flowNodeLabel span, .flowNodeLabel small { color: var(--color-text-muted); font-size: $font-size-10; }
 .topologyInspector { display: flex; min-width: 0; min-height: 420px; box-sizing: border-box; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--color-border); border-radius: $radius-12; background: var(--color-surface); }
 /* 已鎖定的班級：環境是既成事實，攤成四格摘要就好，不用一整份選單。 */
@@ -454,11 +454,11 @@
 .setupActions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .topologyInspector label { @include form-field; }
 .topologyInspector select, .topologyInspector input { @include form-control; }
-.inspectorTitle { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 8px; padding-bottom: 3px; }
+.inspectorTitle { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: start; gap: 8px; padding-bottom: 3px; }
 .inspectorTitle > :first-child { color: var(--color-primary); }
 .inspectorTitle div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.inspectorTitle strong { font-size: $font-size-12; line-height: 1.35; overflow-wrap: anywhere; }
-.inspectorTitle small { color: var(--color-text-muted); font-size: $font-size-10; line-height: 1.35; overflow-wrap: anywhere; }
+.inspectorTitle strong { font-size: $font-size-14; line-height: 1.4; overflow-wrap: break-word; }
+.inspectorTitle small { color: var(--color-text-muted); font-size: $font-size-12; line-height: 1.4; overflow-wrap: break-word; }
 .inspectorSplit { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .inspectorSliders { display: flex; flex-direction: column; gap: 12px; }
 .sliderLabel { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }

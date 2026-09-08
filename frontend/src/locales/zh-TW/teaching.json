@@ -272,7 +272,6 @@
   "CourseTemplateEditorPage.fieldProtocol": "協定",
   "CourseTemplateEditorPage.protocolAnyLegacy": "全部（舊設定）",
   "CourseTemplateEditorPage.fieldPort": "連接埠",
-  "CourseTemplateEditorPage.directionHint": "單向會建立來源 OUT 與目標 IN 規則；雙向會再建立反向規則。",
   "CourseTemplateEditorPage.deleteConnectionBtn": "刪除連線",
   "CourseTemplateEditorPage.sourceCustomSpec": "自訂規格",
   "CourseTemplateEditorPage.fieldName": "名稱",

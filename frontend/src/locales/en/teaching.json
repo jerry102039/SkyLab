@@ -272,7 +272,6 @@
   "CourseTemplateEditorPage.fieldProtocol": "Protocol",
   "CourseTemplateEditorPage.protocolAnyLegacy": "All (legacy setting)",
   "CourseTemplateEditorPage.fieldPort": "Port",
-  "CourseTemplateEditorPage.directionHint": "One-way creates an OUT rule on the source and an IN rule on the target; two-way also creates the reverse rule.",
   "CourseTemplateEditorPage.deleteConnectionBtn": "Delete connection",
   "CourseTemplateEditorPage.sourceCustomSpec": "Custom spec",
   "CourseTemplateEditorPage.fieldName": "Name",

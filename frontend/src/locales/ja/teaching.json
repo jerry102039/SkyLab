@@ -272,7 +272,6 @@
   "CourseTemplateEditorPage.fieldProtocol": "プロトコル",
   "CourseTemplateEditorPage.protocolAnyLegacy": "すべて（旧設定）",
   "CourseTemplateEditorPage.fieldPort": "ポート",
-  "CourseTemplateEditorPage.directionHint": "一方向はソースの OUT ルールとターゲットの IN ルールを作成します；双方向はさらに逆方向のルールも作成します。",
   "CourseTemplateEditorPage.deleteConnectionBtn": "接続を削除",
   "CourseTemplateEditorPage.sourceCustomSpec": "カスタム仕様",
   "CourseTemplateEditorPage.fieldName": "名前",
