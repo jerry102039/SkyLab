@@ -45,10 +45,10 @@ const DEFAULT_CONTEXT = {
 
 /* 同一個對話框背後有幾種能力，開場列出名稱，使用者才會用到後面幾個。 */
 const CAPABILITIES = [
-  { icon: "explore", titleKey: "AiFloatingChat.capabilityFindTitle" },
-  { icon: "checklist", titleKey: "AiFloatingChat.capabilityGuideTitle" },
-  { icon: "auto_fix_high", titleKey: "AiFloatingChat.capabilityRecommendTitle" },
-  { icon: "help_center", titleKey: "AiFloatingChat.capabilityExplainTitle" },
+  { titleKey: "AiFloatingChat.capabilityFindTitle" },
+  { titleKey: "AiFloatingChat.capabilityGuideTitle" },
+  { titleKey: "AiFloatingChat.capabilityRecommendTitle" },
+  { titleKey: "AiFloatingChat.capabilityExplainTitle" },
 ];
 
 const NAVIGATION_PATTERN = /(帶我|前往|打開|開啟|跳到|導航|在哪|哪裡|頁面)/i;
@@ -695,7 +695,6 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {} }
       {presence.open && (
         <aside className={`${styles.panel} ${presence.closing ? styles.panelOut : ""}`} aria-label={t("AiFloatingChat.assistantName")}>
           <header className={styles.header}>
-            <span className={styles.brandIcon}><MIcon name="auto_awesome" size={19} /></span>
             <div className={styles.headerText}>
               <strong>{t("AiFloatingChat.assistantName")}</strong>
               <span>{t("AiFloatingChat.headerSubtitle")}</span>
@@ -731,7 +730,6 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {} }
                 <ul className={styles.capabilities}>
                   {CAPABILITIES.map((item) => (
                     <li key={item.titleKey}>
-                      <MIcon name={item.icon} size={17} />
                       <strong>{t(item.titleKey)}</strong>
                     </li>
                   ))}

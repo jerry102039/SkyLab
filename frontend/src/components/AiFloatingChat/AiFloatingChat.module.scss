@@ -76,18 +76,6 @@
   }
 }
 
-.brandIcon {
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 11%, transparent);
-  @include flex-center;
-}
-
-.brandIcon {
-  width: 36px;
-  height: 36px;
-  border-radius: $radius-12;
-}
-
 .headerText {
   flex: 1;
   min-width: 0;

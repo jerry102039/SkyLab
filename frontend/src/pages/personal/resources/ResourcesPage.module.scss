@@ -144,6 +144,9 @@
   min-width: 1080px;
 }
 
+/* 名稱欄也給定寬度，剩餘空間依比例分給所有欄，
+   否則寬螢幕時名稱欄會吸掉全部留白、其他欄擠在右側 */
+.colName    { width: 300px; }
 .colEnv     { width: 160px; }
 .colStatus  { width: 100px; }
 .colIp      { width: 130px; }
@@ -385,6 +388,7 @@
   padding: 4px 10px;
   margin-left: 8px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .badge_success { background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); }

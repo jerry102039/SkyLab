@@ -97,6 +97,7 @@ const VIEW_CREATE = "create";
 const LIST_COLUMN_KEYS = [
   "RequestsPage.colResource",
   "RequestsPage.colOs",
+  "RequestsPage.fieldAccount",
   "RequestsPage.colSpec",
   "RequestsPage.colReason",
   "RequestsPage.colRequestedAt",
@@ -145,7 +146,7 @@ function getOsDisplay(req) {
 
 function getFormInfoItems(req, t = defaultT) {
   const items = [];
-  if (req.username)             items.push({ label: t("RequestsPage.fieldAccount"),   value: req.username });
+  /* 帳號已改為列表欄位，這裡只留展開明細才需要的資訊 */
   if (req.gpu_mapping_id)       items.push({ label: "GPU",    value: req.gpu_mapping_id });
   return items;
 }
@@ -375,6 +376,9 @@ function RequestRow({ req, onUpdated }) {
         </td>
         <td className={styles.td}>
           <span className={styles.osCell} title={osDisplay ?? undefined}>{osDisplay ?? "—"}</span>
+        </td>
+        <td className={styles.td}>
+          <span className={styles.osCell} title={req.username ?? undefined}>{req.username ?? "—"}</span>
         </td>
         <td className={styles.td}>
           <span className={styles.specCell}>{getSpecDisplay(req, t)}</span>

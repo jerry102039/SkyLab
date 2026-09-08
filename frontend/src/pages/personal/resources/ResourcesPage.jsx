@@ -645,7 +645,7 @@ export default function ResourcesPage() {
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <colgroup>
-                <col />
+                <col className={styles.colName} />
                 <col className={styles.colEnv} />
                 <col className={styles.colStatus} />
                 <col className={styles.colIp} />
