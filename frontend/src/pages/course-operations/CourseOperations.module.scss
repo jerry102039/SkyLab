@@ -422,7 +422,7 @@
 .machineAddBar .btnPrimary { flex: 0 0 auto; min-width: 138px; }
 
 .topologyWorkspace { display: grid; grid-template-columns: minmax(0, 1fr) 312px; gap: 16px; padding: 16px 22px 22px; }
-.topologyCanvas { min-height: 420px; overflow: hidden; border: 1px solid var(--color-border); border-radius: $radius-12; background: color-mix(in srgb, var(--color-hover) 24%, var(--color-surface)); }
+.topologyCanvas { height: 420px; overflow: hidden; border: 1px solid var(--color-border); border-radius: $radius-12; background: color-mix(in srgb, var(--color-hover) 24%, var(--color-surface)); }
 .topologyCanvas :global(.react-flow) { background: transparent; }
 .topologyCanvas :global(.react-flow) svg { max-width: none; }
 .topologyCanvas :global(.react-flow__edge path) { stroke-opacity: 1 !important; }
@@ -440,8 +440,7 @@
 .topologyInspector {
   display: flex;
   min-width: 0;
-  min-height: 420px;
-  max-height: calc(100vh - 200px);
+  height: 420px;
   box-sizing: border-box;
   flex-direction: column;
   gap: 12px;
@@ -624,8 +623,8 @@
   .machineAddBar .field { flex-basis: 100%; }
   .machineAddBar .btnPrimary { width: 100%; }
   .topologyWorkspace { grid-template-columns: 1fr; padding-inline: $spacing-16; }
-  .topologyCanvas { min-height: 280px; }
-  .topologyInspector { min-height: 0; max-height: none; }
+  .topologyCanvas { height: 280px; }
+  .topologyInspector { height: auto; max-height: 70vh; }
   .weekRows article { grid-template-columns: 1fr; align-items: stretch; gap: 10px; padding: 16px 18px; }
   .weekRowsHead { display: none; }
   .weekRows article > .weekFileList { grid-column: auto; }

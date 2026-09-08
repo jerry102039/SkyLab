@@ -269,6 +269,7 @@
   "CourseTemplateEditorPage.cancelBtn": "Cancel",
   "CourseTemplateEditorPage.confirmBtn": "Confirm",
   "CourseTemplateEditorPage.duplicateHostnameHint": "Another service in this environment already uses this template. One address can only point at one port.",
+  "CourseTemplateEditorPage.noSourceOption": "No source available",
   "CourseTemplateEditorPage.nodeLimitLabel": "{{count}} / 3 machines",
   "CourseTemplateEditorPage.cpuValue": "{{count}} vCPU",
   "CourseTemplateEditorPage.memoryValue": "{{count}} GB",

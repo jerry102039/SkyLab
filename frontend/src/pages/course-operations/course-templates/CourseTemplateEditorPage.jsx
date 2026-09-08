@@ -138,6 +138,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState([]);
   const [topologyNotice, setTopologyNotice] = useState("");
   const [publicationDraft, setPublicationDraft] = useState(null);
+  const sourceOptions = sourceMode === "template" ? pveTemplates : (customType === "lxc" ? lxcImages : vmImages);
   const atLimit = value.length >= 3;
 
   function addMachine() {
@@ -338,7 +339,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
       <div className={styles.machineAddBar}>
         <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldSourceMode")}</span><select value={sourceMode} disabled={locked || atLimit} onChange={(event) => { setSourceMode(event.target.value); setSourceId(""); }}><option value="template">{t("CourseTemplateEditorPage.sourceModeTemplateOption")}</option><option value="custom">{t("CourseTemplateEditorPage.sourceModeCustomOption")}</option></select></label>
         {sourceMode === "custom" && <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldMachineType")}</span><select value={customType} disabled={locked || atLimit} onChange={(event) => { setCustomType(event.target.value); setSourceId(""); }}><option value="qemu">VM</option><option value="lxc">LXC</option></select></label>}
-        <label className={styles.field}><span>{sourceMode === "template" ? t("CourseTemplateEditorPage.sourceExistingTemplate") : t("CourseTemplateEditorPage.fieldBaseImage")}</span><select value={sourceId} disabled={locked || atLimit} onChange={(event) => setSourceId(event.target.value)}><option value="">{locked ? t("CourseTemplateEditorPage.publishedLockedOption") : atLimit ? t("CourseTemplateEditorPage.atLimitOption") : t("CourseTemplateEditorPage.pleaseSelectOption")}</option>{sourceMode === "template" ? pveTemplates.map((source) => <option key={source.id} value={source.id}>{source.name} · {source.resource_type ?? "VM"}</option>) : (customType === "lxc" ? lxcImages : vmImages).map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}</select></label>
+        <label className={styles.field}><span>{sourceMode === "template" ? t("CourseTemplateEditorPage.sourceExistingTemplate") : t("CourseTemplateEditorPage.fieldBaseImage")}</span><select value={sourceId} disabled={locked || atLimit} onChange={(event) => setSourceId(event.target.value)}><option value="">{locked ? t("CourseTemplateEditorPage.publishedLockedOption") : atLimit ? t("CourseTemplateEditorPage.atLimitOption") : sourceOptions.length === 0 ? t("CourseTemplateEditorPage.noSourceOption") : t("CourseTemplateEditorPage.pleaseSelectOption")}</option>{sourceMode === "template" ? sourceOptions.map((source) => <option key={source.id} value={source.id}>{source.name} · {source.resource_type ?? "VM"}</option>) : sourceOptions.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}</select></label>
         <button type="button" className={styles.btnPrimary} disabled={locked || atLimit || !sourceId} onClick={addMachine}><MIcon name={atLimit ? "check" : "add"} size={16} />{atLimit ? t("CourseTemplateEditorPage.atLimitBtn") : t("CourseTemplateEditorPage.addMachineBtn")}</button>
       </div>
       {value.length ? <>
@@ -513,12 +514,20 @@ export default function CourseTemplateEditorPage() {
       .catch(() => { if (active) setZones([]); });
     return () => { active = false; };
   }, []);
+  // 兩份清單分開載：VM 與 LXC 各自可能失敗，別讓其中一支把另一支也拖成空的
   useEffect(() => {
     let active = true;
-    Promise.all([apiGet("/api/v1/vm/templates"), apiGet("/api/v1/lxc/templates")])
-      .then(([vms, lxcs]) => {
+    apiGet("/api/v1/vm/templates")
+      .then((vms) => {
         if (!active) return;
         setVmImages((vms ?? []).map((item) => ({ value: String(item.vmid), label: t("CourseTemplateEditorPage.vmImageLabel", { name: item.name, vmid: item.vmid, node: item.node }), cores: item.cores, memoryMb: item.memory_mb, diskGb: item.disk_gb })));
+      })
+      .catch((reason) => {
+        if (active) setSourceNotice(reason?.message ?? t("CourseTemplateEditorPage.loadImagesFailed"));
+      });
+    apiGet("/api/v1/lxc/templates")
+      .then((lxcs) => {
+        if (!active) return;
         setLxcImages((lxcs ?? []).map((item) => ({ value: item.volid, label: item.volid.split("/").pop() ?? item.volid })));
       })
       .catch((reason) => {

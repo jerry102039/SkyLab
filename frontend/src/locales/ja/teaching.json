@@ -269,6 +269,7 @@
   "CourseTemplateEditorPage.cancelBtn": "キャンセル",
   "CourseTemplateEditorPage.confirmBtn": "確定",
   "CourseTemplateEditorPage.duplicateHostnameHint": "このテンプレートは同じ環境の別のサービスで使われています。1つのURLは1つのポートにしか向けられません。",
+  "CourseTemplateEditorPage.noSourceOption": "利用可能なソースがありません",
   "CourseTemplateEditorPage.nodeLimitLabel": "{{count}} / 3 台",
   "CourseTemplateEditorPage.cpuValue": "{{count}} コア",
   "CourseTemplateEditorPage.memoryValue": "{{count}} GB",
