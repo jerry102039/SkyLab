@@ -295,6 +295,7 @@
   "CourseTemplateEditorPage.deleteConnectionBtn": "刪除連線",
   "CourseTemplateEditorPage.sourceCustomSpec": "自訂規格",
   "CourseTemplateEditorPage.fieldName": "名稱",
+  "CourseTemplateEditorPage.fieldRole": "角色",
   "CourseTemplateEditorPage.removeNodeBtn": "移除節點",
   "CourseTemplateEditorPage.emptyNodesTitle": "先加入一個節點，再設定機器之間的連線。",
   "CourseTemplateEditorPage.needNameReason": "請先輸入環境名稱",
