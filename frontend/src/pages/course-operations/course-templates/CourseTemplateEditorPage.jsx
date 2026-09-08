@@ -330,6 +330,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
                   <span>{t("CourseTemplateEditorPage.publicAccessLabel")}</span>
                   {!locked && <button type="button" className={styles.publicationAddBtn} onClick={() => addPublication(selectedNode)}><MIcon name="add" size={14} />{t("CourseTemplateEditorPage.addPublicationBtn")}</button>}
                 </div>
+                {!zones.length && <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.noZoneHint")}</p>}
                 {nodePublications.length === 0
                   ? <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.noPublicationHint")}</p>
                   : nodePublications.map((publication) => <div key={publication.id} className={styles.publicationRow}>
