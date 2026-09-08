@@ -25,6 +25,7 @@ from app.models import (
     CourseEnvironment,
     CourseEnvironmentEdge,
     CourseEnvironmentNode,
+    CourseEnvironmentPublication,
     CourseEnvironmentVersion,
     CourseEnvironmentVersionStatus,
     Resource,
@@ -311,6 +312,10 @@ def _serialize(session: SessionDep, item: TeachingClass) -> dict:
     )
     course_environment = None
     topology_edges = []
+    # 上課環境要畫得跟課程環境一樣：位置沿用老師在編輯器排好的座標
+    # （班級複本沒有存座標，只能回頭讀環境版本），對外服務也一併帶出來。
+    node_positions: dict[str, dict[str, float]] = {}
+    publications: list[dict] = []
     if item.course_version_id:
         version = session.get(CourseEnvironmentVersion, item.course_version_id)
         environment = (
@@ -323,6 +328,22 @@ def _serialize(session: SessionDep, item: TeachingClass) -> dict:
                     select(CourseEnvironmentEdge).where(
                         CourseEnvironmentEdge.version_id == version.id
                     )
+                ).all()
+            ]
+            node_positions = {
+                row.node_key: {"x": row.position_x, "y": row.position_y}
+                for row in session.exec(
+                    select(CourseEnvironmentNode).where(
+                        CourseEnvironmentNode.version_id == version.id
+                    )
+                ).all()
+            }
+            publications = [
+                row.model_dump()
+                for row in session.exec(
+                    select(CourseEnvironmentPublication)
+                    .where(CourseEnvironmentPublication.version_id == version.id)
+                    .order_by(CourseEnvironmentPublication.sort_order)
                 ).all()
             ]
             course_environment = {
@@ -361,6 +382,8 @@ def _serialize(session: SessionDep, item: TeachingClass) -> dict:
         ],
         "course_environment": course_environment,
         "topology_edges": topology_edges,
+        "node_positions": node_positions,
+        "publications": publications,
         "capacity_preview": capacity,
         "capacity_reservation": reservation.model_dump() if reservation else None,
     }
