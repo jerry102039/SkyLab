@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./BatchReviewPage.module.scss";
 import MIcon from "../../../components/MIcon";
@@ -9,16 +9,17 @@ import { useToast } from "../../../hooks/useToast";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import PageHeader from "../../../components/PageHeader/PageHeader";
+import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
 
 /* 這些 hook 的回傳值會進 useCallback / useMemo 的相依陣列，
    必須 useMemo 固定身分，否則載入 effect 會無限重跑 */
 function useTabs() {
   const { t } = useTranslation("resource");
   return useMemo(() => [
-    { key: "pending", label: t("BatchReviewPage.tabPending"), icon: "pending_actions" },
-    { key: "approved", label: t("BatchReviewPage.tabApproved"), icon: "task_alt" },
-    { key: "rejected", label: t("BatchReviewPage.tabRejected"), icon: "block" },
-    { key: "all", label: t("BatchReviewPage.tabAll"), icon: "view_list" },
+    { key: "pending", label: t("BatchReviewPage.tabPending") },
+    { key: "approved", label: t("BatchReviewPage.tabApproved") },
+    { key: "rejected", label: t("BatchReviewPage.tabRejected") },
+    { key: "all", label: t("BatchReviewPage.tabAll") },
   ], [t]);
 }
 
@@ -186,6 +187,23 @@ function ProgressInline({ done, failed, total }) {
   );
 }
 
+/* RRULE 轉人話：只處理後端 build_weekly_rule 產生的 FREQ=WEEKLY 形式，
+   解析不了（含未知 BYDAY 代碼）回傳 null，由呼叫端改顯示原始字串 */
+const RRULE_DAY_KEYS = {
+  MO: "BatchReviewPage.dayMO", TU: "BatchReviewPage.dayTU", WE: "BatchReviewPage.dayWE",
+  TH: "BatchReviewPage.dayTH", FR: "BatchReviewPage.dayFR", SA: "BatchReviewPage.daySA", SU: "BatchReviewPage.daySU",
+};
+
+function describeRecurrence(rule, t) {
+  const parts = Object.fromEntries(String(rule ?? "").split(";").map((pair) => pair.split("=")));
+  if (parts.FREQ !== "WEEKLY" || !parts.BYDAY) return null;
+  const dayKeys = parts.BYDAY.split(",").map((code) => RRULE_DAY_KEYS[code]);
+  if (dayKeys.some((key) => !key)) return null;
+  const days = dayKeys.map((key) => t(key)).join(t("BatchReviewPage.recurDaySeparator"));
+  const time = `${String(parts.BYHOUR ?? 0).padStart(2, "0")}:${String(parts.BYMINUTE ?? 0).padStart(2, "0")}`;
+  return t("BatchReviewPage.recurWeekly", { days, time });
+}
+
 function filterByTab(rows, tab) {
   if (tab === "all") return rows;
   return rows.filter((row) => row.reviewStatus === tab);
@@ -208,6 +226,8 @@ export default function BatchReviewPage() {
   const [reviewing, setReviewing] = useState(false);
   /** jobId → "loading" | [start, end][]，點「查看時段」才載入 */
   const [previews, setPreviews] = useState({});
+  /* 開合與資料分開存：收合時保留已抓的時段，收合動畫才有內容可收、再展開也不用重抓 */
+  const [openPreviews, setOpenPreviews] = useState({});
 
   /** silent = true 時不觸發 loading 與錯誤提示，供背景自動刷新使用 */
   const load = useCallback(async (silent = false) => {
@@ -268,14 +288,20 @@ export default function BatchReviewPage() {
   }, [reviewRows]);
 
   const togglePreview = async (jobId) => {
-    if (previews[jobId]) {
-      setPreviews((p) => { const n = { ...p }; delete n[jobId]; return n; });
+    if (openPreviews[jobId]) {
+      setOpenPreviews((p) => ({ ...p, [jobId]: false }));
+      return;
+    }
+    if (Array.isArray(previews[jobId])) {
+      setOpenPreviews((p) => ({ ...p, [jobId]: true }));
       return;
     }
     setPreviews((p) => ({ ...p, [jobId]: "loading" }));
     try {
       const res = await BatchProvisionService.getRecurrencePreview(jobId);
       setPreviews((p) => ({ ...p, [jobId]: res?.windows ?? [] }));
+      /* 先讓清單以收合狀態渲染一幀，下一幀再展開，首次載入才有展開動畫 */
+      window.requestAnimationFrame(() => setOpenPreviews((p) => ({ ...p, [jobId]: true })));
     } catch (e) {
       setPreviews((p) => { const n = { ...p }; delete n[jobId]; return n; });
       toast.error(e?.message ?? t("BatchReviewPage.previewLoadFailed"));
@@ -323,6 +349,18 @@ export default function BatchReviewPage() {
 
   const isPending = selected?.reviewStatus === "pending";
   const preview = selected ? previews[selected.previewJobId] : undefined;
+  const previewOpen = selected ? Boolean(openPreviews[selected.previewJobId]) : false;
+
+  /* 展開後把清單捲進可視範圍（nearest = 只捲必要的最小距離），滑鼠不用再滾 */
+  const recurListRef = useRef(null);
+  useEffect(() => {
+    if (!previewOpen) return undefined;
+    // 等收合動畫（0.22s）跑完、高度到位後再捲，才不會捲不到底
+    const timer = window.setTimeout(() => {
+      recurListRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 240);
+    return () => window.clearTimeout(timer);
+  }, [previewOpen]);
 
   return (
     <div className={styles.page}>
@@ -371,19 +409,13 @@ export default function BatchReviewPage() {
       </div>
 
       <div className={styles.tabsRow}>
-        <div className={styles.tabs}>
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ""}`}
-              onClick={() => setActiveTab(tab.key)}
-            >
-              <MIcon name={tab.icon} size={16} />
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          className={styles.tabsControl}
+          options={tabs.map(({ key, label }) => ({ value: key, label }))}
+          value={activeTab}
+          onChange={setActiveTab}
+          ariaLabel={t("BatchReviewPage.tabsAriaLabel")}
+        />
 
         <div className={styles.search}>
           <MIcon name="search" size={16} />
@@ -499,14 +531,15 @@ export default function BatchReviewPage() {
                 {selected.recurrenceRule && (
                   <div className={styles.reasonBox}>
                     <span>{t("BatchReviewPage.recurChipLabel")}</span>
-                    <p className={styles.ruleText}>{selected.recurrenceRule}</p>
+                    <p className={styles.ruleHuman}>{describeRecurrence(selected.recurrenceRule, t) ?? selected.recurrenceRule}</p>
+                    {describeRecurrence(selected.recurrenceRule, t) && <p className={styles.ruleText}>{selected.recurrenceRule}</p>}
                     <button
                       type="button"
                       className={styles.recurChip}
                       title={t("BatchReviewPage.recurChipTitle")}
                       onClick={() => togglePreview(selected.previewJobId)}
                     >
-                      <MIcon name="update" size={12} />
+                      <MIcon name={preview === "loading" || previewOpen ? "expand_less" : "expand_more"} size={12} />
                       {t("BatchReviewPage.recurPreviewToggle")}
                     </button>
                     {preview === "loading" && (
@@ -515,14 +548,18 @@ export default function BatchReviewPage() {
                       </span>
                     )}
                     {Array.isArray(preview) && (
-                      <ul className={styles.recurWindows}>
-                        {preview.length === 0 && <li>{t("BatchReviewPage.noScheduledWindows")}</li>}
-                        {preview.map(([start, end]) => (
-                          <li key={start}>
-                            {formatDateTime(start, t)} ～ {formatDateTime(end, t)}
-                          </li>
-                        ))}
-                      </ul>
+                      <div ref={recurListRef} className={`${styles.recurCollapse} ${previewOpen ? styles.recurCollapseOpen : ""}`}>
+                        <div className={styles.recurCollapseInner}>
+                          <ul className={styles.recurWindows}>
+                            {preview.length === 0 && <li>{t("BatchReviewPage.noScheduledWindows")}</li>}
+                            {preview.map(([start, end]) => (
+                              <li key={start}>
+                                {formatDateTime(start, t)} ～ {formatDateTime(end, t)}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}

@@ -10,6 +10,7 @@ import { ResourcesService } from "../../../services/resources";
 import { QuickPracticeService } from "../../../services/quickPractice";
 import styles from "./StudentHomePage.module.scss";
 import PageHeader from "../../../components/PageHeader/PageHeader";
+import LoadingState from "../../../components/LoadingState/LoadingState";
 import i18n from "../../../i18n";
 
 // 與 react-i18next 的 t 同型（key, options），normalizeSchedule 會帶插值參數
@@ -158,19 +159,6 @@ function StatusBadge({ meta }) {
       <MIcon name={meta.icon} size={16} />
       {meta.label ?? t(meta.labelKey)}
     </span>
-  );
-}
-
-function LoadingState() {
-  const { t } = useTranslation("personal");
-  return (
-    <div className={styles.loadingState} aria-label={t("StudentHomePage.loadingLabel")}>
-      <span className={styles.loadingIcon}><MIcon name="school" size={28} /></span>
-      <div>
-        <strong>{t("StudentHomePage.loadingLabel")}</strong>
-        <p>{t("StudentHomePage.loadingDesc")}</p>
-      </div>
-    </div>
   );
 }
 
@@ -600,7 +588,7 @@ export default function StudentHomePage({ courseView = false }) {
   if (view.loading) {
     return (
       <div className={styles.page}>
-        <LoadingState />
+        <LoadingState fullPage text={t("StudentHomePage.loadingLabel")} />
       </div>
     );
   }
@@ -1057,9 +1045,7 @@ export default function StudentHomePage({ courseView = false }) {
           </div>
 
           {templatesLoading ? (
-            <div className={styles.quickTemplateGrid} aria-label={t("StudentHomePage.loadingTemplatesAria")}>
-              {[0, 1, 2].map((item) => <div key={item} className={styles.quickTemplateSkeleton} />)}
-            </div>
+            <LoadingState />
           ) : displayedQuickTemplates.length > 0 ? (
             <div className={styles.quickTemplateGrid}>
               {displayedQuickTemplates.map((template) => (
@@ -1067,7 +1053,6 @@ export default function StudentHomePage({ courseView = false }) {
                   type="button"
                   key={template.id}
                   className={styles.templateCard}
-                  style={{ "--accent-color": "var(--color-primary)" }}
                   onClick={() => navigate(`/quick-template/${template.id}`, { state: { from: "/dashboard" } })}
                 >
                   <div className={styles.templateHeader}>

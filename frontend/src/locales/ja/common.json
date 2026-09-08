@@ -169,6 +169,8 @@
   "Sidebar.itemMonitoring": "リソース監視",
   "Sidebar.itemJobs": "バックグラウンドタスク",
   "Sidebar.itemAudit": "監査ログ",
+  "Sidebar.pin": "ピン留め",
+  "Sidebar.unpin": "ピン留めを解除",
   "Sidebar.userSettings": "ユーザー設定",
   "Sidebar.logOut": "ログアウト",
   "Sidebar.userMenuAriaLabel": "ユーザーメニュー：{{name}}"

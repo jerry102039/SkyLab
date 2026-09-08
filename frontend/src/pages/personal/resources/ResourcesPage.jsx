@@ -9,6 +9,7 @@ import PowerMenu from "../../../components/PowerMenu/PowerMenu";
 import TemplateConvertDialog from "../../../components/TemplateConvertDialog/TemplateConvertDialog";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
+import LoadingState from "../../../components/LoadingState/LoadingState";
 import { ResourcesService } from "../../../services/resources";
 import {
   PENDING_POLL_INTERVAL,
@@ -474,11 +475,6 @@ function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
   </>;
 }
 
-/* ── Skeleton ── */
-function SkeletonRow() {
-  return <tr className={styles.tr} aria-hidden>{[0, 1, 2, 3, 4, 5, 6].map((column) => <td key={column} className={styles.td}><div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: column === 0 ? "75%" : "60%", height: 14 }} /></td>)}</tr>;
-}
-
 /* ── Empty / Error states ── */
 function EmptyState() {
   const { t } = useTranslation("personal");
@@ -642,13 +638,15 @@ export default function ResourcesPage() {
       <div className={styles.content}>
         {error ? (
           <ErrorState onRetry={() => fetchResources()} />
-        ) : !loading && visibleResources.length === 0 && visiblePending.length === 0 && environmentGroups.length === 0 ? (
+        ) : loading ? (
+          <LoadingState fullPage />
+        ) : visibleResources.length === 0 && visiblePending.length === 0 && environmentGroups.length === 0 ? (
           <EmptyState />
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <colgroup>
-                <col />
+                <col className={styles.colName} />
                 <col className={styles.colEnv} />
                 <col className={styles.colStatus} />
                 <col className={styles.colIp} />
@@ -660,11 +658,9 @@ export default function ResourcesPage() {
                 <tr><th className={styles.th}>{t("ResourcesPage.colName")}</th><th className={styles.th}>{t("ResourcesPage.colEnvironment")}</th><th className={styles.th}>{t("ResourcesPage.colStatus")}</th><th className={styles.th}>{t("ResourcesPage.colIp")}</th><th className={styles.th}>{t("ResourcesPage.colExpiry")}</th><th className={styles.th}>{t("ResourcesPage.colNode")}</th><th className={styles.th}>{t("ResourcesPage.colActions")}</th></tr>
               </thead>
               <tbody>
-                {loading ? [0, 1, 2].map((i) => <SkeletonRow key={i} />) : <>
-                  {environmentGroups.map((group) => <EnvironmentGroupRows key={group.id} group={group} onUpdated={handleUpdated} onEnded={() => fetchResources(true)} />)}
-                  {visiblePending.map((req) => <CreatingRow key={`creating:${req.id}`} request={req} onCancelled={refreshPending} />)}
-                  {visibleResources.map((r, index) => <ResourceRow key={resourceRowKey(r, index)} resource={r} onUpdated={handleUpdated} onDeleted={handleDeleted} />)}
-                </>}
+                {environmentGroups.map((group) => <EnvironmentGroupRows key={group.id} group={group} onUpdated={handleUpdated} onEnded={() => fetchResources(true)} />)}
+                {visiblePending.map((req) => <CreatingRow key={`creating:${req.id}`} request={req} onCancelled={refreshPending} />)}
+                {visibleResources.map((r, index) => <ResourceRow key={resourceRowKey(r, index)} resource={r} onUpdated={handleUpdated} onDeleted={handleDeleted} />)}
               </tbody>
             </table>
           </div>

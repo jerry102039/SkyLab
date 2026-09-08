@@ -270,6 +270,7 @@
   "CourseTemplateEditorPage.confirmBtn": "Confirm",
   "CourseTemplateEditorPage.duplicateHostnameHint": "Another service in this environment already uses this template. One address can only point at one port.",
   "CourseTemplateEditorPage.noSourceOption": "No source available",
+  "CourseTemplateEditorPage.duplicateHostnameReason": "Hostname template \"{{hostname}}\" is used twice; one address can only point at one port",
   "CourseTemplateEditorPage.nodeLimitLabel": "{{count}} / 3 machines",
   "CourseTemplateEditorPage.cpuValue": "{{count}} vCPU",
   "CourseTemplateEditorPage.memoryValue": "{{count}} GB",
@@ -299,8 +300,6 @@
   "CourseTemplateEditorPage.fieldRole": "Role",
   "CourseTemplateEditorPage.removeNodeBtn": "Remove node",
   "CourseTemplateEditorPage.emptyNodesTitle": "Add a node first, then set up connections between machines.",
-  "CourseTemplateEditorPage.needNameReason": "Please enter an environment name first",
-  "CourseTemplateEditorPage.needAudienceClassReason": "Please select the classes that can see this environment",
   "CourseTemplateEditorPage.needAtLeastOneMachineReason": "Please add at least one machine in \"Machine Configuration\"",
   "CourseTemplateEditorPage.maxThreeMachinesReason": "Each student can be assigned at most three machines",
   "CourseTemplateEditorPage.fixPortReason": "Please fix the port on the topology connection",
@@ -322,8 +321,6 @@
   "CourseTemplateEditorPage.publishFailed": "Publish failed",
   "CourseTemplateEditorPage.newVersionFailed": "Failed to create a new version",
   "CourseTemplateEditorPage.loadingTemplateText": "Loading learning environment…",
-  "CourseTemplateEditorPage.backToClassEnv": "Back to class teaching environment",
-  "CourseTemplateEditorPage.backToTemplateList": "Back to learning environments",
   "CourseTemplateEditorPage.createTemplateTitle": "Create Learning Environment",
   "CourseTemplateEditorPage.createTemplateSubtitle": "Define a fixed set of machines that can be reused for formal courses or quick practice.",
   "CourseTemplateEditorPage.backBtn": "Back",
@@ -332,7 +329,6 @@
   "CourseTemplateEditorPage.saveDraftBtn": "Save draft",
   "CourseTemplateEditorPage.classDraftSavedTitle": "Class draft saved.",
   "CourseTemplateEditorPage.classDraftSavedDesc": "Complete the machine configuration and \"publish\" the template; once published it will automatically return to the class creation flow.",
-  "CourseTemplateEditorPage.cannotSaveYet": "Can't save yet: {{reason}}.",
   "CourseTemplateEditorPage.lockedVersionNote": "This version has been published and locked; create a new version if you need to make changes.",
   "CourseTemplateEditorPage.reusableEnvNote": "This learning environment can be used for formal courses, quick practice, or both purposes at once.",
   "CourseTemplateEditorPage.fieldEnvName": "Environment name",
@@ -1007,5 +1003,6 @@
   "AiJudgePanel.viewNotesSummary": "View notes",
   "AiJudgePanel.waitingCollectionLabel": "Awaiting collection",
   "AiJudgePanel.weekOptionLabel": "Week {{week}} · {{title}}",
-  "AiJudgePanel.whichWeekLabel": "Which week's task should this go into?"
+  "AiJudgePanel.whichWeekLabel": "Which week's task should this go into?",
+  "CourseTemplateEditorPage.draftRestoredMsg": "Restored your unsaved edits"
 }
