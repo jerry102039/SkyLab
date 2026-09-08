@@ -27,7 +27,6 @@ class ProxmoxConnectionConfig:
 
 @dataclass(frozen=True, slots=True)
 class ProxmoxPlacementConfig:
-    strategy: str
     cpu_overcommit_ratio: float
     disk_overcommit_ratio: float
 
@@ -82,7 +81,6 @@ class ProxmoxConfig(SQLModel, table=True):
     gateway_ip: str | None = Field(default=None, max_length=255)
     local_subnet: str | None = Field(default=None, max_length=50)
     default_node: str | None = Field(default=None, max_length=255)
-    placement_strategy: str = Field(default="priority_dominant_share", max_length=64)
     cpu_overcommit_ratio: float = Field(default=2.0)
     disk_overcommit_ratio: float = Field(default=1.0)
     placement_reassignment_cost: float = Field(default=0.15, ge=0.0, le=5.0)
@@ -94,8 +92,6 @@ class ProxmoxConfig(SQLModel, table=True):
     placement_disk_contention_warn_share: float = Field(default=0.7, ge=0.0, le=1.5)
     placement_disk_contention_high_share: float = Field(default=0.9, ge=0.1, le=2.0)
     placement_disk_penalty_weight: float = Field(default=0.75, ge=0.0, le=5.0)
-    placement_search_max_reassignments: int = Field(default=2, ge=0, le=10)
-    placement_search_depth: int = Field(default=3, ge=0, le=10)
     placement_cpu_peak_warn_share: float = Field(default=0.7, ge=0.0, le=2.0)
     placement_cpu_peak_high_share: float = Field(default=1.2, ge=0.1, le=3.0)
     placement_memory_peak_warn_share: float = Field(default=0.8, ge=0.0, le=2.0)
@@ -136,7 +132,6 @@ class ProxmoxConfig(SQLModel, table=True):
     @property
     def placement(self) -> ProxmoxPlacementConfig:
         return ProxmoxPlacementConfig(
-            strategy=self.placement_strategy,
             cpu_overcommit_ratio=self.cpu_overcommit_ratio,
             disk_overcommit_ratio=self.disk_overcommit_ratio,
         )

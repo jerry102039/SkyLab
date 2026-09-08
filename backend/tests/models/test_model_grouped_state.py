@@ -14,7 +14,7 @@ def test_proxmox_config_exposes_grouped_state_without_schema_split() -> None:
     assert config.connection.host == "pve.example.test"
     assert config.connection.user == "root@pam"
     assert config.connection.data_storage == "local-lvm"
-    assert config.placement.strategy == "priority_dominant_share"
+    assert config.placement.cpu_overcommit_ratio == 2.0
     assert config.capacity.resource_weight_cpu == 1.0
     assert config.scheduler.boot_batch_size == 5
     assert config.scheduler.expiry_warning_hours == 24

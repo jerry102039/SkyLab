@@ -14,6 +14,10 @@ import PageHeader from "../../../components/PageHeader/PageHeader";
 /**
  * PUT /proxmox-config 需要的完整欄位（password / ca_cert 另外處理）。
  *
+ * ProxmoxConfigUpdate 是全量取代 schema：沒送出的欄位不是「維持原值」，
+ * 而是套用 schema 預設值。所以這份清單必須涵蓋 singleton 的每一個可寫欄位，
+ * 漏掉任何一個，存檔就會把該欄位默默重置成預設。
+ *
  * 連線與叢集資源欄位（host / user / storage / pool / gateway…）已改由
  * 「PVE 連線」的新增·編輯表單管理，這裡保留只是為了原樣送回 singleton，
  * 讓排程設定能單獨儲存；UI 不再提供編輯入口。
@@ -23,9 +27,11 @@ const UPDATE_KEYS = [
   "api_timeout", "task_check_interval", "pool_name", "gateway_ip",
   "local_subnet", "default_node",
   "cpu_overcommit_ratio", "disk_overcommit_ratio",
-  "placement_peak_cpu_margin",
+  "placement_reassignment_cost", "placement_peak_cpu_margin",
   "placement_peak_memory_margin", "placement_loadavg_warn_per_core",
   "placement_loadavg_max_per_core", "placement_loadavg_penalty_weight",
+  "placement_disk_contention_warn_share", "placement_disk_contention_high_share",
+  "placement_disk_penalty_weight",
   "placement_cpu_peak_warn_share", "placement_cpu_peak_high_share",
   "placement_memory_peak_warn_share", "placement_memory_peak_high_share",
   "placement_resource_weight_cpu", "placement_resource_weight_memory",
@@ -63,6 +69,7 @@ function useSchedulerGroups(t) {
       fields: [
         { key: "cpu_overcommit_ratio", label: t("SettingsPage.cpuOvercommitRatio"), step: 0.1 },
         { key: "disk_overcommit_ratio", label: t("SettingsPage.diskOvercommitRatio"), step: 0.1 },
+        { key: "placement_reassignment_cost", label: t("SettingsPage.placementReassignmentCost"), step: 0.01 },
       ],
     },
     {
@@ -73,6 +80,9 @@ function useSchedulerGroups(t) {
         { key: "placement_loadavg_warn_per_core", label: t("SettingsPage.placementLoadavgWarnPerCore"), step: 0.1 },
         { key: "placement_loadavg_max_per_core", label: t("SettingsPage.placementLoadavgMaxPerCore"), step: 0.1 },
         { key: "placement_loadavg_penalty_weight", label: t("SettingsPage.placementLoadavgPenaltyWeight"), step: 0.01 },
+        { key: "placement_disk_contention_warn_share", label: t("SettingsPage.placementDiskContentionWarnShare"), step: 0.01 },
+        { key: "placement_disk_contention_high_share", label: t("SettingsPage.placementDiskContentionHighShare"), step: 0.01 },
+        { key: "placement_disk_penalty_weight", label: t("SettingsPage.placementDiskPenaltyWeight"), step: 0.01 },
         { key: "placement_cpu_peak_warn_share", label: t("SettingsPage.placementCpuPeakWarnShare"), step: 0.01 },
         { key: "placement_cpu_peak_high_share", label: t("SettingsPage.placementCpuPeakHighShare"), step: 0.01 },
         { key: "placement_memory_peak_warn_share", label: t("SettingsPage.placementMemoryPeakWarnShare"), step: 0.01 },
