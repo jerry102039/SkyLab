@@ -68,17 +68,13 @@
   }
 }
 
-.notice,
-.loadingState {
+.notice {
   @include glass-surface($shadow: none);
   display: flex;
   align-items: center;
   gap: 12px;
   padding: $spacing-16;
   border-radius: $radius-12;
-}
-
-.notice {
   color: var(--color-warning);
 
   div {
@@ -90,27 +86,6 @@
     color: var(--color-text-secondary);
     font-size: $font-size-12;
   }
-}
-
-.loadingState {
-  min-height: 180px;
-  justify-content: center;
-  color: var(--color-text-primary);
-
-  p {
-    margin-top: 4px;
-    color: var(--color-text-secondary);
-    font-size: $font-size-14;
-  }
-}
-
-.loadingIcon {
-  @include flex-center;
-  width: 52px;
-  height: 52px;
-  border-radius: $radius-16;
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  color: var(--color-primary);
 }
 
 .mainGrid {
@@ -1268,20 +1243,6 @@
   gap: 12px;
 }
 
-.quickTemplateSkeleton {
-  min-height: 142px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-12;
-  background: linear-gradient(
-    100deg,
-    var(--color-surface) 25%,
-    var(--color-hover) 42%,
-    var(--color-surface) 60%
-  );
-  background-size: 220% 100%;
-  animation: templateLoading 1.25s ease-in-out infinite;
-}
-
 .quickTemplateEmpty {
   display: flex;
   align-items: center;
@@ -1310,10 +1271,6 @@
     color: var(--color-text-secondary);
     font-size: $font-size-12;
   }
-}
-
-@keyframes templateLoading {
-  to { background-position-x: -220%; }
 }
 
 /* ── Template card ── */

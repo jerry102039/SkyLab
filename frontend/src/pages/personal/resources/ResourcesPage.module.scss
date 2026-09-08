@@ -529,52 +529,6 @@
   color: var(--color-text);
 }
 
-/* ── Power action buttons (legacy, kept for skeleton) ── */
-.powerActions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.powerBtn {
-  width: 30px;
-  height: 30px;
-  border-radius: $radius-8;
-  @include flex-center;
-  color: var(--color-text-secondary);
-  background: var(--color-surface);
-  transition: background $transition-base, color $transition-base, border-color $transition-base;
-
-  &:hover:not(:disabled) {
-    background: var(--color-hover);
-    color: var(--color-text);
-  }
-
-  &:disabled { opacity: 0.4; cursor: not-allowed; }
-}
-
-.powerBtnStart {
-  background: color-mix(in srgb, var(--color-success) 10%, transparent);
-  color: var(--color-success);
-
-  &:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-success) 10%, var(--color-border));
-    color: var(--color-success);
-    border-color: var(--color-success);
-  }
-}
-
-.powerBtnStop {
-  color: var(--color-danger);
-  border-color: color-mix(in srgb, var(--color-danger) 30%, var(--color-border));
-
-  &:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
-    color: var(--color-danger);
-    border-color: var(--color-danger);
-  }
-}
-
 /* ── Delete button（同申請頁撤銷鈕樣式）── */
 .deleteBtn {
   display: inline-flex;
@@ -598,30 +552,6 @@
     border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border));
   }
 }
-
-/* ── Empty error tint ── */
-
-/* ── Skeleton ── */
-@keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--color-hover) 25%,
-    color-mix(in srgb, var(--color-text-secondary) 8%, var(--color-hover)) 50%,
-    var(--color-hover) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
-}
-
-.skRow     { border-radius: 4px; }
-.skBadge   { width: 60px; height: 22px; border-radius: $radius-pill; }
-.skChip    { width: 72px; height: 30px; border-radius: $radius-8; }
-.skInfoRow { display: flex; align-items: center; gap: $spacing-8; }
 
 /* ── Modal ── */
 .modalOverlay {

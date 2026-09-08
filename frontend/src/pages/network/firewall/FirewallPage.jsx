@@ -31,6 +31,7 @@ import ConnectionEdge   from "./edges/ConnectionEdge";
 import { buildFlow, portLabel } from "./utils/buildFlow";
 import { useTheme } from "../../../contexts/ThemeContext";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
+import LoadingState from "../../../components/LoadingState/LoadingState";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import { useToast } from "../../../hooks/useToast";
 import styles from "./FirewallPage.module.scss";
@@ -237,14 +238,7 @@ export default function FirewallPage() {
       {/* ── Content ── */}
       <div className={styles.content}>
         {loading && !topology && (
-          <div className={styles.centerState}>
-            <div className={styles.topoLoader}>
-              {Array.from({ length: 9 }, (_, i) => (
-                <div key={i} className={styles.topoNode} style={{ "--i": i }} />
-              ))}
-            </div>
-            <span className={styles.loadingTitle}>{t("FirewallPage.loadingTopology")}</span>
-          </div>
+          <LoadingState fullPage text={t("FirewallPage.loadingTopology")} />
         )}
 
         {error && (

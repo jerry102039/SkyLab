@@ -425,28 +425,6 @@
   }
 }
 
-/* ── Empty error tint ── */
-
-/* ── Skeleton ── */
-@keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--color-hover) 25%,
-    color-mix(in srgb, var(--color-text-secondary) 8%, var(--color-hover)) 50%,
-    var(--color-hover) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
-}
-
-.skRow   { border-radius: 4px; }
-.skBadge { width: 60px; height: 22px; border-radius: $radius-pill; }
-
 /* ── Retry button ── */
 .retryBtn {
   @extend %rowBtn;

@@ -19,6 +19,7 @@ import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import RequestFormPage from "./RequestFormPage";
 import MIcon from "../../../components/MIcon";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
+import LoadingState from "../../../components/LoadingState/LoadingState";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
 /* ── Constants ── */
@@ -653,45 +654,6 @@ function SpecRequestRow({ req, onUpdated }) {
   );
 }
 
-/* ── Skeleton ── */
-function SkeletonRow() {
-  return (
-    <tr className={styles.tr} aria-hidden>
-      <td className={styles.td}>
-        <div className={styles.nameCell}>
-          <span className={styles.expandPlaceholder} aria-hidden="true" />
-          <div className={`${styles.nameIcon} ${styles.skeleton}`} />
-          <div className={styles.nameMeta}>
-            <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 110, height: 13 }} />
-            <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 70, height: 10 }} />
-          </div>
-        </div>
-      </td>
-      <td className={styles.td}>
-        <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 90, height: 12 }} />
-      </td>
-      <td className={styles.td}>
-        <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 130, height: 12 }} />
-      </td>
-      <td className={styles.td}>
-        <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 100, height: 12 }} />
-      </td>
-      <td className={styles.td}>
-        <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 80, height: 12 }} />
-      </td>
-      <td className={styles.td}>
-        <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 120, height: 12 }} />
-      </td>
-      <td className={styles.td}>
-        <div className={`${styles.skeleton} ${styles.skBadge}`} />
-      </td>
-      <td className={styles.td}>
-        <div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: 60, height: 12 }} />
-      </td>
-    </tr>
-  );
-}
-
 /* ── Empty / Error states ── */
 function EmptyState({ onCreateClick }) {
   const { t } = useTranslation("personal");
@@ -818,11 +780,13 @@ export default function RequestsPage() {
       <div className={styles.content} data-guide="request-list">
         {error ? (
           <ErrorState onRetry={fetchRequests} />
-        ) : !loading && requests.length === 0 && specRequests.length === 0 ? (
+        ) : loading ? (
+          <LoadingState fullPage />
+        ) : requests.length === 0 && specRequests.length === 0 ? (
           <EmptyState onCreateClick={() => setView(VIEW_CREATE)} />
         ) : (
           <>
-            {(loading || requests.length > 0) && (
+            {requests.length > 0 && (
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
                   <thead>
@@ -833,17 +797,15 @@ export default function RequestsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {loading
-                      ? [0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)
-                      : requests.map((r) => (
-                          <RequestRow key={r.id} req={r} onUpdated={handleUpdated} />
-                        ))}
+                    {requests.map((r) => (
+                      <RequestRow key={r.id} req={r} onUpdated={handleUpdated} />
+                    ))}
                   </tbody>
                 </table>
               </div>
             )}
 
-            {!loading && specRequests.length > 0 && (
+            {specRequests.length > 0 && (
               <section className={styles.subSection}>
                 <h2 className={styles.sectionTitle}>{t("RequestsPage.specSectionTitle")}</h2>
                 <p className={styles.sectionDesc}>{t("RequestsPage.specSectionDesc")}</p>
