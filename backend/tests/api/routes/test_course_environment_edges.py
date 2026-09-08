@@ -10,6 +10,7 @@ import pytest
 from app.api.routes.course_environments import (
     EnvironmentEdgeIn,
     EnvironmentNodeIn,
+    EnvironmentPublicationIn,
     _validate_configuration,
 )
 from app.exceptions import BadRequestError
@@ -42,8 +43,19 @@ def _edge(source: str, target: str, *, direction="one_way", protocol="tcp", port
 NODES = [_node("web"), _node("db")]
 
 
-def _validate(edges):
-    _validate_configuration(None, NODES, edges)
+def _validate(edges, publications=None):
+    _validate_configuration(None, NODES, edges, publications)
+
+
+def _publication(node="web", *, port=80, hostname="{student}-web"):
+    return EnvironmentPublicationIn(
+        node_key=node,
+        mode="domain",
+        port=port,
+        protocol="tcp",
+        hostname_prefix=hostname,
+        zone_id="zone-1",
+    )
 
 
 # ── 應該被擋下的重疊 ────────────────────────────────────────────────────
@@ -96,3 +108,40 @@ def test_different_protocols_do_not_overlap() -> None:
 def test_edge_pointing_at_an_unknown_node_is_rejected() -> None:
     with pytest.raises(BadRequestError):
         _validate([_edge("web", "cache")])
+
+
+# ── 對外服務 ────────────────────────────────────────────────────────────
+
+
+def test_two_ports_cannot_share_one_hostname_template() -> None:
+    """一個網址只能指向一個 port；同樣板的第二條在開課時才會撞上網域被占用。"""
+    with pytest.raises(BadRequestError):
+        _validate([], [_publication(port=80), _publication(port=443)])
+
+
+def test_distinct_hostname_templates_are_fine() -> None:
+    _validate([], [
+        _publication(port=80, hostname="{student}-web"),
+        _publication(port=443, hostname="{student}-web-tls"),
+    ])
+
+
+def test_same_port_cannot_be_published_twice() -> None:
+    with pytest.raises(BadRequestError):
+        _validate([], [
+            _publication(port=80, hostname="{student}-a"),
+            _publication(port=80, hostname="{student}-b"),
+        ])
+
+
+def test_publication_pointing_at_an_unknown_node_is_rejected() -> None:
+    with pytest.raises(BadRequestError):
+        _validate([], [_publication("cache")])
+
+
+def test_firewall_only_publications_do_not_need_distinct_hostnames() -> None:
+    firewall_only = [
+        EnvironmentPublicationIn(node_key="web", mode="firewall_only", port=port)
+        for port in (80, 443)
+    ]
+    _validate([], firewall_only)

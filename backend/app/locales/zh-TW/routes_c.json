@@ -14,6 +14,7 @@
   "course_env.publication_domain_tcp_only": "對外網址只支援 TCP",
   "course_env.publication_zone_required": "對外網址需要指定網域（Cloudflare zone）",
   "course_env.publication_student_placeholder": "主機名樣板必須包含 {student}，否則全班會搶同一個網址",
+  "course_env.duplicate_publication_hostname": "主機名樣板「{hostname}」重複了；一個網址只能指向一個 port，請給每條對外網址不同的樣板",
   "course_env.publication_unknown_node": "對外服務指向了不存在的機器",
   "course_env.duplicate_publication": "同一台機器的 port {port} 只能發布一次",
   "course_env.overlapping_edge": "「{source}」到「{target}」已經有一條連線涵蓋這個 port；雙向連線已包含反向，不需要再畫一條",

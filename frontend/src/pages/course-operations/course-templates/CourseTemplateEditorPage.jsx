@@ -91,10 +91,14 @@ const TOPOLOGY_NODE_TYPES = { courseMachine: TopologyMachineNode };
 const TOPOLOGY_EDGE_TYPES = { connection: ConnectionEdge };
 
 /** 對外服務的設定對話框：欄位放這裡，側欄只留一行摘要。 */
-function PublicationDialog({ draft, zones, onChange, onSave, onClose }) {
+function PublicationDialog({ draft, zones, siblings, onChange, onSave, onClose }) {
   const { t } = useTranslation("teaching");
   const isDomain = draft.mode === "domain";
-  const hostnameValid = !isDomain || (draft.hostnamePrefix.includes("{student}") && Boolean(draft.zoneId));
+  const duplicated = isDomain && siblings.some((item) => (
+    item.id !== draft.id && item.mode === "domain" && item.hostnamePrefix === draft.hostnamePrefix
+  ));
+  const hostnameValid = !isDomain
+    || (draft.hostnamePrefix.includes("{student}") && Boolean(draft.zoneId) && !duplicated);
   const zone = zones.find((item) => item.id === draft.zoneId);
   const preview = `${String(draft.hostnamePrefix || "").replace("{student}", "alice")}${zone ? `.${zone.name}` : ""}`;
 
@@ -113,7 +117,7 @@ function PublicationDialog({ draft, zones, onChange, onSave, onClose }) {
         {isDomain && <>
           <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldHostnameTemplate")}</span><input value={draft.hostnamePrefix} onChange={(event) => onChange({ hostnamePrefix: event.target.value })} placeholder="{student}-app" /></label>
           <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldZone")}</span><select value={draft.zoneId} onChange={(event) => onChange({ zoneId: event.target.value })}>{zones.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.hostnameTemplateHint", { example: preview })}</p>
+          <p className={styles.inspectorHint}>{duplicated ? t("CourseTemplateEditorPage.duplicateHostnameHint") : t("CourseTemplateEditorPage.hostnameTemplateHint", { example: preview })}</p>
         </>}
       </div>
       <footer className={styles.createDialogFooter}>
@@ -183,11 +187,18 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
       mode: zones.length ? "domain" : "firewall_only",
       port,
       protocol: "tcp",
-      // 樣板必須帶 {student}，否則全班會搶同一個網址
-      hostnamePrefix: `{student}-${hostnameSlug(node.name)}`,
+      // 樣板必須帶 {student}，否則全班會搶同一個網址；同一份環境裡也不能重複，
+      // 一個網址只能指向一個 port
+      hostnamePrefix: uniqueHostnamePrefix(`{student}-${hostnameSlug(node.name)}`, port),
       zoneId: zones[0]?.id ?? "",
       enableHttps: true,
     };
+  }
+
+  /** 樣板撞到既有的就補上 port，避免多條網址指向同一個位址。 */
+  function uniqueHostnamePrefix(base, port) {
+    const taken = new Set(publications.filter((item) => item.mode === "domain").map((item) => item.hostnamePrefix));
+    return taken.has(base) ? `${base}-${port}` : base;
   }
 
   function savePublication(draft) {
@@ -393,6 +404,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
       {publicationDraft && <PublicationDialog
         draft={publicationDraft}
         zones={zones}
+        siblings={publications}
         onChange={(patch) => setPublicationDraft((current) => ({ ...current, ...patch }))}
         onSave={savePublication}
         onClose={() => setPublicationDraft(null)}
