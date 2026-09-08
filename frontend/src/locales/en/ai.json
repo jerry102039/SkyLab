@@ -158,6 +158,7 @@
   "AiApiReviewPage.tabApproved": "Approved",
   "AiApiReviewPage.tabRejected": "Rejected",
   "AiApiReviewPage.tabAll": "All",
+  "AiApiReviewPage.tabsAriaLabel": "Filter reviews by status",
   "AiApiReviewPage.statusPending": "Pending Review",
   "AiApiReviewPage.statusApproved": "Approved",
   "AiApiReviewPage.statusRejected": "Rejected",
@@ -289,8 +290,8 @@
   "AiMonitoringPage.detailTitle": "Call details",
   "AiMonitoringPage.detailDescription": "Open the records when you need to trace a user, model, or failure.",
   "AiMonitoringPage.clearSearch": "Clear search",
-  "AiMonitoringPage.failedOnly": "Failed only",
-  "AiMonitoringPage.allRecords": "All records",
+  "AiMonitoringPage.statusFilterLabel": "Filter by status",
+  "AiMonitoringPage.statusFilterAll": "All",
   "AiPvePage.pageTitle": "PVE Operations Assistant",
   "AiPvePage.pageSubtitle": "An administrator-only site-wide PVE operations tool for querying VM/LXC and node status, with confirmation required before executing commands"
 }

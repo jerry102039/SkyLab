@@ -158,6 +158,7 @@
   "AiApiReviewPage.tabApproved": "已通過",
   "AiApiReviewPage.tabRejected": "已拒絕",
   "AiApiReviewPage.tabAll": "全部",
+  "AiApiReviewPage.tabsAriaLabel": "審核狀態篩選",
   "AiApiReviewPage.statusPending": "待審核",
   "AiApiReviewPage.statusApproved": "已通過",
   "AiApiReviewPage.statusRejected": "已拒絕",
@@ -289,8 +290,8 @@
   "AiMonitoringPage.detailTitle": "呼叫明細",
   "AiMonitoringPage.detailDescription": "需要追查時，再從完整紀錄查看使用者、模型與錯誤狀態。",
   "AiMonitoringPage.clearSearch": "清除搜尋",
-  "AiMonitoringPage.failedOnly": "只看失敗",
-  "AiMonitoringPage.allRecords": "全部紀錄",
+  "AiMonitoringPage.statusFilterLabel": "狀態篩選",
+  "AiMonitoringPage.statusFilterAll": "全部",
   "AiPvePage.pageTitle": "PVE 維運助手",
   "AiPvePage.pageSubtitle": "管理員專用的全站 PVE 維運工具，可查詢 VM/LXC 與節點狀態，執行指令前會再次確認"
 }

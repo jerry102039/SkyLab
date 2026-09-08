@@ -158,6 +158,7 @@
   "AiApiReviewPage.tabApproved": "承認済み",
   "AiApiReviewPage.tabRejected": "却下済み",
   "AiApiReviewPage.tabAll": "すべて",
+  "AiApiReviewPage.tabsAriaLabel": "審査状態で絞り込み",
   "AiApiReviewPage.statusPending": "審査中",
   "AiApiReviewPage.statusApproved": "承認済み",
   "AiApiReviewPage.statusRejected": "却下済み",
@@ -289,8 +290,8 @@
   "AiMonitoringPage.detailTitle": "呼び出し詳細",
   "AiMonitoringPage.detailDescription": "ユーザー、モデル、失敗内容を追跡するときに詳細を確認します。",
   "AiMonitoringPage.clearSearch": "検索をクリア",
-  "AiMonitoringPage.failedOnly": "失敗のみ",
-  "AiMonitoringPage.allRecords": "すべての記録",
+  "AiMonitoringPage.statusFilterLabel": "ステータスで絞り込み",
+  "AiMonitoringPage.statusFilterAll": "すべて",
   "AiPvePage.pageTitle": "PVE運用アシスタント",
   "AiPvePage.pageSubtitle": "管理者専用のサイト全体PVE運用ツール。VM/LXCとノードの状態を照会でき、コマンド実行前に再確認します"
 }

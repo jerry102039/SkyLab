@@ -39,44 +39,6 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 14%, transparent);
 }
 
-.segment {
-  display: inline-flex;
-  padding: 3px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.segmentBtn {
-  padding: 5px $spacing-16;
-  border-radius: $radius-8;
-  color: var(--color-text-secondary);
-  font-size: $font-size-12;
-  font-weight: $font-weight-500;
-  cursor: pointer;
-  transition: background $transition-base, color $transition-base;
-
-  &:hover {
-    color: var(--color-text);
-  }
-
-  &:focus-visible,
-  &[aria-pressed="true"]:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
-  }
-}
-
-.segmentActive {
-  background: var(--color-primary);
-  color: var(--color-text-on-primary);
-
-  &:hover {
-    color: var(--color-text-on-primary);
-  }
-}
-
 .statusBanner {
   display: flex;
   align-items: center;
@@ -583,13 +545,16 @@
   justify-content: flex-end;
   gap: $spacing-8;
   flex-wrap: wrap;
+  flex: 1;
 }
 
 .search {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex: 1;
   min-width: 260px;
+  max-width: 480px;
   padding: 6px 8px 6px 10px;
   border: 1px solid var(--color-border);
   border-radius: $radius-8;
@@ -616,20 +581,6 @@
 }
 
 .clearSearch,
-.filterButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 32px;
-  border: 1px solid var(--color-border);
-  border-radius: $radius-8;
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background $transition-base, color $transition-base, border-color $transition-base;
-}
-
 .clearSearch {
   width: 24px;
   min-height: 24px;
@@ -637,20 +588,7 @@
   background: transparent;
 }
 
-.filterButton {
-  padding: 5px 10px;
-  font-size: $font-size-12;
-  font-weight: $font-weight-500;
-}
-
-.filterButton:hover,
 .clearSearch:hover { background: var(--color-hover); color: var(--color-text-primary); }
-
-.filterButtonActive {
-  border-color: color-mix(in srgb, var(--color-danger) 36%, var(--color-border));
-  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
-  color: var(--color-danger);
-}
 
 .detailTabs {
   display: flex;
@@ -827,9 +765,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .segmentBtn,
   .breakdownRow,
-  .filterButton,
   .clearSearch,
   .detailTab { transition: none; }
 }
