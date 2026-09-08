@@ -249,6 +249,7 @@
   "CourseTemplateEditorPage.typeVm": "仮想マシン",
   "CourseTemplateEditorPage.defaultMachineRole": "環境マシン",
   "CourseTemplateEditorPage.multiMachineEnvTitle": "毎回適用される学習環境",
+  "CourseTemplateEditorPage.overlappingEdgeNotice": "この 2 台の間には、このポートを含む接続がすでにあります。双方向接続には逆方向も含まれます。",
   "CourseTemplateEditorPage.nodeLimitLabel": "{{count}} / 3 台",
   "CourseTemplateEditorPage.cpuValue": "{{count}} コア",
   "CourseTemplateEditorPage.memoryValue": "{{count}} GB",

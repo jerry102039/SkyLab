@@ -181,23 +181,34 @@ def _validate_configuration(
         if node.resource_type != expected:
             raise BadRequestError(t("course_env.type_mismatch", name=node.name))
     node_keys = {node.node_key for node in nodes}
-    signatures: set[tuple[object, ...]] = set()
+    # 每條連線實際授予的方向：單向一個，雙向兩個。以此比對才抓得到
+    # 「A→B 單向」被「A↔B 雙向」涵蓋、或「A↔B」與「B↔A」互為同一件事。
+    granted: dict[tuple[str, str], list[tuple[str, int | None]]] = {}
     for edge in edges:
         if (
             edge.source_node_key not in node_keys
             or edge.target_node_key not in node_keys
         ):
             raise BadRequestError(t("course_env.edge_unknown_node"))
-        signature = (
-            edge.source_node_key,
-            edge.target_node_key,
-            edge.direction,
-            edge.protocol,
-            edge.port,
-        )
-        if signature in signatures:
-            raise BadRequestError(t("course_env.duplicate_edge"))
-        signatures.add(signature)
+        pairs = [(edge.source_node_key, edge.target_node_key)]
+        if edge.direction == "bidirectional":
+            pairs.append((edge.target_node_key, edge.source_node_key))
+        for pair in pairs:
+            for protocol, port in granted.get(pair, []):
+                # 舊資料的 "any" 不分協定與 port，與同一組機器的任何規則重疊
+                if (
+                    protocol == "any"
+                    or edge.protocol == "any"
+                    or (protocol, port) == (edge.protocol, edge.port)
+                ):
+                    raise BadRequestError(
+                        t(
+                            "course_env.overlapping_edge",
+                            source=pair[0],
+                            target=pair[1],
+                        )
+                    )
+            granted.setdefault(pair, []).append((edge.protocol, edge.port))
 
 
 def _audience_class_ids(

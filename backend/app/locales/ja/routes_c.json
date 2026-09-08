@@ -11,6 +11,7 @@
   "course_env.template_not_ready": "マシン「{name}」に紐づく PVE テンプレートが存在しないか、まだ準備できていません",
   "course_env.type_mismatch": "マシン「{name}」の種類が PVE テンプレートと一致しません",
   "course_env.edge_unknown_node": "トポロジー接続に存在しないマシンノードが含まれています",
+  "course_env.overlapping_edge": "「{source}」から「{target}」への接続はすでにこのポートを含んでいます。双方向接続には逆方向も含まれるため、追加する必要はありません",
   "course_env.duplicate_edge": "同じトポロジー接続を重複させることはできません",
   "course_env.class_not_found": "指定されたクラスは存在しません",
   "course_env.class_not_owned": "クラス「{name}」はこの教員のものではありません",

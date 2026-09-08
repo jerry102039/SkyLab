@@ -249,6 +249,7 @@
   "CourseTemplateEditorPage.typeVm": "虛擬機",
   "CourseTemplateEditorPage.defaultMachineRole": "環境機器",
   "CourseTemplateEditorPage.multiMachineEnvTitle": "每次套用的學習環境",
+  "CourseTemplateEditorPage.overlappingEdgeNotice": "這兩台之間已經有一條連線涵蓋這個 port。雙向連線已包含反向，不需要再畫一條。",
   "CourseTemplateEditorPage.nodeLimitLabel": "{{count}} / 3 台",
   "CourseTemplateEditorPage.cpuValue": "{{count}} 核心",
   "CourseTemplateEditorPage.memoryValue": "{{count}} GB",

@@ -11,12 +11,16 @@ from fastapi import APIRouter, HTTPException
 from app.api.deps import AdminUser, CurrentUser, SessionDep, check_firewall_access
 from app.core.authorizers import can_bypass_resource_ownership
 from app.core.i18n import t
-from app.exceptions import BadRequestError, ProxmoxError
+from app.exceptions import BadRequestError, NotFoundError, ProxmoxError
 from app.models import AuditAction
 from app.repositories import resource as resource_repo
 from app.repositories import reverse_proxy as rp_repo
 from app.schemas import Message
-from app.schemas.firewall import ReverseProxyRulePublic
+from app.schemas.firewall import (
+    PublishedServiceCreate,
+    PublishedServiceRef,
+    ReverseProxyRulePublic,
+)
 from app.schemas.reverse_proxy import (
     DomainAvailability,
     ReverseProxyRuleCreate,
@@ -24,7 +28,12 @@ from app.schemas.reverse_proxy import (
     ReverseProxyRuntimeSnapshot,
     ReverseProxySetupContext,
 )
-from app.services.network import reverse_proxy_service, traefik_runtime_service
+from app.services.network import (
+    cloudflare_service,
+    firewall_service,
+    reverse_proxy_service,
+    traefik_runtime_service,
+)
 from app.services.user import audit_service
 
 logger = logging.getLogger(__name__)
@@ -129,6 +138,37 @@ def _filter_runtime_snapshot(
     )
 
 
+
+def _full_domain(session: SessionDep, *, zone_id: str, hostname_prefix: str) -> str:
+    """把表單的 zone + 主機名組回完整網域，交給統一的發布路徑。"""
+    zone = cloudflare_service.get_zone(session=session, zone_id=zone_id)
+    return reverse_proxy_service.build_full_domain(
+        zone_name=zone.name, hostname_prefix=hostname_prefix
+    )
+
+
+def _publish_domain_service(
+    session: SessionDep, *, vmid: int, domain: str, internal_port: int, enable_https: bool
+) -> None:
+    """對外網址一律走 publish_vm_service：Traefik、DNS 與防火牆入站規則一起建立。
+
+    這個路由早期直接寫 Traefik 與 Cloudflare，機器上卻沒有對應的入站規則，
+    造成「DB 有紀錄、Proxmox 沒有」的半套狀態（list_vm_published_services
+    至今仍要標記 firewall_rule_present=False 來容忍這批資料）。
+    """
+    firewall_service.publish_vm_service(
+        vmid,
+        PublishedServiceCreate(
+            port=internal_port,
+            protocol="tcp",
+            mode="domain",
+            domain=domain,
+            enable_https=enable_https,
+        ),
+        session,
+    )
+
+
 @router.get("/runtime", response_model=ReverseProxyRuntimeSnapshot)
 def get_runtime_snapshot(session: SessionDep, current_user: CurrentUser):
     try:
@@ -182,20 +222,13 @@ def create_reverse_proxy_rule(
 ):
     check_firewall_access(vmid=body.vmid, current_user=current_user, session=session)
 
-    vm_ip = reverse_proxy_service.resolve_vmid_ip(vmid=body.vmid, session=session)
-    if not vm_ip:
-        raise HTTPException(
-            status_code=400,
-            detail=t("reverseProxy.vmIpUnavailable"),
-        )
-
     try:
-        reverse_proxy_service.apply_reverse_proxy_rule(
-            session=session,
+        _publish_domain_service(
+            session,
             vmid=body.vmid,
-            vm_ip=vm_ip,
-            zone_id=body.zone_id,
-            hostname_prefix=body.hostname_prefix,
+            domain=_full_domain(
+                session, zone_id=body.zone_id, hostname_prefix=body.hostname_prefix
+            ),
             internal_port=body.internal_port,
             enable_https=body.enable_https,
         )
@@ -230,25 +263,25 @@ def update_reverse_proxy_rule(
     if body.vmid != existing_rule.vmid:
         check_firewall_access(vmid=body.vmid, current_user=current_user, session=session)
 
-    vm_ip = reverse_proxy_service.resolve_vmid_ip(vmid=body.vmid, session=session)
-    if not vm_ip:
-        raise HTTPException(
-            status_code=400,
-            detail=t("reverseProxy.vmIpUnavailable"),
-        )
-
     try:
-        reverse_proxy_service.update_reverse_proxy_rule(
-            session=session,
-            rule_id=rule_id,
+        # 先撤下舊的（連同它的入站規則）再重新發布，換機器時也不會留下孤兒規則。
+        firewall_service.unpublish_vm_service(
+            existing_rule.vmid,
+            PublishedServiceRef(port=existing_rule.internal_port, protocol="tcp"),
+            session,
+        )
+        _publish_domain_service(
+            session,
             vmid=body.vmid,
-            vm_ip=vm_ip,
-            zone_id=body.zone_id,
-            hostname_prefix=body.hostname_prefix,
+            domain=_full_domain(
+                session, zone_id=body.zone_id, hostname_prefix=body.hostname_prefix
+            ),
             internal_port=body.internal_port,
             enable_https=body.enable_https,
         )
         return Message(message=t("reverseProxy.ruleUpdated"))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except BadRequestError as exc:
         raise HTTPException(status_code=400, detail=exc.message)
     except ProxmoxError as exc:
@@ -277,9 +310,11 @@ def delete_reverse_proxy_rule(
     check_firewall_access(vmid=rule.vmid, current_user=current_user, session=session)
 
     try:
-        reverse_proxy_service.remove_reverse_proxy_rule_by_id(
-            session=session,
-            rule_id=rule_id,
+        # 撤下服務會一併刪掉機器上的入站規則；反向代理紀錄由它連帶清除。
+        firewall_service.unpublish_vm_service(
+            rule.vmid,
+            PublishedServiceRef(port=rule.internal_port, protocol="tcp"),
+            session,
         )
         audit_service.log_action(
             session=session,

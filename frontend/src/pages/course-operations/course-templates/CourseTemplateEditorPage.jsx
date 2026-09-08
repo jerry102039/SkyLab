@@ -39,6 +39,28 @@ const MEMORY_RANGE = [1, 64];
 const LXC_DISK_RANGE = [1, 1000];
 const VM_DISK_RANGE = [10, 1000];
 
+/** 一條連線實際授予的方向：單向一個，雙向兩個。 */
+function edgeGrants(edge) {
+  const pairs = [[edge.source, edge.target]];
+  if (edge.direction === "bidirectional") pairs.push([edge.target, edge.source]);
+  return pairs.map(([source, target]) => ({ source, target, protocol: edge.protocol, port: edge.port }));
+}
+
+/**
+ * 這條連線是否與既有連線重疊。
+ * 比對授予的方向而非欄位組合，才抓得到「A→B 單向」被「A↔B 雙向」涵蓋、
+ * 以及「A↔B」與「B↔A」其實是同一件事。舊資料的 "any" 不分協定與 port。
+ */
+function overlapsExistingEdge(candidate, existingEdges) {
+  const wanted = edgeGrants(candidate);
+  return existingEdges.some((edge) => edge.id !== candidate.id && edgeGrants(edge).some((granted) => wanted.some((want) => (
+    granted.source === want.source
+    && granted.target === want.target
+    && (granted.protocol === "any" || want.protocol === "any"
+      || (granted.protocol === want.protocol && Number(granted.port) === Number(want.port)))
+  ))));
+}
+
 /** LXC 映像是 tarball，檔名直接當機器名稱又臭又長，去掉封裝副檔名。 */
 function stripImageExtension(name) {
   return String(name).replace(/\.tar(\.(gz|xz|zst|bz2|lzo))?$/i, "");
@@ -70,6 +92,7 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedEdgeId, setSelectedEdgeId] = useState("");
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState([]);
+  const [topologyNotice, setTopologyNotice] = useState("");
   const atLimit = value.length >= 3;
 
   function addMachine() {
@@ -111,14 +134,6 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
 
   function connect(connection) {
     if (locked || connection.source === connection.target) return;
-    const duplicate = edges.some((edge) => (
-      edge.source === connection.source
-      && edge.target === connection.target
-      && edge.direction === "one_way"
-      && edge.protocol === "tcp"
-      && Number(edge.port) === 22
-    ));
-    if (duplicate) return;
     const edge = {
       id: `edge-${Date.now()}`,
       source: connection.source,
@@ -127,6 +142,11 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
       protocol: "tcp",
       port: 22,
     };
+    if (overlapsExistingEdge(edge, edges)) {
+      setTopologyNotice(t("CourseTemplateEditorPage.overlappingEdgeNotice"));
+      return;
+    }
+    setTopologyNotice("");
     onEdgesChange([...edges, edge]);
     setSelectedEdgeId(edge.id);
     setSelectedNodeId("");
@@ -137,7 +157,16 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
   }
 
   function patchEdge(patch) {
-    onEdgesChange(edges.map((edge) => edge.id === selectedEdgeId ? { ...edge, ...patch } : edge));
+    const current = edges.find((edge) => edge.id === selectedEdgeId);
+    if (!current) return;
+    const next = { ...current, ...patch };
+    // 改成雙向或換 port 都可能撞到既有連線，改之前先擋，別等存檔才失敗。
+    if (overlapsExistingEdge(next, edges)) {
+      setTopologyNotice(t("CourseTemplateEditorPage.overlappingEdgeNotice"));
+      return;
+    }
+    setTopologyNotice("");
+    onEdgesChange(edges.map((edge) => edge.id === selectedEdgeId ? next : edge));
   }
 
   function removeEdge(edgeId) {
@@ -215,6 +244,7 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
         <span className={styles.nodeLimit}>{t("CourseTemplateEditorPage.nodeLimitLabel", { count: value.length })}</span>
       </div>
       {sourceNotice && <p className={styles.persistentFeedback}><MIcon name="info" size={17} />{sourceNotice}</p>}
+      {topologyNotice && <p className={styles.persistentFeedback}><MIcon name="info" size={17} />{topologyNotice}</p>}
       <div className={styles.machineAddBar}>
         <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldSourceMode")}</span><select value={sourceMode} disabled={locked || atLimit} onChange={(event) => { setSourceMode(event.target.value); setSourceId(""); }}><option value="template">{t("CourseTemplateEditorPage.sourceModeTemplateOption")}</option><option value="custom">{t("CourseTemplateEditorPage.sourceModeCustomOption")}</option></select></label>
         {sourceMode === "custom" && <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldMachineType")}</span><select value={customType} disabled={locked || atLimit} onChange={(event) => { setCustomType(event.target.value); setSourceId(""); }}><option value="qemu">VM</option><option value="lxc">LXC</option></select></label>}

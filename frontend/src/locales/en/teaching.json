@@ -249,6 +249,7 @@
   "CourseTemplateEditorPage.typeVm": "Virtual machine",
   "CourseTemplateEditorPage.defaultMachineRole": "Environment machine",
   "CourseTemplateEditorPage.multiMachineEnvTitle": "Learning Environment Applied Each Time",
+  "CourseTemplateEditorPage.overlappingEdgeNotice": "These two machines already have a connection covering this port. A bidirectional connection already includes the reverse direction.",
   "CourseTemplateEditorPage.nodeLimitLabel": "{{count}} / 3 machines",
   "CourseTemplateEditorPage.cpuValue": "{{count}} vCPU",
   "CourseTemplateEditorPage.memoryValue": "{{count}} GB",
