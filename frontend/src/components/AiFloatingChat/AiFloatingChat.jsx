@@ -786,9 +786,8 @@ export default function AiFloatingChat({ open = false, onOpenChange = () => {} }
       )}
 
       {!presence.open && (
-        <button type="button" className={styles.fab} onClick={() => onOpenChange(true)} aria-label={t("AiFloatingChat.openAssistantAriaLabel")}>
-          <MIcon name="auto_awesome" size={21} />
-          <span>{t("AiFloatingChat.assistantName")}</span>
+        <button type="button" className={styles.fab} onClick={() => onOpenChange(true)} title={t("AiFloatingChat.assistantName")} aria-label={t("AiFloatingChat.openAssistantAriaLabel")}>
+          <MIcon name="smart_toy" size={22} />
         </button>
       )}
     </div>
