@@ -11,7 +11,6 @@ from fastapi import APIRouter, Body, HTTPException
 
 from app.api.deps import AdminUser, SessionDep
 from app.core.i18n import t
-from app.domain.placement.constants import DEFAULT_PLACEMENT_STRATEGY
 from app.exceptions import BadRequestError
 from app.infrastructure.proxmox import (
     DEFAULT_PROXMOX_POOL_NAME,
@@ -79,9 +78,9 @@ def _to_public(config, *, is_configured: bool) -> ProxmoxConfigPublic:
         gateway_ip=config.gateway_ip,
         local_subnet=config.local_subnet,
         default_node=config.default_node,
-        placement_strategy=DEFAULT_PLACEMENT_STRATEGY,
         cpu_overcommit_ratio=config.cpu_overcommit_ratio,
         disk_overcommit_ratio=config.disk_overcommit_ratio,
+        placement_reassignment_cost=config.placement_reassignment_cost,
         placement_peak_cpu_margin=config.placement_peak_cpu_margin,
         placement_peak_memory_margin=config.placement_peak_memory_margin,
         placement_loadavg_warn_per_core=config.placement_loadavg_warn_per_core,
@@ -103,6 +102,7 @@ def _to_public(config, *, is_configured: bool) -> ProxmoxConfigPublic:
         window_grace_period_minutes=config.window_grace_period_minutes,
         practice_session_hours=config.practice_session_hours,
         practice_warning_minutes=config.practice_warning_minutes,
+        expiry_warning_hours=config.expiry_warning_hours,
         updated_at=config.updated_at,
         is_configured=is_configured,
         has_ca_cert=bool(config.ca_cert),
@@ -316,15 +316,11 @@ def _storage_to_public(
     )
 
 
-def _resolve_credentials(
-    session,
-    config_in: ProxmoxConfigUpdate,
-) -> tuple[str, str | bool]:
-    """
-    解析連線所需的 password 與 verify_ssl/ca_cert。
-    password：用請求提供的；若無則從 DB 取。
-    ca_cert：用請求提供的；若無則從 DB 取。
-    回傳 (password, verify_ssl_or_ca_cert_pem)。
+def _validate_threshold_ordering(config_in: ProxmoxConfigUpdate) -> None:
+    """成對的警戒／上限閾值必須嚴格遞增。
+
+    /preview 與 PUT / 都要檢查：評分函式雖然會用 max(high, warn + 0.01) 兜底，
+    但存進 DB 的順序若顛倒，管理員看到的數字就與實際生效的不一致。
     """
     if (
         config_in.placement_loadavg_max_per_core
@@ -340,6 +336,19 @@ def _resolve_credentials(
         raise BadRequestError(
             "Disk contention high share must be greater than the warning threshold"
         )
+
+
+def _resolve_credentials(
+    session,
+    config_in: ProxmoxConfigUpdate,
+) -> tuple[str, str | bool]:
+    """
+    解析連線所需的 password 與 verify_ssl/ca_cert。
+    password：用請求提供的；若無則從 DB 取。
+    ca_cert：用請求提供的；若無則從 DB 取。
+    回傳 (password, verify_ssl_or_ca_cert_pem)。
+    """
+    _validate_threshold_ordering(config_in)
 
     existing = proxmox_config_repo.get_proxmox_config(session)
 
@@ -382,9 +391,9 @@ def get_proxmox_config(session: SessionDep, current_user: AdminUser) -> Any:
             gateway_ip=None,
             local_subnet=None,
             default_node=None,
-            placement_strategy=DEFAULT_PLACEMENT_STRATEGY,
             cpu_overcommit_ratio=2.0,
             disk_overcommit_ratio=1.0,
+            placement_reassignment_cost=0.15,
             placement_peak_cpu_margin=1.1,
             placement_peak_memory_margin=1.05,
             placement_loadavg_warn_per_core=0.8,
@@ -413,6 +422,7 @@ def update_proxmox_config(
     session: SessionDep, current_user: AdminUser, config_in: ProxmoxConfigUpdate
 ) -> Any:
     """新增或更新 Proxmox 連線設定"""
+    _validate_threshold_ordering(config_in)
     existing = proxmox_config_repo.get_proxmox_config(session)
     password = config_in.password
     if existing is None and password is None:
@@ -446,9 +456,9 @@ def update_proxmox_config(
         gateway_ip=config_in.gateway_ip,
         local_subnet=config_in.local_subnet,
         default_node=config_in.default_node,
-        placement_strategy=DEFAULT_PLACEMENT_STRATEGY,
         cpu_overcommit_ratio=config_in.cpu_overcommit_ratio,
         disk_overcommit_ratio=config_in.disk_overcommit_ratio,
+        placement_reassignment_cost=config_in.placement_reassignment_cost,
         placement_peak_cpu_margin=config_in.placement_peak_cpu_margin,
         placement_peak_memory_margin=config_in.placement_peak_memory_margin,
         placement_loadavg_warn_per_core=config_in.placement_loadavg_warn_per_core,
@@ -470,6 +480,7 @@ def update_proxmox_config(
         window_grace_period_minutes=config_in.window_grace_period_minutes,
         practice_session_hours=config_in.practice_session_hours,
         practice_warning_minutes=config_in.practice_warning_minutes,
+        expiry_warning_hours=config_in.expiry_warning_hours,
     )
 
     # 連線欄位與 pool / storage / gateway 的唯一真相來源是 proxmox_connections，

@@ -1,5 +1,5 @@
 import { lazy } from "react";
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "./contexts/AuthContext";
 import DashboardLayout from "./layout/DashboardLayout";
@@ -44,7 +44,13 @@ const ClassSetupPage = lazy(() => import("./pages/course-operations/class-setup/
 
 // 系統管理
 const AdminPage = lazy(() => import("./pages/system/admin/AdminPage"));
-const SettingsPage = lazy(() => import("./pages/system/settings/SettingsPage"));
+const PveConnectionsPage = lazy(() => import("./pages/system/settings/PveConnectionsPage"));
+const SchedulerPage = lazy(() => import("./pages/system/settings/SchedulerPage"));
+const GovernancePage = lazy(() => import("./pages/system/settings/GovernancePage"));
+const QuotasPage = lazy(() => import("./pages/system/settings/QuotasPage"));
+const LdapPage = lazy(() => import("./pages/system/settings/LdapPage"));
+const NodesPage = lazy(() => import("./pages/system/settings/NodesPage"));
+const StoragePage = lazy(() => import("./pages/system/settings/StoragePage"));
 const MonitoringPage = lazy(() => import("./pages/system/monitoring/MonitoringPage"));
 const IpManagementPage = lazy(() => import("./pages/system/ip-management/IpManagementPage"));
 const AuditPage = lazy(() => import("./pages/system/audit/AuditPage"));
@@ -98,6 +104,23 @@ function LegacyAiJudgeEditorRedirect() {
   const { classId, sessionId } = useParams();
   const query = sessionId ? `?check=${encodeURIComponent(sessionId)}` : "";
   return <Navigate to={`/class-management/${classId}/ai${query}`} replace />;
+}
+
+/** 舊「系統設定」的 ?tab= 值 → 升格後的獨立頁面；沒帶 tab 就是原本的第一個分頁（PVE 連線）。 */
+const LEGACY_SETTINGS_TABS = {
+  pve: "/pve-connections",
+  scheduler: "/scheduler",
+  governance: "/governance",
+  quotas: "/quotas",
+  ldap: "/ldap",
+  nodes: "/nodes",
+  storage: "/storage",
+};
+
+function LegacySettingsRedirect() {
+  const [searchParams] = useSearchParams();
+  const target = LEGACY_SETTINGS_TABS[searchParams.get("tab")] ?? LEGACY_SETTINGS_TABS.pve;
+  return <Navigate to={target} replace />;
 }
 
 function App() {
@@ -206,9 +229,16 @@ function App() {
           {isAdmin && (
             <>
               <Route path="/admin"     element={<AdminPage />} />
-              <Route path="/settings"  element={<SettingsPage />} />
-              {/* 配額管理已併入系統設定的分頁，舊網址導向新位置 */}
-              <Route path="/quotas"    element={<Navigate to="/settings?tab=quotas" replace />} />
+              {/* 原「系統設定」的七個分頁，2026-09 各自升格為獨立頁面 */}
+              <Route path="/pve-connections" element={<PveConnectionsPage />} />
+              <Route path="/scheduler" element={<SchedulerPage />} />
+              <Route path="/governance" element={<GovernancePage />} />
+              <Route path="/quotas"    element={<QuotasPage />} />
+              <Route path="/ldap"      element={<LdapPage />} />
+              <Route path="/nodes"     element={<NodesPage />} />
+              <Route path="/storage"   element={<StoragePage />} />
+              {/* 舊的 /settings?tab=… 書籤依分頁導到對應的新頁面 */}
+              <Route path="/settings"  element={<LegacySettingsRedirect />} />
               <Route path="/ip-management" element={<IpManagementPage />} />
               <Route path="/monitoring" element={<MonitoringPage />} />
               <Route path="/audit"     element={<AuditPage />} />

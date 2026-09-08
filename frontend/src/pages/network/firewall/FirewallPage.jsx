@@ -31,6 +31,7 @@ import ConnectionEdge   from "./edges/ConnectionEdge";
 import { buildFlow, portLabel } from "./utils/buildFlow";
 import { useTheme } from "../../../contexts/ThemeContext";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
+import LoadingState from "../../../components/LoadingState/LoadingState";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import { useToast } from "../../../hooks/useToast";
 import styles from "./FirewallPage.module.scss";
@@ -68,6 +69,8 @@ export default function FirewallPage() {
   const [showMiniMap,  setShowMiniMap]  = useState(true);
   const connDialog    = useDialogPresence(showDialog);
   const deleteConfirm = useDialogPresence(deleteEdge);
+  /* 關閉細項面板時先播 0.22s 滑出動畫再卸載，時長需與 SCSS 的 panelOut 一致 */
+  const rulesPanel    = useDialogPresence(selectedNode, 220);
   const rfInstance = useRef(null);
   const saveTimer  = useRef(null);
 
@@ -238,12 +241,7 @@ export default function FirewallPage() {
       <div className={styles.content}>
         {loading && !topology && (
           <div className={styles.centerState}>
-            <div className={styles.topoLoader}>
-              {Array.from({ length: 9 }, (_, i) => (
-                <div key={i} className={styles.topoNode} style={{ "--i": i }} />
-              ))}
-            </div>
-            <span className={styles.loadingTitle}>{t("FirewallPage.loadingTopology")}</span>
+            <LoadingState text={t("FirewallPage.loadingTopology")} />
           </div>
         )}
 
@@ -329,9 +327,10 @@ export default function FirewallPage() {
               </Panel>
             </ReactFlow>
 
-            {selectedNode && (
+            {rulesPanel.open && (
               <RulesPanel
-                node={{ vmid: Number(selectedNode.id), name: selectedNode.data.name }}
+                node={{ vmid: Number(rulesPanel.item.id), name: rulesPanel.item.data.name }}
+                closing={rulesPanel.closing}
                 onClose={() => setSelectedNode(null)}
               />
             )}

@@ -81,6 +81,11 @@
     column-gap: $spacing-24;
     row-gap: $spacing-24;
     align-items: start;
+
+    /* 頁首（PageHeader）橫跨兩欄，返回鍵才會靠到頁面右緣而非左欄右緣 */
+    > :first-child {
+      grid-column: 1 / -1;
+    }
   }
 }
 

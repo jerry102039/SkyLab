@@ -47,6 +47,17 @@ export function normalizeCourseEnvironment(item) {
       protocol: edge.protocol ?? "tcp",
       port: edge.protocol === "any" ? null : Number(edge.port ?? 22),
     })),
+    publications: (item.publications ?? []).map((publication, index) => ({
+      ...publication,
+      id: String(publication.id ?? `publication-${index + 1}`),
+      nodeKey: publication.node_key,
+      mode: publication.mode ?? "domain",
+      port: Number(publication.port ?? 80),
+      protocol: publication.protocol ?? "tcp",
+      hostnamePrefix: publication.hostname_prefix ?? "",
+      zoneId: publication.zone_id ?? "",
+      enableHttps: publication.enable_https !== false,
+    })),
   };
 }
 
@@ -81,6 +92,15 @@ export function environmentPayload(item) {
       direction: edge.direction ?? "one_way",
       protocol: edge.protocol ?? "tcp",
       port: edge.protocol === "any" ? null : Number(edge.port ?? 22),
+    })),
+    publications: (item.publications ?? []).map((publication) => ({
+      node_key: String(publication.nodeKey ?? publication.node_key),
+      mode: publication.mode ?? "domain",
+      port: Number(publication.port),
+      protocol: publication.protocol ?? "tcp",
+      hostname_prefix: publication.mode === "domain" ? (publication.hostnamePrefix || "").trim() : null,
+      zone_id: publication.mode === "domain" ? (publication.zoneId || null) : null,
+      enable_https: publication.enableHttps !== false,
     })),
   };
 }

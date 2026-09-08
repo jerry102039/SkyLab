@@ -266,6 +266,24 @@ def _apply_session_topology(
             planned=planned,
         )
     )
+
+    # 「外網 → 機器」的宣告：每位學生各配一個網址，重複執行會略過已發布的
+    from app.services.teaching import course_publication_service  # noqa: PLC0415
+
+    owner = session.get(User, practice.user_id)
+    if owner is not None:
+        errors.extend(
+            course_publication_service.apply_for_machines(
+                session,
+                version_id=practice.environment_version_id,
+                vmid_by_key={
+                    key: request.vmid
+                    for key, request in machines_by_key.items()
+                    if request.vmid is not None
+                },
+                owner=owner,
+            )
+        )
     return errors
 
 
@@ -512,6 +530,14 @@ def process_lifecycle() -> int:
     return processed
 
 
+def _node_disk_gb(session: Session, node: CourseEnvironmentNode) -> int:
+    """節點磁碟的實際大小，含來源範本下限；配額與申請單共用同一個值。"""
+    # 頂層 import 會與 provisioning_service 互相相依
+    from app.services.proxmox import provisioning_service  # noqa: PLC0415
+
+    return provisioning_service.clone_source_disk_gb(session, node)
+
+
 def _machine_request(
     *,
     session: Session,
@@ -550,6 +576,7 @@ def _machine_request(
             ) from exc
         username = node.custom_username or "student"
 
+    disk_gb = _node_disk_gb(session, node)
     return VMRequestCreate(
         reason=f"Quick practice environment: {environment.name[:120]}",
         resource_type="lxc" if is_lxc else "vm",
@@ -564,9 +591,9 @@ def _machine_request(
         start_at=now,
         end_at=expires_at,
         ostemplate=ostemplate,
-        rootfs_size=node.disk_gb if is_lxc else None,
+        rootfs_size=disk_gb if is_lxc else None,
         template_id=template_id,
-        disk_size=None if is_lxc else node.disk_gb,
+        disk_size=None if is_lxc else disk_gb,
         username=username,
     )
 
@@ -670,7 +697,7 @@ def launch(
         user.id,
         delta_cores=sum(node.cpu for node in nodes),
         delta_memory_mb=sum(node.memory_mb for node in nodes),
-        delta_disk_gb=sum(node.disk_gb for node in nodes),
+        delta_disk_gb=sum(_node_disk_gb(session, node) for node in nodes),
         delta_instances=len(nodes),
     )
 
@@ -790,6 +817,12 @@ def serialize_session(session: Session, item: QuickPracticeSession) -> dict:
             .order_by(col(QuickPracticeSessionMachine.sort_order))
         ).all()
     )
+    # 對外網址直接讀反向代理紀錄，清單頁不打 Proxmox
+    from app.services.teaching import course_publication_service  # noqa: PLC0415
+
+    public_urls = course_publication_service.public_urls_by_vmid(
+        session, [request.vmid for _machine, request in rows if request.vmid is not None]
+    )
     machines = []
     for machine, request in rows:
         if request.vmid is not None:
@@ -815,6 +848,7 @@ def serialize_session(session: Session, item: QuickPracticeSession) -> dict:
                     else None
                 ),
                 "os_info": request.os_info,
+                "public_url": public_urls.get(request.vmid) if request.vmid else None,
             }
         )
     statuses = {machine["status"] for machine in machines}
