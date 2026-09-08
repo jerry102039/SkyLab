@@ -279,8 +279,6 @@
   "CourseTemplateEditorPage.storageAutoHint": "儲存區由系統依容量、相容類型與管理優先序自動選擇。",
   "CourseTemplateEditorPage.removeNodeBtn": "移除節點",
   "CourseTemplateEditorPage.emptyNodesTitle": "先加入一個節點，再設定機器之間的連線。",
-  "CourseTemplateEditorPage.needNameReason": "請先輸入環境名稱",
-  "CourseTemplateEditorPage.needAudienceClassReason": "請選擇可以看到這個環境的班級",
   "CourseTemplateEditorPage.needAtLeastOneMachineReason": "請到「機器配置」加入至少一台機器",
   "CourseTemplateEditorPage.maxThreeMachinesReason": "每位學生最多只能配置三台機器",
   "CourseTemplateEditorPage.fixPortReason": "請修正拓撲連線的連接埠",
@@ -302,8 +300,6 @@
   "CourseTemplateEditorPage.publishFailed": "發布失敗",
   "CourseTemplateEditorPage.newVersionFailed": "建立新版本失敗",
   "CourseTemplateEditorPage.loadingTemplateText": "正在讀取學習環境…",
-  "CourseTemplateEditorPage.backToClassEnv": "返回班級上課環境",
-  "CourseTemplateEditorPage.backToTemplateList": "返回學習環境",
   "CourseTemplateEditorPage.createTemplateTitle": "建立學習環境",
   "CourseTemplateEditorPage.createTemplateSubtitle": "定義可重複套用到正式課程或快速練習的固定機器組合。",
   "CourseTemplateEditorPage.backBtn": "返回",
@@ -312,7 +308,6 @@
   "CourseTemplateEditorPage.saveDraftBtn": "儲存草稿",
   "CourseTemplateEditorPage.classDraftSavedTitle": "班級草稿已保存。",
   "CourseTemplateEditorPage.classDraftSavedDesc": "請完成機器配置並「發布」模板；發布後會自動回到班級建立流程。",
-  "CourseTemplateEditorPage.cannotSaveYet": "尚不能儲存：{{reason}}。",
   "CourseTemplateEditorPage.lockedVersionNote": "這個版本已發布並鎖定；需要調整時請建立新版本。",
   "CourseTemplateEditorPage.reusableEnvNote": "同一份學習環境可用於正式課程、快速練習，或同時提供兩種用途。",
   "CourseTemplateEditorPage.fieldEnvName": "環境名稱",
@@ -987,5 +982,6 @@
   "AiJudgePanel.viewNotesSummary": "查看心得",
   "AiJudgePanel.waitingCollectionLabel": "等待回收",
   "AiJudgePanel.weekOptionLabel": "第 {{week}} 週 · {{title}}",
-  "AiJudgePanel.whichWeekLabel": "放到哪一週任務？"
+  "AiJudgePanel.whichWeekLabel": "放到哪一週任務？",
+  "CourseTemplateEditorPage.draftRestoredMsg": "已還原上次未儲存的編輯"
 }

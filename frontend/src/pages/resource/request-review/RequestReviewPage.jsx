@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./RequestReviewPage.module.scss";
 import MIcon from "../../../components/MIcon";
@@ -11,15 +11,16 @@ import { SpecChangeRequestsService } from "../../../services/specChangeRequests"
 import { VmRequestsService } from "../../../services/vmRequests";
 import { CONSUMED_REQUEST_MARKERS } from "../../../services/pendingResources";
 import PageHeader from "../../../components/PageHeader/PageHeader";
+import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
 
 function useTabs() {
   const { t } = useTranslation("resource");
   return useMemo(() => [
-    { key: "pending", label: t("RequestReviewPage.tabPending"), icon: "pending_actions" },
-    { key: "approved", label: t("RequestReviewPage.tabApproved"), icon: "task_alt" },
-    { key: "rejected", label: t("RequestReviewPage.tabRejected"), icon: "block" },
-    { key: "expired", label: t("RequestReviewPage.tabExpired"), icon: "hourglass_empty" },
-    { key: "all", label: t("RequestReviewPage.tabAll"), icon: "view_list" },
+    { key: "pending", label: t("RequestReviewPage.tabPending") },
+    { key: "approved", label: t("RequestReviewPage.tabApproved") },
+    { key: "rejected", label: t("RequestReviewPage.tabRejected") },
+    { key: "expired", label: t("RequestReviewPage.tabExpired") },
+    { key: "all", label: t("RequestReviewPage.tabAll") },
   ], [t]);
 }
 
@@ -57,6 +58,40 @@ function specReviewStatus(request) {
   }
 }
 
+
+/* 超長文字預設收合成 4 行，實際有被裁掉才顯示展開按鈕 */
+function ExpandableText({ text }) {
+  const { t } = useTranslation("resource");
+  const [expanded, setExpanded] = useState(false);
+  const [clampable, setClampable] = useState(false);
+  const textRef = useRef(null);
+
+  useLayoutEffect(() => {
+    setExpanded(false);
+  }, [text]);
+
+  useLayoutEffect(() => {
+    if (expanded) return undefined;
+    const measure = () => {
+      const el = textRef.current;
+      if (el) setClampable(el.scrollHeight > el.clientHeight + 1);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [text, expanded]);
+
+  return (
+    <>
+      <p ref={textRef} className={expanded ? undefined : styles.reasonClamp}>{text}</p>
+      {(clampable || expanded) && (
+        <button type="button" className={styles.reasonToggle} onClick={() => setExpanded((value) => !value)}>
+          {expanded ? t("RequestReviewPage.showLess") : t("RequestReviewPage.showMore")}
+        </button>
+      )}
+    </>
+  );
+}
 
 function formatDateTime(value, t) {
   if (!value) return t("RequestReviewPage.notSet");
@@ -437,19 +472,13 @@ export default function RequestReviewPage() {
       </div>
 
       <div className={styles.tabsRow}>
-        <div className={styles.tabs}>
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ""}`}
-              onClick={() => setActiveTab(tab.key)}
-            >
-              <MIcon name={tab.icon} size={16} />
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          className={styles.tabsControl}
+          options={tabs.map(({ key, label }) => ({ value: key, label }))}
+          value={activeTab}
+          onChange={setActiveTab}
+          ariaLabel={t("RequestReviewPage.tabsAriaLabel")}
+        />
 
         <div className={styles.search}>
           <MIcon name="search" size={16} />
@@ -510,56 +539,73 @@ export default function RequestReviewPage() {
               <div className={styles.stateBox}>{t("RequestReviewPage.selectARequest")}</div>
             ) : (
               <>
-                <div className={styles.detailHeader}>
-                  <h2>{selected.title}</h2>
-                  <p>{selected.user}</p>
-                </div>
-
-                <div className={styles.infoGrid}>
-                  <InfoRow label={t("RequestReviewPage.infoLabelType")} value={sourceLabel(selected.source, t)} />
-                  <InfoRow label={t("RequestReviewPage.infoLabelSpec")} value={selected.specText} />
-                  <InfoRow label={t("RequestReviewPage.infoLabelTime")} value={selected.timeText} />
-                  <InfoRow label={selected.paramLabel} value={selected.paramText} />
-                  <InfoRow label={t("RequestReviewPage.infoLabelGpu")} value={selected.gpuText} />
-                  <InfoRow label={t("RequestReviewPage.infoLabelNode")} value={context?.projected_node || selected.nodeText} />
-                </div>
-
-                <div className={styles.reasonBox}>
-                  <span>{t("RequestReviewPage.reasonLabel")}</span>
-                  <p>{selected.reason}</p>
-                </div>
-
-                {contextLoading && <LoadingState text={t("RequestReviewPage.loadingContext")} />}
-                {contextError && selected.source === "vm" && (
-                  <div className={`${styles.stateBox} ${styles.stateError}`}>
-                    {contextError}
+                <div className={styles.detailScroll}>
+                  <div className={styles.detailHeader}>
+                    <h2>{selected.title}</h2>
+                    <p>{selected.user}</p>
                   </div>
-                )}
-                {context && selected.source === "vm" && (
-                  <div className={styles.contextBox}>
-                    <div className={styles.contextTitle}>
-                      <MIcon name={context.feasible ? "check_circle" : "warning"} size={18} />
-                      <span>{context.feasible ? t("RequestReviewPage.feasibleYes") : t("RequestReviewPage.feasibleNo")}</span>
+  
+                  <div className={styles.infoGrid}>
+                    <InfoRow label={t("RequestReviewPage.infoLabelType")} value={sourceLabel(selected.source, t)} />
+                    <InfoRow label={t("RequestReviewPage.infoLabelSpec")} value={selected.specText} />
+                    <InfoRow label={t("RequestReviewPage.infoLabelTime")} value={selected.timeText} />
+                    <InfoRow label={selected.paramLabel} value={selected.paramText} />
+                    <InfoRow label={t("RequestReviewPage.infoLabelGpu")} value={selected.gpuText} />
+                    <InfoRow label={t("RequestReviewPage.infoLabelNode")} value={context?.projected_node || selected.nodeText} />
+                  </div>
+  
+                  <div className={styles.reasonBox}>
+                    <span>{t("RequestReviewPage.reasonLabel")}</span>
+                    <ExpandableText text={selected.reason} />
+                  </div>
+  
+                  {contextLoading && <LoadingState text={t("RequestReviewPage.loadingContext")} />}
+                  {contextError && selected.source === "vm" && (
+                    <div className={`${styles.stateBox} ${styles.stateError}`}>
+                      {contextError}
                     </div>
-                    <p>{context.summary}</p>
-                    {context.warnings?.length > 0 && (
-                      <div className={styles.warningList}>
-                        {context.warnings.map((warning) => (
-                          <span key={warning}>{warning}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
+                  {selected.source === "deletion" ? (
+                    <div className={styles.rowActions}>
+                      <span className={styles.doneText}>{t("RequestReviewPage.deletionOnlyNote")}</span>
+                    </div>
+                  ) : !isPending && (
+                    <>
+                      {(reviewNote || selected.reviewedAt) && (
+                        <div className={styles.reasonBox}>
+                          <span>
+                            {t("RequestReviewPage.commentLabel")}
+                            {selected.reviewedAt ? t("RequestReviewPage.reviewedAtSuffix", { time: formatDateTime(selected.reviewedAt, t) }) : ""}
+                          </span>
+                          <ExpandableText text={reviewNote || t("RequestReviewPage.noReviewNote")} />
+                        </div>
+                      )}
+                      {selected.source === "spec" && selected.raw?.status === "approved" && (
+                        <div className={styles.reasonBox}>
+                          <span>
+                            {t("RequestReviewPage.applyResultLabel")}
+                            {selected.raw.applied_at ? t("RequestReviewPage.applyResultAppliedAt", { time: formatDateTime(selected.raw.applied_at, t) }) : ""}
+                          </span>
+                          <p>
+                            {selected.raw.apply_error
+                              || (selected.raw.apply_status === "applied"
+                                ? t("RequestReviewPage.applyResultApplied")
+                                : selected.raw.apply_status === "applying"
+                                  ? t("RequestReviewPage.applyResultApplying")
+                                  : t("RequestReviewPage.applyResultAwaiting"))}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
 
-                {isPending && selected.source !== "deletion" ? (
+                {isPending && selected.source !== "deletion" && (
                   <div className={styles.reviewBar}>
-                    {selected.source === "spec" && (
+                    {specResourceGone && (
                       <div className={styles.rowActions}>
                         <span className={styles.doneText}>
-                          {specResourceGone
-                            ? t("RequestReviewPage.specResourceGoneHint")
-                            : t("RequestReviewPage.specApplyHint")}
+                          {t("RequestReviewPage.specResourceGoneHint")}
                         </span>
                       </div>
                     )}
@@ -591,38 +637,6 @@ export default function RequestReviewPage() {
                       </button>
                     </div>
                   </div>
-                ) : selected.source === "deletion" ? (
-                  <div className={styles.rowActions}>
-                    <span className={styles.doneText}>{t("RequestReviewPage.deletionOnlyNote")}</span>
-                  </div>
-                ) : (
-                  <>
-                    {(reviewNote || selected.reviewedAt) && (
-                      <div className={styles.reasonBox}>
-                        <span>
-                          {t("RequestReviewPage.commentLabel")}
-                          {selected.reviewedAt ? t("RequestReviewPage.reviewedAtSuffix", { time: formatDateTime(selected.reviewedAt, t) }) : ""}
-                        </span>
-                        <p>{reviewNote || t("RequestReviewPage.noReviewNote")}</p>
-                      </div>
-                    )}
-                    {selected.source === "spec" && selected.raw?.status === "approved" && (
-                      <div className={styles.reasonBox}>
-                        <span>
-                          {t("RequestReviewPage.applyResultLabel")}
-                          {selected.raw.applied_at ? t("RequestReviewPage.applyResultAppliedAt", { time: formatDateTime(selected.raw.applied_at, t) }) : ""}
-                        </span>
-                        <p>
-                          {selected.raw.apply_error
-                            || (selected.raw.apply_status === "applied"
-                              ? t("RequestReviewPage.applyResultApplied")
-                              : selected.raw.apply_status === "applying"
-                                ? t("RequestReviewPage.applyResultApplying")
-                                : t("RequestReviewPage.applyResultAwaiting"))}
-                        </p>
-                      </div>
-                    )}
-                  </>
                 )}
               </>
             )}

@@ -19,6 +19,7 @@ import { AiMonitoringService } from "../../../services/aiMonitoring";
 import { useToast } from "../../../hooks/useToast";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import PageHeader from "../../../components/PageHeader/PageHeader";
+import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
 
 export function presetToRange(preset) {
   const end = new Date();
@@ -276,7 +277,7 @@ function TrendChart({ series, bucket, loading, t }) {
             type="monotone"
             dataKey="error_rate"
             name={t("AiMonitoringPage.chartErrorRate")}
-            stroke="var(--color-warning)"
+            stroke="var(--color-danger)"
             strokeWidth={2}
             strokeDasharray="5 4"
             dot={false}
@@ -419,7 +420,7 @@ function StatusBanner({ overview, runtime, overviewError, runtimeError, t }) {
   );
 }
 
-function DetailTable({ tab, calls, users, query, failedOnly, t }) {
+function DetailTable({ tab, calls, users, query, statusFilter, t }) {
   const CALL_TYPE_LABELS = {
     recommend: t("AiMonitoringPage.callTypeRecommend"),
     chat: t("AiMonitoringPage.callTypeChat"),
@@ -469,7 +470,8 @@ function DetailTable({ tab, calls, users, query, failedOnly, t }) {
 
   const source = tab === "proxy" ? calls.proxy : calls.template;
   const visibleCalls = (source ?? []).filter((call) => {
-    if (failedOnly && isOkStatus(call.status)) return false;
+    if (statusFilter === "success" && !isOkStatus(call.status)) return false;
+    if (statusFilter === "error" && isOkStatus(call.status)) return false;
     if (!q) return true;
     return (call.user_email ?? "").toLowerCase().includes(q)
       || (call.user_full_name ?? "").toLowerCase().includes(q)
@@ -527,7 +529,7 @@ export default function AiMonitoringPage() {
   const [preset, setPreset] = useState("7d");
   const [detailTab, setDetailTab] = useState("proxy");
   const [query, setQuery] = useState("");
-  const [failedOnly, setFailedOnly] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [selectedModel, setSelectedModel] = useState("");
   const [overview, setOverview] = useState(null);
   const [runtime, setRuntime] = useState(null);
@@ -551,6 +553,11 @@ export default function AiMonitoringPage() {
     { key: "proxy", label: t("AiMonitoringPage.tabProxy"), icon: "swap_horiz", count: counts.proxy },
     { key: "template", label: t("AiMonitoringPage.tabTemplate"), icon: "auto_awesome", count: counts.template },
     { key: "users", label: t("AiMonitoringPage.tabUsers"), icon: "groups", count: counts.users },
+  ];
+  const STATUS_FILTERS = [
+    { value: "all", label: t("AiMonitoringPage.statusFilterAll") },
+    { value: "success", label: t("AiMonitoringPage.statusSuccess") },
+    { value: "error", label: t("AiMonitoringPage.statusFail") },
   ];
 
   const load = useCallback(async (silent = false) => {
@@ -631,12 +638,8 @@ export default function AiMonitoringPage() {
     const hasTemplateCalls = templateCalls.some((call) => call.model_name === modelName);
     setDetailTab(hasProxyCalls || !hasTemplateCalls ? "proxy" : "template");
     setQuery("");
-    setFailedOnly(false);
+    setStatusFilter("all");
   };
-
-  const detailStatusLabel = failedOnly
-    ? t("AiMonitoringPage.failedOnly")
-    : t("AiMonitoringPage.allRecords");
 
   return (
     <div className={styles.page}>
@@ -646,19 +649,12 @@ export default function AiMonitoringPage() {
             <span className={styles.refreshDot} />
             <span>{lastUpdated ? t("AiMonitoringPage.lastUpdated", { time: lastUpdated.toLocaleTimeString("zh-TW") }) : t("AiMonitoringPage.waitingForData")}</span>
           </div>
-          <div className={styles.segment} role="group" aria-label={t("AiMonitoringPage.rangeLabel")}>
-            {PRESETS.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                className={`${styles.segmentBtn} ${preset === item.value ? styles.segmentActive : ""}`}
-                onClick={() => setPreset(item.value)}
-                aria-pressed={preset === item.value}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            options={PRESETS}
+            value={preset}
+            onChange={setPreset}
+            ariaLabel={t("AiMonitoringPage.rangeLabel")}
+          />
         </div>
       </PageHeader>
 
@@ -769,6 +765,14 @@ export default function AiMonitoringPage() {
             <p className={styles.detailDescription}>{t("AiMonitoringPage.detailDescription")}</p>
           </div>
           <div className={styles.detailToolbar}>
+            {detailTab !== "users" ? (
+              <SegmentedControl
+                options={STATUS_FILTERS}
+                value={statusFilter}
+                onChange={setStatusFilter}
+                ariaLabel={t("AiMonitoringPage.statusFilterLabel")}
+              />
+            ) : null}
             <div className={styles.search}>
               <MIcon name="search" size={16} />
               <input
@@ -781,9 +785,6 @@ export default function AiMonitoringPage() {
               />
               {(query || selectedModel) ? <button type="button" className={styles.clearSearch} onClick={() => { setQuery(""); setSelectedModel(""); }} aria-label={t("AiMonitoringPage.clearSearch")}><MIcon name="close" size={14} /></button> : null}
             </div>
-            <button type="button" className={`${styles.filterButton} ${failedOnly ? styles.filterButtonActive : ""}`} onClick={() => setFailedOnly((current) => !current)} aria-pressed={failedOnly}>
-              <MIcon name="filter_alt" size={15} />{detailStatusLabel}
-            </button>
           </div>
         </div>
         <div className={styles.detailTabs} role="tablist" aria-label={t("AiMonitoringPage.detailTitle")}>
@@ -794,7 +795,7 @@ export default function AiMonitoringPage() {
           ))}
         </div>
         <div className={styles.detailContent}>
-          {detailLoading ? <LoadingState /> : <DetailTable tab={detailTab} calls={{ proxy: proxyCalls, template: templateCalls }} users={users} query={detailQuery} failedOnly={failedOnly} t={t} />}
+          {detailLoading ? <LoadingState /> : <DetailTable tab={detailTab} calls={{ proxy: proxyCalls, template: templateCalls }} users={users} query={detailQuery} statusFilter={statusFilter} t={t} />}
         </div>
       </section>
     </div>

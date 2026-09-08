@@ -115,53 +115,23 @@
 }
 
 /* ── Tabs ── */
-/* 分頁與搜尋擺同一排，省下的垂直空間留給右側詳情表單與審核按鈕 */
+/* 分段切換器與搜尋擺同一排，省下的垂直空間留給右側詳情表單與審核按鈕 */
 .tabsRow {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: $spacing-16;
   flex-wrap: wrap;
-  border-bottom: 1px solid var(--color-border);
 }
 
-.tabs {
-  display: flex;
-  gap: $spacing-4;
-  /* 手機仍讓搜尋換到下一行，桌面才緊接在分頁按鈕旁邊 */
-  flex: 1 1 100%;
-  min-width: 0;
+/* 窄螢幕選項放不下時讓切換器自己橫向捲動；高度鎖 38px 與搜尋框對齊 */
+.tabsControl {
+  height: 38px;
+  max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
 
   &::-webkit-scrollbar {
     display: none;
-  }
-
-  @include respond-to(md) {
-    flex: 0 1 auto;
-  }
-}
-
-.tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: $spacing-8 $spacing-16;
-  font-size: $font-size-14;
-  font-weight: $font-weight-500;
-  color: var(--color-text-secondary);
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  margin-bottom: -1px;
-  transition: color $transition-base, border-color $transition-base;
-
-  &:hover {
-    color: var(--color-text);
-  }
-
-  &.tabActive {
-    color: var(--color-primary);
-    border-bottom-color: var(--color-primary);
   }
 }
 
@@ -169,8 +139,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: $spacing-8;
-  padding: 6px $spacing-8 6px 10px;
+  min-height: 38px;
+  padding: 0 $spacing-8 0 10px;
   border: 1px solid var(--color-border);
   border-radius: $radius-8;
   background: var(--color-surface);
@@ -439,9 +409,19 @@
   }
 }
 
+/* 人話版排程（每週四 13:00）為主，原始 RRULE 縮小附在下方供核對 */
+.ruleHuman {
+  font-weight: $font-weight-500;
+}
+
 .ruleText {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   overflow-wrap: anywhere;
+}
+
+.reasonBox p.ruleText {
+  color: var(--color-text-muted);
+  font-size: $font-size-12;
 }
 
 .failedNote {
@@ -531,6 +511,29 @@
   transition: background $transition-base;
 
   &:hover { background: color-mix(in srgb, var(--color-primary-on-surface) 20%, transparent); }
+}
+
+/* 收合動畫：grid-template-rows 0fr↔1fr 讓高度平滑過渡；
+   收合時以負 margin 抵掉 reasonBox 的 gap，避免留一條空隙 */
+.recurCollapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: -$spacing-8;
+  transition: grid-template-rows 0.22s cubic-bezier(0.25, 0.8, 0.25, 1), margin-top 0.22s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.recurCollapseOpen {
+  grid-template-rows: 1fr;
+  margin-top: 0;
+}
+
+.recurCollapseInner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recurCollapse { transition: none; }
 }
 
 .recurWindows {

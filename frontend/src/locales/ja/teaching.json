@@ -279,8 +279,6 @@
   "CourseTemplateEditorPage.storageAutoHint": "ストレージは容量、互換タイプ、管理優先度に基づいてシステムが自動的に選択します。",
   "CourseTemplateEditorPage.removeNodeBtn": "ノードを削除",
   "CourseTemplateEditorPage.emptyNodesTitle": "まずノードを追加してから、マシン間の接続を設定してください。",
-  "CourseTemplateEditorPage.needNameReason": "まず環境名を入力してください",
-  "CourseTemplateEditorPage.needAudienceClassReason": "この環境を閲覧できるクラスを選択してください",
   "CourseTemplateEditorPage.needAtLeastOneMachineReason": "「マシン構成」で少なくとも 1 台のマシンを追加してください",
   "CourseTemplateEditorPage.maxThreeMachinesReason": "学生 1 人あたり最大 3 台までしか設定できません",
   "CourseTemplateEditorPage.fixPortReason": "トポロジ接続のポートを修正してください",
@@ -302,8 +300,6 @@
   "CourseTemplateEditorPage.publishFailed": "公開に失敗しました",
   "CourseTemplateEditorPage.newVersionFailed": "新しいバージョンの作成に失敗しました",
   "CourseTemplateEditorPage.loadingTemplateText": "学習環境を読み込んでいます…",
-  "CourseTemplateEditorPage.backToClassEnv": "クラスの受講環境に戻る",
-  "CourseTemplateEditorPage.backToTemplateList": "学習環境に戻る",
   "CourseTemplateEditorPage.createTemplateTitle": "学習環境を作成",
   "CourseTemplateEditorPage.createTemplateSubtitle": "正規コースまたはクイック演習に再利用できる固定マシン構成を定義します。",
   "CourseTemplateEditorPage.backBtn": "戻る",
@@ -312,7 +308,6 @@
   "CourseTemplateEditorPage.saveDraftBtn": "下書きを保存",
   "CourseTemplateEditorPage.classDraftSavedTitle": "クラスの下書きを保存しました。",
   "CourseTemplateEditorPage.classDraftSavedDesc": "マシン構成を完了し、テンプレートを「公開」してください。公開すると自動的にクラス作成の流れに戻ります。",
-  "CourseTemplateEditorPage.cannotSaveYet": "まだ保存できません：{{reason}}。",
   "CourseTemplateEditorPage.lockedVersionNote": "このバージョンはすでに公開・ロックされています。変更が必要な場合は新しいバージョンを作成してください。",
   "CourseTemplateEditorPage.reusableEnvNote": "この学習環境は正規コース、クイック演習、または両方の用途に同時に使用できます。",
   "CourseTemplateEditorPage.fieldEnvName": "環境名",
@@ -987,5 +982,6 @@
   "AiJudgePanel.viewNotesSummary": "所感を見る",
   "AiJudgePanel.waitingCollectionLabel": "回収待ち",
   "AiJudgePanel.weekOptionLabel": "第 {{week}} 週 ・{{title}}",
-  "AiJudgePanel.whichWeekLabel": "どの週のタスクに入れますか？"
+  "AiJudgePanel.whichWeekLabel": "どの週のタスクに入れますか？",
+  "CourseTemplateEditorPage.draftRestoredMsg": "保存されていない編集内容を復元しました"
 }
