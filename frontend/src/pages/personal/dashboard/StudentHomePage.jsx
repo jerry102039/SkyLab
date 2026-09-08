@@ -1053,7 +1053,6 @@ export default function StudentHomePage({ courseView = false }) {
                   type="button"
                   key={template.id}
                   className={styles.templateCard}
-                  style={{ "--accent-color": "var(--color-primary)" }}
                   onClick={() => navigate(`/quick-template/${template.id}`, { state: { from: "/dashboard" } })}
                 >
                   <div className={styles.templateHeader}>

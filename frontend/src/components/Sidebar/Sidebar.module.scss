@@ -528,7 +528,7 @@
 
     .userName { color: var(--color-text-on-primary); }
     .userEmail { color: color-mix(in srgb, var(--color-text-on-primary) 75%, transparent); }
-    .avatar    { background: rgba(255,255,255,0.25); }
+    .avatar    { background: color-mix(in srgb, var(--color-text-on-primary) 25%, transparent); }
   }
 
   .collapsed & {

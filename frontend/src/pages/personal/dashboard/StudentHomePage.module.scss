@@ -1120,7 +1120,7 @@
   padding: 24px;
   align-items: center;
   justify-content: center;
-  background: rgb(4 10 22 / 76%);
+  background: var(--color-overlay);
   backdrop-filter: blur(4px);
 }
 
@@ -1296,7 +1296,7 @@
     height: 120px;
     background: radial-gradient(
       circle at top right,
-      color-mix(in srgb, var(--accent-color) 12%, transparent),
+      color-mix(in srgb, var(--color-primary) 12%, transparent),
       transparent 70%
     );
     pointer-events: none;
@@ -1306,16 +1306,16 @@
 
   &:hover {
     transform: translateY(-3px);
-    border-color: color-mix(in srgb, var(--accent-color) 50%, var(--color-border));
-    box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-color) 18%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary) 50%, var(--color-border));
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--color-primary) 18%, transparent);
 
     &::before { opacity: 1; }
     .templateLogo {
       transform: scale(1.05);
-      border-color: color-mix(in srgb, var(--accent-color) 40%, var(--color-border));
+      border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
     }
     .templateAction {
-      color: var(--accent-color);
+      color: var(--color-primary);
       gap: 8px;
     }
   }
@@ -1337,7 +1337,7 @@
   border-radius: $radius-12;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  color: var(--accent-color);
+  color: var(--color-primary);
   flex-shrink: 0;
   overflow: hidden;
   transition: transform $transition-base, border-color $transition-base;
@@ -1352,8 +1352,8 @@
 .templateCategoryChip {
   @include badge-base;
   padding: 2px 8px;
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
-  color: var(--accent-color);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -1704,7 +1704,7 @@
   border-radius: 20px;
   box-shadow:
     0 0 0 5px color-mix(in srgb, var(--color-primary) 22%, transparent),
-    0 0 0 9999px rgb(7 12 24 / 0.64);
+    0 0 0 9999px var(--color-overlay);
   pointer-events: none;
   transition:
     top $transition-slow,

@@ -411,9 +411,9 @@ function TopologyPreview({ item }) {
       type: "smoothstep",
       animated: true,
       label: `${bidirectional ? t("ClassWorkspacePage.directionBidirectional") : t("ClassWorkspacePage.directionOneWay")} · ${String(edge.protocol).toUpperCase()}${edge.port ? `/${edge.port}` : ""}`,
-      markerEnd: { type: MarkerType.ArrowClosed, color: "#5d78cf" },
-      markerStart: bidirectional ? { type: MarkerType.ArrowClosed, color: "#5d78cf" } : undefined,
-      style: { stroke: "#5d78cf", strokeWidth: 2 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: "var(--color-primary)" },
+      markerStart: bidirectional ? { type: MarkerType.ArrowClosed, color: "var(--color-primary)" } : undefined,
+      style: { stroke: "var(--color-primary)", strokeWidth: 2 },
       labelStyle: { fill: "var(--color-text-secondary)", fontSize: 10, fontWeight: 600 },
       labelBgStyle: { fill: "var(--color-surface)", fillOpacity: 0.95 },
     };

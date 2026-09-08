@@ -36,7 +36,7 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 20px;
-  box-shadow: 0 12px 40px rgba(27, 51, 96, 0.12);
+  box-shadow: var(--shadow-lg);
   animation: panelIn 180ms ease both;
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
@@ -527,7 +527,7 @@
   border: 1px solid var(--color-border);
   border-radius: $radius-16;
   background: var(--color-surface);
-  box-shadow: 0 3px 14px rgba(27, 51, 96, 0.08);
+  box-shadow: var(--shadow-sm);
 
   &:focus-within { border-color: var(--color-primary); }
 

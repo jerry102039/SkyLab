@@ -198,7 +198,7 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
             onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(""); }}
             nodesDraggable={!locked}
             nodesConnectable={!locked}
-            connectionLineStyle={{ stroke: "#4f6fdc", strokeWidth: 3 }}
+            connectionLineStyle={{ stroke: "var(--color-primary)", strokeWidth: 3 }}
             elementsSelectable
             minZoom={0.7}
             maxZoom={1.4}
