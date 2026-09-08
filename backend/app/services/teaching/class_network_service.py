@@ -15,9 +15,11 @@ from app.models import (
     TeachingClassMachineNode,
     TeachingClassStudent,
     TeachingClassStudentMachine,
+    User,
 )
 from app.services.network import firewall_service
 from app.services.proxmox import proxmox_service
+from app.services.teaching import course_publication_service
 
 COMMENT_PREFIX = "SkyLab:class-net:"
 logger = logging.getLogger(__name__)
@@ -318,6 +320,20 @@ def apply_class_topology(session: Session, *, class_id: uuid.UUID) -> list[str]:
             if row.machine_node_id in nodes
         }
         scope_vmids.update(row.vmid for row in machines if row.vmid is not None)
+        student = session.get(User, enrollment.user_id)
+        if student is not None:
+            errors.extend(
+                course_publication_service.apply_for_machines(
+                    session,
+                    version_id=teaching_class.course_version_id,
+                    vmid_by_key={
+                        key: row.vmid
+                        for key, row in machines_by_key.items()
+                        if row.vmid is not None
+                    },
+                    owner=student,
+                )
+            )
         if edges:
             for edge in edges:
                 source = machines_by_key.get(edge.source_node_key)

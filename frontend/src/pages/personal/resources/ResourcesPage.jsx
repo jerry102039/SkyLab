@@ -388,7 +388,8 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
       : <strong>{machine.name}</strong>}<small>{machine.role} · {t(type.labelKey ?? type.label)}{specLabel ? ` · ${specLabel}` : ""}</small></div></div></td>
     <td className={styles.td}><div className={styles.envPrimary}>{machine.os}</div><div className={styles.envSub}>{machine.resource ? t("EnvironmentMachineRow.resourceConnected") : t("EnvironmentMachineRow.creating")}</div></td>
     <td className={styles.td}><StatusBadge status={machine.status} /></td>
-    <td className={styles.td}><span className={styles.mono}>{machine.ip}</span></td>
+    <td className={styles.td}><span className={styles.mono}>{machine.ip}</span>
+      {machine.publicUrl && <a className={styles.publicUrlLink} href={machine.publicUrl} target="_blank" rel="noreferrer"><MIcon name="open_in_new" size={13} />{machine.publicUrl.replace(/^https?:\/\//, "")}</a>}</td>
     <td className={styles.td}><span className={styles.muted}>{t("EnvironmentMachineRow.managedByEnvironment")}</span></td>
     <td className={styles.td}>{machine.node}</td>
     <td className={styles.td}><div className={styles.rowActions}>

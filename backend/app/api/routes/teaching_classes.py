@@ -42,7 +42,7 @@ from app.models.base import get_datetime_utc
 from app.repositories import resource as resource_repo
 from app.repositories.user import get_user_by_email
 from app.services.course import course_service
-from app.services.proxmox import proxmox_service
+from app.services.proxmox import provisioning_service, proxmox_service
 from app.services.resource import resource_service
 from app.services.teaching import (
     class_capacity_service,
@@ -727,7 +727,9 @@ def select_course(
                 resource_type=node.resource_type,
                 cpu=node.cpu,
                 memory_mb=node.memory_mb,
-                disk_gb=node.disk_gb,
+                # 克隆機不可能小於來源範本；把下限寫進班級節點，之後的容量
+                # 預檢、IP/資源保留與開機才會用同一個數字。
+                disk_gb=provisioning_service.clone_source_disk_gb(session, node),
                 network=node.network,
                 sort_order=node.sort_order,
             )
