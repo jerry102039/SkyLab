@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Background,
   Handle,
   Position,
   ReactFlow,
+  useNodesState,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -32,6 +33,17 @@ function makeEmptyTemplate() {
 
 const FIREWALL_PROTOCOLS = ["tcp", "udp", "icmp", "icmpv6", "sctp"];
 
+/** 規格滑桿範圍；後端上限為 64 核 / 128 GB RAM / 2000 GB Disk，這裡取教學情境的保守值。 */
+const CPU_RANGE = [1, 32];
+const MEMORY_RANGE = [1, 64];
+const LXC_DISK_RANGE = [1, 1000];
+const VM_DISK_RANGE = [10, 1000];
+
+/** LXC 映像是 tarball，檔名直接當機器名稱又臭又長，去掉封裝副檔名。 */
+function stripImageExtension(name) {
+  return String(name).replace(/\.tar(\.(gz|xz|zst|bz2|lzo))?$/i, "");
+}
+
 function TopologyMachineNode({ data, selected, isConnectable }) {
   const { t } = useTranslation("teaching");
   const node = data.node;
@@ -39,7 +51,7 @@ function TopologyMachineNode({ data, selected, isConnectable }) {
     <Handle type="target" position={Position.Left} isConnectable={isConnectable} />
     <div className={styles.flowNodeIcon}><MIcon name={node.type === "lxc" ? "deployed_code" : "dns"} size={18} /></div>
     <div className={styles.flowNodeLabel}>
-      <strong>{node.name}</strong>
+      <strong title={node.name}>{node.name}</strong>
       <span>{node.sourceType === "custom" ? t("CourseTemplateEditorPage.sourceCustomShort") : t("CourseTemplateEditorPage.sourceTemplateShort")} · {node.type === "lxc" ? t("CourseTemplateEditorPage.typeContainerLxc") : t("CourseTemplateEditorPage.typeVm")}</span>
       <small>{node.cpu} CPU · {node.memory} GB RAM · {node.disk} GB</small>
     </div>
@@ -57,6 +69,7 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
   const [customType, setCustomType] = useState("qemu");
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedEdgeId, setSelectedEdgeId] = useState("");
+  const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState([]);
   const atLimit = value.length >= 3;
 
   function addMachine() {
@@ -77,8 +90,11 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
       onChange([...value, {
         id: nodeId, sourceType: "custom", sourceTemplateId: null, customImageRef: source.value,
         customUsername: "student", customUnprivileged: true,
-        name: source.label.split(" · ")[0], role: t("CourseTemplateEditorPage.defaultMachineRole"), type: customType, image: source.label,
-        cpu: 2, memory: 2, disk: customType === "lxc" ? 8 : 20, network: "lab-net", icon: "dns",
+        name: stripImageExtension(source.label.split(" · ")[0]), role: t("CourseTemplateEditorPage.defaultMachineRole"), type: customType, image: source.label,
+        cpu: customType === "lxc" ? 2 : (source.cores ?? 2),
+        memory: customType === "lxc" ? 2 : Math.max(1, Math.round((source.memoryMb ?? 2048) / 1024)),
+        disk: customType === "lxc" ? 8 : Math.max(VM_DISK_RANGE[0], source.diskGb ?? 20),
+        network: "lab-net", icon: "dns",
         positionX: 60 + value.length * 260, positionY: 120,
       }]);
     }
@@ -129,34 +145,54 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
     setSelectedEdgeId("");
   }
 
-  function handleGraphNodesChange(changes) {
-    const positions = new Map(
-      changes
-        .filter((change) => change.type === "position" && change.position)
-        .map((change) => [change.id, change.position]),
-    );
-    if (!positions.size) return;
+  const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
+  const selectedNode = value.find((node) => node.id === selectedNodeId) ?? (!selectedEdge ? value[0] : null);
+  // 來自 PVE 範本的機器沿用範本規格，只有自訂規格可調整。
+  const specLocked = locked || selectedNode?.sourceType !== "custom";
+  // 自訂規格的 VM 其實也是克隆一台 PVE 範本機，磁碟不可小於該範本。
+  const customVmImage = selectedNode?.sourceType === "custom" && selectedNode?.type !== "lxc"
+    ? vmImages.find((item) => item.value === String(selectedNode.customImageRef))
+    : null;
+  const vmDiskFloor = Math.max(VM_DISK_RANGE[0], Number(customVmImage?.diskGb) || 0);
+  const diskRange = selectedNode?.type === "lxc"
+    ? LXC_DISK_RANGE
+    : [vmDiskFloor, Math.max(VM_DISK_RANGE[1], vmDiskFloor)];
+
+  // 範本清單是非同步載入的，既有節點可能存著低於下限的磁碟值，補正一次。
+  useEffect(() => {
+    if (specLocked || !selectedNode || selectedNode.disk >= diskRange[0]) return;
+    patchNode(selectedNode.id, { disk: diskRange[0] });
+  }, [specLocked, selectedNode, diskRange[0]]);
+  // 畫布節點交給 ReactFlow 自己維護：拖曳時只更新畫布，不會讓整個編輯器重繪。
+  // 已在畫布上的節點沿用當下位置，避免規格變更把拖到一半的節點彈回去。
+  useEffect(() => {
+    setFlowNodes((previous) => {
+      const placed = new Map(previous.map((item) => [item.id, item.position]));
+      return value.map((node, index) => ({
+        id: String(node.id),
+        type: "courseMachine",
+        position: placed.get(String(node.id)) ?? {
+          x: Number(node.positionX ?? (60 + index * 260)),
+          y: Number(node.positionY ?? (120 + (index % 2) * 45)),
+        },
+        data: { node },
+        selected: selectedNode?.id === node.id,
+      }));
+    });
+  }, [value, selectedNode?.id, setFlowNodes]);
+
+  // 位置只在放開滑鼠時回寫，一次拖曳只產生一筆變更。
+  const commitNodePositions = useCallback((_event, _node, draggedNodes) => {
+    const moved = new Map(draggedNodes.map((item) => [item.id, item.position]));
     onChange(value.map((node) => {
-      const position = positions.get(String(node.id));
+      const position = moved.get(String(node.id));
       return position
         ? { ...node, positionX: Math.round(position.x), positionY: Math.round(position.y) }
         : node;
     }));
-  }
+  }, [onChange, value]);
 
-  const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId);
-  const selectedNode = value.find((node) => node.id === selectedNodeId) ?? (!selectedEdge ? value[0] : null);
-  const graphNodes = value.map((node, index) => ({
-    id: String(node.id),
-    type: "courseMachine",
-    position: {
-      x: Number(node.positionX ?? (60 + index * 260)),
-      y: Number(node.positionY ?? (120 + (index % 2) * 45)),
-    },
-    data: { node },
-    selected: selectedNode?.id === node.id,
-  }));
-  const graphEdges = edges.map((edge) => ({
+  const graphEdges = useMemo(() => edges.map((edge) => ({
     ...edge,
     type: "connection",
     data: {
@@ -171,7 +207,7 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
       onDelete: locked ? null : () => removeEdge(edge.id),
     },
     zIndex: 5,
-  }));
+  })), [edges, locked, t]);
 
   return <section className={`${styles.card} ${styles.templateMachineWorkspace}`}>
       <div className={styles.machineWorkspaceHeader}>
@@ -188,12 +224,13 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
       {value.length ? <>
         <div className={styles.topologyWorkspace}>
           <div className={styles.topologyCanvas}><ReactFlow
-            nodes={graphNodes}
+            nodes={flowNodes}
             edges={graphEdges}
             nodeTypes={TOPOLOGY_NODE_TYPES}
             edgeTypes={TOPOLOGY_EDGE_TYPES}
             onConnect={connect}
-            onNodesChange={handleGraphNodesChange}
+            onNodesChange={onFlowNodesChange}
+            onNodeDragStop={commitNodePositions}
             onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(""); }}
             onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(""); }}
             nodesDraggable={!locked}
@@ -217,15 +254,14 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
               <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.directionHint")}</p>
               {!locked && <button type="button" className={styles.inspectorDanger} onClick={() => removeEdge(selectedEdge.id)}><MIcon name="delete_outline" size={16} />{t("CourseTemplateEditorPage.deleteConnectionBtn")}</button>}
             </> : selectedNode ? <>
-              <div className={styles.inspectorTitle}><MIcon name="dns" size={18} /><div><strong>{selectedNode.name}</strong><small>{selectedNode.sourceType === "custom" ? t("CourseTemplateEditorPage.sourceCustomSpec") : t("CourseTemplateEditorPage.sourceExistingTemplate")} · {selectedNode.type === "lxc" ? t("CourseTemplateEditorPage.typeContainerLxc") : t("CourseTemplateEditorPage.typeVm")}</small></div></div>
+              <div className={styles.inspectorTitle}><MIcon name="dns" size={18} /><div><strong title={selectedNode.name}>{selectedNode.name}</strong><small>{selectedNode.sourceType === "custom" ? t("CourseTemplateEditorPage.sourceCustomSpec") : t("CourseTemplateEditorPage.sourceExistingTemplate")} · {selectedNode.type === "lxc" ? t("CourseTemplateEditorPage.typeContainerLxc") : t("CourseTemplateEditorPage.typeVm")}</small></div></div>
               <label>{t("CourseTemplateEditorPage.fieldName")}<input disabled={locked} value={selectedNode.name} onChange={(event) => patchNode(selectedNode.id, { name: event.target.value })} /></label>
               <label>{t("CourseTemplateEditorPage.fieldRole")}<input disabled={locked} value={selectedNode.role} onChange={(event) => patchNode(selectedNode.id, { role: event.target.value })} /></label>
-              <div className={styles.inspectorTriple}>
-                <label>CPU<input disabled={locked || selectedNode.sourceType !== "custom"} type="number" min="1" max="32" value={selectedNode.cpu} onChange={(event) => patchNode(selectedNode.id, { cpu: Number(event.target.value) })} /></label>
-                <label>RAM<input disabled={locked || selectedNode.sourceType !== "custom"} type="number" min="1" max="64" value={selectedNode.memory} onChange={(event) => patchNode(selectedNode.id, { memory: Number(event.target.value) })} /></label>
-                <label>Disk<input disabled={locked || selectedNode.sourceType !== "custom"} type="number" min={selectedNode.type === "lxc" ? 1 : 10} max="1000" value={selectedNode.disk} onChange={(event) => patchNode(selectedNode.id, { disk: Number(event.target.value) })} /></label>
+              <div className={styles.inspectorSliders}>
+                <label><span className={styles.sliderLabel}>CPU<em>{t("CourseTemplateEditorPage.cpuValue", { count: selectedNode.cpu })}</em></span><input disabled={specLocked} type="range" step="1" min={Math.min(CPU_RANGE[0], selectedNode.cpu)} max={Math.max(CPU_RANGE[1], selectedNode.cpu)} value={selectedNode.cpu} onChange={(event) => patchNode(selectedNode.id, { cpu: Number(event.target.value) })} /></label>
+                <label><span className={styles.sliderLabel}>RAM<em>{t("CourseTemplateEditorPage.memoryValue", { count: selectedNode.memory })}</em></span><input disabled={specLocked} type="range" step="1" min={Math.min(MEMORY_RANGE[0], selectedNode.memory)} max={Math.max(MEMORY_RANGE[1], selectedNode.memory)} value={selectedNode.memory} onChange={(event) => patchNode(selectedNode.id, { memory: Number(event.target.value) })} /></label>
+                <label><span className={styles.sliderLabel}>Disk<em>{t("CourseTemplateEditorPage.diskValue", { count: selectedNode.disk })}</em></span><input disabled={specLocked} type="range" step="1" min={Math.min(diskRange[0], selectedNode.disk)} max={Math.max(diskRange[1], selectedNode.disk)} value={selectedNode.disk} onChange={(event) => patchNode(selectedNode.id, { disk: Number(event.target.value) })} /></label>
               </div>
-              <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.storageAutoHint")}</p>
               {!locked && <button type="button" className={styles.inspectorDanger} onClick={() => removeMachine(selectedNode.id)}><MIcon name="delete_outline" size={16} />{t("CourseTemplateEditorPage.removeNodeBtn")}</button>}
             </> : null}
           </aside>
@@ -331,7 +367,7 @@ export default function CourseTemplateEditorPage() {
     Promise.all([apiGet("/api/v1/vm/templates"), apiGet("/api/v1/lxc/templates")])
       .then(([vms, lxcs]) => {
         if (!active) return;
-        setVmImages((vms ?? []).map((item) => ({ value: String(item.vmid), label: t("CourseTemplateEditorPage.vmImageLabel", { name: item.name, vmid: item.vmid, node: item.node }) })));
+        setVmImages((vms ?? []).map((item) => ({ value: String(item.vmid), label: t("CourseTemplateEditorPage.vmImageLabel", { name: item.name, vmid: item.vmid, node: item.node }), cores: item.cores, memoryMb: item.memory_mb, diskGb: item.disk_gb })));
         setLxcImages((lxcs ?? []).map((item) => ({ value: item.volid, label: item.volid.split("/").pop() ?? item.volid })));
       })
       .catch((reason) => {
@@ -390,7 +426,6 @@ export default function CourseTemplateEditorPage() {
     {!locked && saveBlockReason && <p className={styles.persistentFeedback}><MIcon name="info" size={17} />{t("CourseTemplateEditorPage.cannotSaveYet", { reason: saveBlockReason })}</p>}
     <section className={styles.stepTabsBar}>
       <nav className={styles.stepTabs}>{TABS.map(([key, labelKey], index) => <button type="button" key={key} className={tab === key ? styles.stepActive : ""} onClick={() => changeTab(key)}><span>{index + 1}</span><strong>{t(labelKey)}</strong></button>)}</nav>
-      <div className={styles.stepTabsAside}><span>{t("CourseTemplateEditorPage.machineCountLabel")}</span><strong>{t("CourseTemplateEditorPage.machineCountValue", { count: template.nodes.length })}</strong></div>
     </section>
     {tab === "basic" && <section className={styles.card}><div className={styles.cardHeader}><div><h2>{t("CourseTemplateEditorPage.tabBasicLabel")}</h2><p>{locked ? t("CourseTemplateEditorPage.lockedVersionNote") : t("CourseTemplateEditorPage.reusableEnvNote")}</p></div></div><div className={styles.formGrid}><label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldEnvName")}</span><input disabled={locked} value={template.name} onChange={(event) => update({ name: event.target.value })} placeholder={t("CourseTemplateEditorPage.envNamePlaceholder")} /></label><label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldUsageScope")}</span><select disabled={locked} value={template.usageScope ?? "course"} onChange={(event) => update({ usageScope: event.target.value })}><option value="course">{t("CourseTemplateEditorPage.usageScopeCourseOnly")}</option><option value="quick_practice">{t("CourseTemplateEditorPage.usageScopeQuickPracticeOnly")}</option><option value="both">{t("CourseTemplateEditorPage.usageScopeBoth")}</option></select></label>{offersPractice && <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldMaxConcurrent")}</span><input disabled={locked} type="number" min={1} max={500} placeholder={t("CourseTemplateEditorPage.maxConcurrentPlaceholder")} value={template.maxConcurrentSessions ?? ""} onChange={(event) => update({ maxConcurrentSessions: event.target.value === "" ? null : Number(event.target.value) })} /></label>}{offersPractice && <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldAudience")}</span><select disabled={locked} value={audience} onChange={(event) => update({ audience: event.target.value })}><option value="class">{t("CourseTemplateEditorPage.audienceOptClass")}</option><option value="campus">{t("CourseTemplateEditorPage.audienceOptCampus")}</option><option value="owner">{t("CourseTemplateEditorPage.audienceOptOwner")}</option></select></label>}{offersPractice && audience === "class" && <div className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldAudienceClasses")}</span>{classes.length === 0 ? <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.noClassesHint")}</p> : <div className={styles.audienceClassList}>{classes.map((item) => <label key={item.id} className={styles.audienceClassItem}><input type="checkbox" disabled={locked} checked={(template.audienceClassIds ?? []).includes(String(item.id))} onChange={(event) => update({ audienceClassIds: event.target.checked ? [...(template.audienceClassIds ?? []), String(item.id)] : (template.audienceClassIds ?? []).filter((id) => id !== String(item.id)) })} /><span>{item.name}<small>{item.code} · {item.term}</small></span></label>)}</div>}</div>}<label className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldEnvDescription")}</span><textarea disabled={locked} rows={3} value={template.description ?? ""} onChange={(event) => update({ description: event.target.value })} /></label></div><div className={styles.actionFooter}><button type="button" className={styles.btnPrimary} onClick={() => changeTab("machines")}>{t("CourseTemplateEditorPage.viewMachineConfigBtn")}<MIcon name="arrow_forward" size={16} /></button></div></section>}
     {tab === "machines" && <MachineEditor value={template.nodes} edges={template.edges ?? []} onChange={(nodes) => update({ nodes })} onEdgesChange={(edges) => update({ edges })} pveTemplates={pveTemplates} vmImages={vmImages} lxcImages={lxcImages} sourceNotice={sourceNotice} locked={locked} />}

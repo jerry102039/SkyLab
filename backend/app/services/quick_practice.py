@@ -512,6 +512,14 @@ def process_lifecycle() -> int:
     return processed
 
 
+def _node_disk_gb(session: Session, node: CourseEnvironmentNode) -> int:
+    """節點磁碟的實際大小，含來源範本下限；配額與申請單共用同一個值。"""
+    # 頂層 import 會與 provisioning_service 互相相依
+    from app.services.proxmox import provisioning_service  # noqa: PLC0415
+
+    return provisioning_service.clone_source_disk_gb(session, node)
+
+
 def _machine_request(
     *,
     session: Session,
@@ -550,6 +558,7 @@ def _machine_request(
             ) from exc
         username = node.custom_username or "student"
 
+    disk_gb = _node_disk_gb(session, node)
     return VMRequestCreate(
         reason=f"Quick practice environment: {environment.name[:120]}",
         resource_type="lxc" if is_lxc else "vm",
@@ -564,9 +573,9 @@ def _machine_request(
         start_at=now,
         end_at=expires_at,
         ostemplate=ostemplate,
-        rootfs_size=node.disk_gb if is_lxc else None,
+        rootfs_size=disk_gb if is_lxc else None,
         template_id=template_id,
-        disk_size=None if is_lxc else node.disk_gb,
+        disk_size=None if is_lxc else disk_gb,
         username=username,
     )
 
@@ -670,7 +679,7 @@ def launch(
         user.id,
         delta_cores=sum(node.cpu for node in nodes),
         delta_memory_mb=sum(node.memory_mb for node in nodes),
-        delta_disk_gb=sum(node.disk_gb for node in nodes),
+        delta_disk_gb=sum(_node_disk_gb(session, node) for node in nodes),
         delta_instances=len(nodes),
     )
 

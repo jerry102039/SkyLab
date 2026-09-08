@@ -839,6 +839,8 @@ def plan_provision(*, session: Session, db_request) -> dict:
             disk_gb=int(db_request.rootfs_size or 8),
             required_content="rootdir",
         )
+        plan["rootfs_size"] = db_request.rootfs_size or 8
+        plan["template_disk_gb"] = int(template_row.default_disk or 0)
     elif db_request.resource_type == "lxc":
         # 早期防線：vzcreate 前確認目標節點真的看得到這個 vztmpl，
         # 避免 PVE 端 volume does not exist 的晚期失敗（映射整批查詢
@@ -963,6 +965,13 @@ def execute_provision(plan: dict) -> tuple[int, str]:
                     clone_updates["nameserver"] = net_cfg["dns_servers"]
                 proxmox_service.update_config(
                     actual_node, new_vmid, "lxc", **clone_updates
+                )
+                # 停機狀態下先放大 rootfs，再套防火牆與啟動
+                _resize_clone_rootfs_if_needed(
+                    actual_node,
+                    new_vmid,
+                    plan.get("rootfs_size"),
+                    int(plan.get("template_disk_gb") or 0),
                 )
                 firewall_service.setup_default_rules(actual_node, new_vmid, "lxc")
                 apply_password = bool(
@@ -1204,6 +1213,46 @@ def _template_disk_gb(template: dict) -> int:
     return -(-int(maxdisk) // (1024**3)) if maxdisk else 0
 
 
+def template_disk_floor_gb(template_id: int) -> int:
+    """未註冊 PVE 範本的磁碟大小（GB）；查不到回 0。
+
+    克隆磁碟只能放大，所以範本大小就是克隆機的下限。呼叫端拿它把申請值
+    提高到實際會開出來的大小，避免配額與實體資源對不上。
+    """
+    try:
+        return _template_disk_gb(proxmox_service.find_vm_template(int(template_id)))
+    except Exception:
+        # 查不到範本磁碟大小時回 0，代表「無下限資訊」，交由 PVE 端把關
+        logger.debug(
+            "Unable to determine template %s disk size", template_id, exc_info=True
+        )
+        return 0
+
+
+def clone_source_disk_gb(session: Session, node) -> int:
+    """機器節點磁碟的實際大小，含來源範本下限。
+
+    克隆機不可能小於來源範本（PVE 只能放大不能縮小），所以節點上填的值
+    低於範本時，實際開出來的是範本大小。配額、班級容量預檢與申請單都必
+    須用這個值，否則會發生「記 20 GB、實際開 40 GB」的超賣。``node`` 是
+    課程模板節點或班級機器節點——兩者的來源欄位同形。
+    """
+    floor = 0
+    if node.source_type == "template" and node.source_template_id:
+        from app.models import VMTemplate  # noqa: PLC0415
+
+        template = session.get(VMTemplate, node.source_template_id)
+        if template is not None:
+            floor = int(template.default_disk or 0)
+    elif str(node.resource_type).lower() != "lxc" and node.custom_image_ref:
+        # 自訂規格的 VM 來源就是一台未註冊的 PVE 範本，下限只能問 PVE。
+        try:
+            floor = template_disk_floor_gb(int(node.custom_image_ref))
+        except ValueError:
+            floor = 0
+    return max(int(node.disk_gb), floor)
+
+
 def _resize_clone_disk_if_needed(
     node: str, vmid: int, template_id: int, disk_size: int | None
 ) -> None:
@@ -1215,16 +1264,7 @@ def _resize_clone_disk_if_needed(
     """
     if not disk_size:
         return
-    template_gb = 0
-    try:
-        template_gb = _template_disk_gb(
-            proxmox_service.find_vm_template(template_id)
-        )
-    except Exception:
-        # 查不到範本磁碟大小時略過下限檢查（PVE 端會再驗證）
-        logger.debug(
-            "Unable to determine template %s disk size", template_id, exc_info=True
-        )
+    template_gb = template_disk_floor_gb(template_id)
     if template_gb and int(disk_size) <= template_gb:
         logger.info(
             "Skip disk resize for VM %d: requested %dG <= template %dG",
@@ -1234,6 +1274,51 @@ def _resize_clone_disk_if_needed(
         )
         return
     proxmox_service.resize_disk(node, vmid, "qemu", "scsi0", f"{int(disk_size)}G")
+
+
+_LXC_ROOTFS_SIZE_UNITS = {"K": 1 / 1024**2, "M": 1 / 1024, "G": 1.0, "T": 1024.0}
+
+
+def _lxc_rootfs_gb(node: str, vmid: int) -> int:
+    """讀 LXC 目前的 rootfs 大小（GB）；讀不到或格式看不懂回 0。"""
+    try:
+        rootfs = str(proxmox_service.get_config(node, vmid, "lxc").get("rootfs") or "")
+    except Exception:
+        logger.debug("Unable to read rootfs size for CT %s", vmid, exc_info=True)
+        return 0
+    match = re.search(r"size=(\d+(?:\.\d+)?)([KMGT])", rootfs)
+    if not match:
+        return 0
+    return int(float(match.group(1)) * _LXC_ROOTFS_SIZE_UNITS[match.group(2)])
+
+
+def _resize_clone_rootfs_if_needed(
+    node: str, vmid: int, rootfs_size: int | None, template_gb: int
+) -> None:
+    """LXC 克隆的 rootfs 同樣只能放大：requested <= 範本大小時跳過。
+
+    沒有這一步，從範本克隆的 LXC 會一律停在範本大小，申請單上的磁碟值
+    形同虛設，卻照樣計入配額與班級容量。範本大小以註冊資料為準，缺值時
+    改讀克隆機自己的 rootfs（克隆是範本的副本，大小相同）；兩者都問不到
+    就跳過 —— 不知道下限時貿然 resize，縮小會直接讓整個開機失敗。
+    """
+    if not rootfs_size:
+        return
+    floor = template_gb or _lxc_rootfs_gb(node, vmid)
+    if not floor:
+        logger.warning(
+            "Skip rootfs resize for CT %d: template size unknown", vmid
+        )
+        return
+    if int(rootfs_size) <= floor:
+        logger.info(
+            "Skip rootfs resize for CT %d: requested %dG <= template %dG",
+            vmid,
+            int(rootfs_size),
+            floor,
+        )
+        return
+    proxmox_service.resize_disk(node, vmid, "lxc", "rootfs", f"{int(rootfs_size)}G")
 
 
 def _template_ostype(vm: dict) -> str | None:
