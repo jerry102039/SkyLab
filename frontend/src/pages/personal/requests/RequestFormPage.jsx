@@ -975,18 +975,17 @@ export default function RequestFormPage({ onBack, className, initialPrefill = nu
         </button>
       </PageHeader>
 
-      {/* AI 代填一定要說出來：使用者要知道哪些值不是自己填的 */}
-      {aiPrefilled && (
-        <p className={styles.adviceBox}>
-          <MIcon name="auto_awesome" size={15} />
-          {" "}{t("RequestFormPage.aiPrefillNotice")}
-        </p>
-      )}
-
       {/* ── 主體：表單 + AI 側欄 ── */}
       <div className={styles.formPageBody}>
         <div className={styles.formScroll}>
           <div className={styles.formInner}>
+          {/* AI 代填一定要說出來：使用者要知道哪些值不是自己填的 */}
+          {aiPrefilled && (
+            <p className={styles.adviceBox}>
+              <MIcon name="auto_awesome" size={15} />
+              {" "}{t("RequestFormPage.aiPrefillNotice")}
+            </p>
+          )}
           <form id="request-form" onSubmit={handleSubmit} className={styles.form}>
             {/* ── 申請模式（管理員／老師） ── */}
             {isPrivileged && (

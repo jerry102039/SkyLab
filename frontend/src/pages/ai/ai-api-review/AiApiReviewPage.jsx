@@ -10,6 +10,7 @@ import { useToast } from "../../../hooks/useToast";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import PageHeader from "../../../components/PageHeader/PageHeader";
+import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
 
 function fmtTime(iso, notReviewedLabel) {
   return iso ? new Date(iso).toLocaleString("zh-TW") : notReviewedLabel;
@@ -215,17 +216,14 @@ export default function AiApiReviewPage() {
     <div className={styles.page}>
       <PageHeader title={t("AiApiReviewPage.pageTitle")} subtitle={t("AiApiReviewPage.pageSubtitle")} />
 
-      <div className={styles.tabs}>
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className={styles.tabsRow}>
+        <SegmentedControl
+          className={styles.tabsControl}
+          options={TABS.map(({ key, label }) => ({ value: key, label }))}
+          value={activeTab}
+          onChange={setActiveTab}
+          ariaLabel={t("AiApiReviewPage.tabsAriaLabel")}
+        />
       </div>
 
       <div className={styles.content}>

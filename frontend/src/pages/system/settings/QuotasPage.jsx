@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import styles from "./QuotasTab.module.scss";
+import styles from "./QuotasPage.module.scss";
+import pageStyles from "./settings.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
+import PageHeader from "../../../components/PageHeader/PageHeader";
 import { QuotasService } from "../../../services/quotas";
 import { UsersService } from "../../../services/users";
 import { useConfirm } from "../../../components/ConfirmDialog/ConfirmProvider";
@@ -11,8 +13,8 @@ import { useToast } from "../../../hooks/useToast";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 
 /**
- * 配額分頁（系統設定 → 配額）：全域預設上限 + 個別使用者覆寫。
- * 原本是獨立的 /quotas 頁面，2026-09 併入系統設定；舊網址會導向 /settings?tab=quotas。
+ * 配額（系統管理 → 配額）：全域預設上限 + 個別使用者覆寫。
+ * 2026-09 曾短暫併入「系統設定」的分頁，同月隨系統設定拆分回到獨立的 /quotas。
  */
 
 const FIELD_KEYS = ["max_cpu_cores", "max_memory_mb", "max_disk_gb", "max_instances"];
@@ -365,7 +367,7 @@ function GlobalQuotaCard({ config, onSaved }) {
   );
 }
 
-export default function QuotasTab() {
+function QuotasSection() {
   const { t } = useTranslation("system");
   const toast = useToast();
   const confirm = useConfirm();
@@ -534,6 +536,19 @@ export default function QuotasTab() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/* ── Page ──────────────────────────────────────────── */
+export default function QuotasPage() {
+  const { t } = useTranslation("system");
+  return (
+    <div className={pageStyles.page}>
+      <PageHeader title={t("SettingsPage.quotasTitle")} subtitle={t("SettingsPage.quotasSubtitle")} />
+      <div className={pageStyles.content}>
+        <QuotasSection />
+      </div>
     </div>
   );
 }

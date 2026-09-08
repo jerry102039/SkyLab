@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import styles from "./SettingsPage.module.scss";
+import styles from "./settings.module.scss";
 import MIcon from "../../../components/MIcon";
 import LoadingState from "../../../components/LoadingState/LoadingState";
+import PageHeader from "../../../components/PageHeader/PageHeader";
 import { LdapConfigService } from "../../../services/ldapConfig";
 import { useToast } from "../../../hooks/useToast";
+
+/**
+ * LDAP（系統管理 → LDAP）：LDAP / Active Directory 登入的連線、服務帳號與角色對映。
+ * 2026-09 從「系統設定」的分頁拆成獨立頁面。
+ */
 
 /** 表單值 → API partial payload（bind_password 留空表示不變更） */
 function toPayload(form) {
@@ -43,7 +49,7 @@ function buildForm(config) {
   };
 }
 
-export default function LdapTab() {
+function LdapForm() {
   const { t } = useTranslation("system");
   const toast = useToast();
   const [config, setConfig] = useState(null);
@@ -255,5 +261,18 @@ export default function LdapTab() {
         </button>
       </div>
     </form>
+  );
+}
+
+/* ── Page ──────────────────────────────────────────── */
+export default function LdapPage() {
+  const { t } = useTranslation("system");
+  return (
+    <div className={styles.page}>
+      <PageHeader title={t("SettingsPage.ldapTitle")} subtitle={t("SettingsPage.ldapSubtitle")} />
+      <div className={styles.content}>
+        <LdapForm />
+      </div>
+    </div>
   );
 }

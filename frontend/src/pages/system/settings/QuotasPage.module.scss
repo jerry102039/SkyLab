@@ -1,4 +1,4 @@
-/* 分頁內容：外層版面（padding、頁首）由 SettingsPage 負責，這裡只管卡片堆疊 */
+/* 配額頁內容：外層版面（padding、頁首）沿用 settings.module.scss 的 .page / .content，這裡只管卡片堆疊 */
 .stack {
   @include flex-column;
   gap: $spacing-24;
@@ -127,8 +127,8 @@
 }
 
 .badge_user {
-  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
-  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  color: var(--color-danger);
 }
 
 /* ── 按鈕 ── */

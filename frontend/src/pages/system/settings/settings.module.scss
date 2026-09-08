@@ -1,6 +1,7 @@
 @use "../../../assets/styles/variables" as *;
 @use "../../../assets/styles/mixins" as *;
 
+/* 系統管理底下七個設定頁（PVE 連線／資源排程／治理／配額／LDAP／節點管理／Storage）共用的版面與表單樣式 */
 .page {
   @include flex-column;
   gap: $spacing-24;
@@ -9,37 +10,6 @@
 
   @media (min-width: $breakpoint-sidebar) {
     padding: 0;
-  }
-}
-
-/* ── Header ── */
-/* ── Tabs（pill 樣式，同 AI API / AI API Review） ── */
-.tabs {
-  display: flex;
-  gap: $spacing-4;
-  flex-wrap: wrap;
-}
-
-.tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px $spacing-16;
-  border-radius: $radius-pill;
-  font-size: $font-size-14;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background $transition-base, color $transition-base;
-
-  &:hover {
-    background: var(--color-hover);
-    color: var(--color-text);
-  }
-
-  &.tabActive {
-    background: var(--color-text);
-    color: var(--color-surface);
-    font-weight: $font-weight-500;
   }
 }
 

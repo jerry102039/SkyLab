@@ -9,12 +9,13 @@ import { useTranslation } from "react-i18next";
 import { getVmRules, getVmOptions } from "../../services/firewall";
 import styles from "./RulesPanel.module.scss";
 import MIcon from "../MIcon";
+import LoadingState from "../LoadingState/LoadingState";
 
 function Badge({ label, variant }) {
   return <span className={`${styles.badge} ${styles[`badge_${variant}`]}`}>{label}</span>;
 }
 
-export default function RulesPanel({ node, onClose }) {
+export default function RulesPanel({ node, onClose, closing = false }) {
   const { t } = useTranslation("components");
   const [rules,   setRules]   = useState([]);
   const [options, setOptions] = useState(null);
@@ -35,7 +36,7 @@ export default function RulesPanel({ node, onClose }) {
   if (!node) return null;
 
   return (
-    <div className={styles.panel}>
+    <div className={`${styles.panel} ${closing ? styles.panelOut : ""}`}>
       {/* Header */}
       <div className={styles.header}>
         <div className={styles.headerInfo}>
@@ -47,7 +48,7 @@ export default function RulesPanel({ node, onClose }) {
         </button>
       </div>
 
-      {loading && <p className={styles.hint}>{t("RulesPanel.loading")}</p>}
+      {loading && <LoadingState text={t("RulesPanel.loading")} />}
       {error   && <p className={styles.errorMsg}>{error}</p>}
 
       {!loading && !error && (

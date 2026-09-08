@@ -364,12 +364,15 @@
   font-size: $font-size-16;
   font-weight: $font-weight-700;
   color: var(--color-text-primary);
+  overflow-wrap: anywhere;
 }
 
+/* 內文常插入主機名稱等連續長字串，強制可斷行以免撐破彈窗 */
 .modalDesc {
   font-size: $font-size-14;
   color: var(--color-text-secondary);
   line-height: $line-height-base;
+  overflow-wrap: anywhere;
 }
 
 .modalActions {
@@ -424,28 +427,6 @@
     border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border));
   }
 }
-
-/* ── Empty error tint ── */
-
-/* ── Skeleton ── */
-@keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--color-hover) 25%,
-    color-mix(in srgb, var(--color-text-secondary) 8%, var(--color-hover)) 50%,
-    var(--color-hover) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
-}
-
-.skRow   { border-radius: 4px; }
-.skBadge { width: 60px; height: 22px; border-radius: $radius-pill; }
 
 /* ── Retry button ── */
 .retryBtn {

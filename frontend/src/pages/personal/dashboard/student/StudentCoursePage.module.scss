@@ -124,7 +124,7 @@
 
 .info { color: var(--color-info); }
 
-.warning { color: var(--color-warning); }
+.warning { color: var(--color-danger); }
 
 .danger { color: var(--color-danger); }
 
@@ -640,8 +640,8 @@
   }
 
   &.manual {
-    background: color-mix(in srgb, var(--color-warning) 10%, transparent);
-    color: var(--color-warning);
+    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+    color: var(--color-danger);
   }
 }
 
