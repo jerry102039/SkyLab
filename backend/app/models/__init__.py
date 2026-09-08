@@ -39,6 +39,7 @@ from .course_environment import (
     CourseEnvironmentAudience,
     CourseEnvironmentEdge,
     CourseEnvironmentNode,
+    CourseEnvironmentPublication,
     CourseEnvironmentVersion,
     CourseEnvironmentVersionStatus,
 )
@@ -190,6 +191,7 @@ __all__ = [
     "CourseEnvironment",
     "CourseEnvironmentAudience",
     "CourseEnvironmentEdge",
+    "CourseEnvironmentPublication",
     "CourseEnvironmentVersion",
     "CourseEnvironmentVersionStatus",
     "CourseEnvironmentNode",

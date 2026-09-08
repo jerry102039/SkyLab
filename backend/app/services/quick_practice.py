@@ -266,6 +266,24 @@ def _apply_session_topology(
             planned=planned,
         )
     )
+
+    # 「外網 → 機器」的宣告：每位學生各配一個網址，重複執行會略過已發布的
+    from app.services.teaching import course_publication_service  # noqa: PLC0415
+
+    owner = session.get(User, practice.user_id)
+    if owner is not None:
+        errors.extend(
+            course_publication_service.apply_for_machines(
+                session,
+                version_id=practice.environment_version_id,
+                vmid_by_key={
+                    key: request.vmid
+                    for key, request in machines_by_key.items()
+                    if request.vmid is not None
+                },
+                owner=owner,
+            )
+        )
     return errors
 
 
@@ -799,6 +817,12 @@ def serialize_session(session: Session, item: QuickPracticeSession) -> dict:
             .order_by(col(QuickPracticeSessionMachine.sort_order))
         ).all()
     )
+    # 對外網址直接讀反向代理紀錄，清單頁不打 Proxmox
+    from app.services.teaching import course_publication_service  # noqa: PLC0415
+
+    public_urls = course_publication_service.public_urls_by_vmid(
+        session, [request.vmid for _machine, request in rows if request.vmid is not None]
+    )
     machines = []
     for machine, request in rows:
         if request.vmid is not None:
@@ -824,6 +848,7 @@ def serialize_session(session: Session, item: QuickPracticeSession) -> dict:
                     else None
                 ),
                 "os_info": request.os_info,
+                "public_url": public_urls.get(request.vmid) if request.vmid else None,
             }
         )
     statuses = {machine["status"] for machine in machines}

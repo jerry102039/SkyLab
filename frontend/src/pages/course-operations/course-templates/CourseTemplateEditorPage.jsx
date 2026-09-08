@@ -28,7 +28,7 @@ const TABS = [
 ];
 
 function makeEmptyTemplate() {
-  return { id: "new", name: "", description: "", usageScope: "course", audience: "class", audienceClassIds: [], maxConcurrentSessions: null, status: "draft", classes: 0, updatedAt: i18n.t("CourseTemplateEditorPage.notSavedYet", { ns: "teaching" }), nodes: [], edges: [] };
+  return { id: "new", name: "", description: "", usageScope: "course", audience: "class", audienceClassIds: [], maxConcurrentSessions: null, status: "draft", classes: 0, updatedAt: i18n.t("CourseTemplateEditorPage.notSavedYet", { ns: "teaching" }), nodes: [], edges: [], publications: [] };
 }
 
 const FIREWALL_PROTOCOLS = ["tcp", "udp", "icmp", "icmpv6", "sctp"];
@@ -84,7 +84,7 @@ function TopologyMachineNode({ data, selected, isConnectable }) {
 const TOPOLOGY_NODE_TYPES = { courseMachine: TopologyMachineNode };
 const TOPOLOGY_EDGE_TYPES = { connection: ConnectionEdge };
 
-function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vmImages, lxcImages, sourceNotice, locked = false }) {
+function MachineEditor({ value, edges, publications, onChange, onEdgesChange, onPublicationsChange, pveTemplates, vmImages, lxcImages, zones, sourceNotice, locked = false }) {
   const { t } = useTranslation("teaching");
   const [sourceMode, setSourceMode] = useState("template");
   const [sourceId, setSourceId] = useState("");
@@ -129,7 +129,32 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
   function removeMachine(nodeId) {
     onChange(value.filter((item) => item.id !== nodeId));
     onEdgesChange(edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+    onPublicationsChange(publications.filter((item) => item.nodeKey !== nodeId));
     setSelectedNodeId("");
+  }
+
+  function addPublication(node) {
+    const used = new Set(publications.filter((item) => item.nodeKey === node.id).map((item) => `${item.port}/${item.protocol}`));
+    const port = [80, 443, 8080, 3000, 5678].find((candidate) => !used.has(`${candidate}/tcp`)) ?? 8000;
+    onPublicationsChange([...publications, {
+      id: `publication-${Date.now()}`,
+      nodeKey: node.id,
+      mode: zones.length ? "domain" : "firewall_only",
+      port,
+      protocol: "tcp",
+      // 樣板必須帶 {student}，否則全班會搶同一個網址
+      hostnamePrefix: `{student}-${String(node.id).replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase().slice(0, 20).replace(/^-|-$/g, "") || "app"}`,
+      zoneId: zones[0]?.id ?? "",
+      enableHttps: true,
+    }]);
+  }
+
+  function patchPublication(publicationId, patch) {
+    onPublicationsChange(publications.map((item) => item.id === publicationId ? { ...item, ...patch } : item));
+  }
+
+  function removePublication(publicationId) {
+    onPublicationsChange(publications.filter((item) => item.id !== publicationId));
   }
 
   function connect(connection) {
@@ -186,6 +211,15 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
   const diskRange = selectedNode?.type === "lxc"
     ? LXC_DISK_RANGE
     : [vmDiskFloor, Math.max(VM_DISK_RANGE[1], vmDiskFloor)];
+
+  const nodePublications = publications.filter((item) => item.nodeKey === selectedNode?.id);
+
+  /** 給老師看的示範網址：{student} 換成一個代表性的帳號。 */
+  function previewDomain(publication) {
+    const zone = zones.find((item) => item.id === publication.zoneId);
+    const hostname = String(publication.hostnamePrefix || "").replace("{student}", "alice");
+    return zone ? `${hostname}.${zone.name}` : hostname;
+  }
 
   // 範本清單是非同步載入的，既有節點可能存著低於下限的磁碟值，補正一次。
   useEffect(() => {
@@ -291,6 +325,26 @@ function MachineEditor({ value, edges, onChange, onEdgesChange, pveTemplates, vm
                 <label><span className={styles.sliderLabel}>RAM<em>{t("CourseTemplateEditorPage.memoryValue", { count: selectedNode.memory })}</em></span><input disabled={specLocked} type="range" step="1" min={Math.min(MEMORY_RANGE[0], selectedNode.memory)} max={Math.max(MEMORY_RANGE[1], selectedNode.memory)} value={selectedNode.memory} onChange={(event) => patchNode(selectedNode.id, { memory: Number(event.target.value) })} /></label>
                 <label><span className={styles.sliderLabel}>Disk<em>{t("CourseTemplateEditorPage.diskValue", { count: selectedNode.disk })}</em></span><input disabled={specLocked} type="range" step="1" min={Math.min(diskRange[0], selectedNode.disk)} max={Math.max(diskRange[1], selectedNode.disk)} value={selectedNode.disk} onChange={(event) => patchNode(selectedNode.id, { disk: Number(event.target.value) })} /></label>
               </div>
+              <div className={styles.publicationSection}>
+                <div className={styles.publicationHead}>
+                  <span>{t("CourseTemplateEditorPage.publicAccessLabel")}</span>
+                  {!locked && <button type="button" className={styles.publicationAddBtn} onClick={() => addPublication(selectedNode)}><MIcon name="add" size={14} />{t("CourseTemplateEditorPage.addPublicationBtn")}</button>}
+                </div>
+                {nodePublications.length === 0
+                  ? <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.noPublicationHint")}</p>
+                  : nodePublications.map((publication) => <div key={publication.id} className={styles.publicationRow}>
+                      <div className={styles.inspectorSplit}>
+                        <label>{t("CourseTemplateEditorPage.fieldInternalPort")}<input disabled={locked} type="number" min="1" max="65535" value={publication.port} onChange={(event) => patchPublication(publication.id, { port: Number(event.target.value) })} /></label>
+                        <label>{t("CourseTemplateEditorPage.fieldPublishMode")}<select disabled={locked} value={publication.mode} onChange={(event) => patchPublication(publication.id, { mode: event.target.value })}><option value="domain" disabled={!zones.length}>{t("CourseTemplateEditorPage.publishModeDomain")}</option><option value="firewall_only">{t("CourseTemplateEditorPage.publishModeFirewallOnly")}</option></select></label>
+                      </div>
+                      {publication.mode === "domain" ? <>
+                        <label>{t("CourseTemplateEditorPage.fieldHostnameTemplate")}<input disabled={locked} value={publication.hostnamePrefix} onChange={(event) => patchPublication(publication.id, { hostnamePrefix: event.target.value })} placeholder="{student}-app" /></label>
+                        <label>{t("CourseTemplateEditorPage.fieldZone")}<select disabled={locked} value={publication.zoneId} onChange={(event) => patchPublication(publication.id, { zoneId: event.target.value })}>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
+                        <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.hostnameTemplateHint", { example: previewDomain(publication) })}</p>
+                      </> : <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.firewallOnlyHint")}</p>}
+                      {!locked && <button type="button" className={styles.publicationRemoveBtn} onClick={() => removePublication(publication.id)}><MIcon name="close" size={14} />{t("CourseTemplateEditorPage.removePublicationBtn")}</button>}
+                    </div>)}
+              </div>
               {!locked && <button type="button" className={styles.inspectorDanger} onClick={() => removeMachine(selectedNode.id)}><MIcon name="delete_outline" size={16} />{t("CourseTemplateEditorPage.removeNodeBtn")}</button>}
             </> : null}
           </aside>
@@ -327,6 +381,7 @@ export default function CourseTemplateEditorPage() {
   const [pveTemplates, setPveTemplates] = useState([]);
   const [vmImages, setVmImages] = useState([]);
   const [lxcImages, setLxcImages] = useState([]);
+  const [zones, setZones] = useState([]);
   const [sourceNotice, setSourceNotice] = useState("");
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(Boolean(templateId));
@@ -393,6 +448,14 @@ export default function CourseTemplateEditorPage() {
   }, [t]);
   useEffect(() => {
     let active = true;
+    // 反向代理沒設定好時回空陣列，發布方式只留「僅開防火牆」
+    apiGet("/api/v1/reverse-proxy/setup-context")
+      .then((context) => { if (active) setZones(context?.enabled ? (context.zones ?? []) : []); })
+      .catch(() => { if (active) setZones([]); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    let active = true;
     Promise.all([apiGet("/api/v1/vm/templates"), apiGet("/api/v1/lxc/templates")])
       .then(([vms, lxcs]) => {
         if (!active) return;
@@ -457,6 +520,6 @@ export default function CourseTemplateEditorPage() {
       <nav className={styles.stepTabs}>{TABS.map(([key, labelKey], index) => <button type="button" key={key} className={tab === key ? styles.stepActive : ""} onClick={() => changeTab(key)}><span>{index + 1}</span><strong>{t(labelKey)}</strong></button>)}</nav>
     </section>
     {tab === "basic" && <section className={styles.card}><div className={styles.cardHeader}><div><h2>{t("CourseTemplateEditorPage.tabBasicLabel")}</h2><p>{locked ? t("CourseTemplateEditorPage.lockedVersionNote") : t("CourseTemplateEditorPage.reusableEnvNote")}</p></div></div><div className={styles.formGrid}><label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldEnvName")}</span><input disabled={locked} value={template.name} onChange={(event) => update({ name: event.target.value })} placeholder={t("CourseTemplateEditorPage.envNamePlaceholder")} /></label><label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldUsageScope")}</span><select disabled={locked} value={template.usageScope ?? "course"} onChange={(event) => update({ usageScope: event.target.value })}><option value="course">{t("CourseTemplateEditorPage.usageScopeCourseOnly")}</option><option value="quick_practice">{t("CourseTemplateEditorPage.usageScopeQuickPracticeOnly")}</option><option value="both">{t("CourseTemplateEditorPage.usageScopeBoth")}</option></select></label>{offersPractice && <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldMaxConcurrent")}</span><input disabled={locked} type="number" min={1} max={500} placeholder={t("CourseTemplateEditorPage.maxConcurrentPlaceholder")} value={template.maxConcurrentSessions ?? ""} onChange={(event) => update({ maxConcurrentSessions: event.target.value === "" ? null : Number(event.target.value) })} /></label>}{offersPractice && <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldAudience")}</span><select disabled={locked} value={audience} onChange={(event) => update({ audience: event.target.value })}><option value="class">{t("CourseTemplateEditorPage.audienceOptClass")}</option><option value="campus">{t("CourseTemplateEditorPage.audienceOptCampus")}</option><option value="owner">{t("CourseTemplateEditorPage.audienceOptOwner")}</option></select></label>}{offersPractice && audience === "class" && <div className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldAudienceClasses")}</span>{classes.length === 0 ? <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.noClassesHint")}</p> : <div className={styles.audienceClassList}>{classes.map((item) => <label key={item.id} className={styles.audienceClassItem}><input type="checkbox" disabled={locked} checked={(template.audienceClassIds ?? []).includes(String(item.id))} onChange={(event) => update({ audienceClassIds: event.target.checked ? [...(template.audienceClassIds ?? []), String(item.id)] : (template.audienceClassIds ?? []).filter((id) => id !== String(item.id)) })} /><span>{item.name}<small>{item.code} · {item.term}</small></span></label>)}</div>}</div>}<label className={`${styles.field} ${styles.fieldFull}`}><span>{t("CourseTemplateEditorPage.fieldEnvDescription")}</span><textarea disabled={locked} rows={3} value={template.description ?? ""} onChange={(event) => update({ description: event.target.value })} /></label></div><div className={styles.actionFooter}><button type="button" className={styles.btnPrimary} onClick={() => changeTab("machines")}>{t("CourseTemplateEditorPage.viewMachineConfigBtn")}<MIcon name="arrow_forward" size={16} /></button></div></section>}
-    {tab === "machines" && <MachineEditor value={template.nodes} edges={template.edges ?? []} onChange={(nodes) => update({ nodes })} onEdgesChange={(edges) => update({ edges })} pveTemplates={pveTemplates} vmImages={vmImages} lxcImages={lxcImages} sourceNotice={sourceNotice} locked={locked} />}
+    {tab === "machines" && <MachineEditor value={template.nodes} edges={template.edges ?? []} publications={template.publications ?? []} onChange={(nodes) => update({ nodes })} onEdgesChange={(edges) => update({ edges })} onPublicationsChange={(publications) => update({ publications })} pveTemplates={pveTemplates} vmImages={vmImages} lxcImages={lxcImages} zones={zones} sourceNotice={sourceNotice} locked={locked} />}
   </div>;
 }
