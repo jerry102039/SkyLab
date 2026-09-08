@@ -481,9 +481,20 @@
 .readonlyTopology { margin: 16px; overflow: hidden; border: 1px solid var(--color-border); border-radius: $radius-12; background: color-mix(in srgb, var(--color-hover) 24%, var(--color-surface)); }
 .readonlyTopology :global(.react-flow) svg { max-width: none; }
 .readonlyTopology :global(.react-flow__edge path) { stroke-opacity: 1 !important; }
-.readonlyTopologyNode { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 12px 14px; text-align: left; }
-.readonlyTopologyNode strong { overflow: hidden; color: var(--color-text-primary); font-size: $font-size-12; text-overflow: ellipsis; white-space: nowrap; }
-.readonlyTopologyNode span, .readonlyTopologyNode small { color: var(--color-text-muted); font-size: $font-size-10; }
+/* 上課環境的唯讀拓撲：沿用 .flowMachineNode 的外觀，只是不能拖曳 */
+.flowMachineNodeStatic { cursor: default; }
+.flowMachineNodeStatic:active { cursor: default; }
+.flowMachineNodeStatic :global(.react-flow__handle) { opacity: 0.45; }
+.flowNodePublic { display: inline-flex; align-items: center; gap: 3px; color: var(--color-primary); font-size: $font-size-10; font-style: normal; }
+
+/* 對外服務清單（上課環境）：一行一條，與課程環境側欄的摘要同一套說法 */
+.classPublicationList { display: flex; flex-direction: column; gap: 8px; margin: 0 16px 16px; }
+.classPublicationRow { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: $radius-8; background: var(--color-surface); }
+.classPublicationIcon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: $radius-8; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface)); }
+.classPublicationRow div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.classPublicationRow strong { color: var(--color-text-primary); font-size: $font-size-12; overflow-wrap: break-word; }
+.classPublicationRow small { color: var(--color-text-muted); font-size: $font-size-10; overflow-wrap: break-word; }
+
 .topologySummary { flex: 0 0 auto; padding: 4px 11px; border-radius: $radius-pill; color: var(--color-text-secondary); background: color-mix(in srgb, var(--color-hover) 55%, transparent); font-size: $font-size-12; font-weight: $font-weight-500; white-space: nowrap; }
 .setupActions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .topologyInspector label { @include form-field; }

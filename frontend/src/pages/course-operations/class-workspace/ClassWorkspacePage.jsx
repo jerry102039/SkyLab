@@ -1,5 +1,5 @@
 import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Background, MarkerType, ReactFlow } from "@xyflow/react";
+import { Background, Handle, MarkerType, Position, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -65,6 +65,8 @@ function normalizeClass(item) {
     students: (item.students ?? []).map((student) => ({ ...student, id: String(student.id), machines: student.machines ?? [] })),
     jobs: item.provision_jobs ?? [],
     topologyEdges: item.topology_edges ?? [],
+    nodePositions: item.node_positions ?? {},
+    publications: item.publications ?? [],
     readyMachines: item.ready_machines ?? 0,
     totalMachines: item.total_machines ?? 0,
     archivedAt: item.archived_at,
@@ -388,16 +390,74 @@ function WeeklyContent({ item, onRefresh }) {
   </div>;
 }
 
+/* 唯讀拓撲節點：外觀與課程環境編輯器的 TopologyMachineNode 一致（同一份
+   .flowMachineNode 樣式），差別只在不能拖曳連線。角色與對外服務是課程環境
+   宣告的內容，這裡一併顯示，老師才對得起來。 */
+function ReadonlyMachineNode({ data }) {
+  const { t } = useTranslation("teaching");
+  const { node, publicationCount } = data;
+  return <div className={`${styles.flowMachineNode} ${styles.flowMachineNodeStatic}`}>
+    <Handle type="target" position={Position.Left} isConnectable={false} />
+    <div className={styles.flowNodeIcon}><MIcon name={node.resource_type === "lxc" ? "terminal" : "dns"} size={18} /></div>
+    <div className={styles.flowNodeLabel}>
+      <strong title={node.name}>{node.name}</strong>
+      <span>{node.role ? `${node.role} · ` : ""}{node.source_type === "custom" ? t("ClassWorkspacePage.sourceCustomSpecLabel") : t("ClassWorkspacePage.machineTemplateLabel")} · {node.resource_type === "lxc" ? t("ClassWorkspacePage.typeContainerLxc") : t("ClassWorkspacePage.typeVm")}</span>
+      <small>{node.cpu} CPU · {Math.round(node.memory_mb / 1024)} GB RAM · {node.disk_gb} GB</small>
+      {publicationCount > 0 && <em className={styles.flowNodePublic}>
+        <MIcon name="public" size={12} />
+        {t("ClassWorkspacePage.nodePublicCount", { count: publicationCount })}
+      </em>}
+    </div>
+    <Handle type="source" position={Position.Right} isConnectable={false} />
+  </div>;
+}
+
+const READONLY_NODE_TYPES = { classMachine: ReadonlyMachineNode };
+
+/* 對外服務清單：與課程環境編輯器側欄的摘要同一套說法。網址是每位學生各一個，
+   模板只存主機名樣板，所以這裡顯示的是樣板而不是實際網址。 */
+function PublicationSummary({ item }) {
+  const { t } = useTranslation("teaching");
+  const nameByKey = useMemo(
+    () => Object.fromEntries(item.nodes.map((node) => [node.node_key, node.name])),
+    [item.nodes],
+  );
+  return <div className={styles.classPublicationList}>
+    {item.publications.map((publication) => <div key={publication.id} className={styles.classPublicationRow}>
+      <span className={styles.classPublicationIcon}>
+        <MIcon name={publication.mode === "domain" ? "public" : "lock"} size={16} />
+      </span>
+      <div>
+        <strong>{nameByKey[publication.node_key] ?? publication.node_key} · Port {publication.port}</strong>
+        <small>{publication.mode === "domain"
+          ? t("ClassWorkspacePage.publicationDomainHint", { hostname: `${publication.hostname_prefix ?? ""}` })
+          : t("ClassWorkspacePage.publicationFirewallHint")}</small>
+      </div>
+    </div>)}
+  </div>;
+}
+
 function TopologyPreview({ item }) {
   const { t } = useTranslation("teaching");
-  const nodes = item.nodes.map((node, index) => ({
-    id: String(node.node_key),
-    position: { x: 70 + index * 250, y: 95 + (index % 2) * 35 },
-    data: {
-      label: <div className={styles.readonlyTopologyNode}><strong>{node.name}</strong><span>{node.source_type === "custom" ? t("ClassWorkspacePage.sourceCustomSpecLabel") : t("ClassWorkspacePage.machineTemplateLabel")} · {node.resource_type === "lxc" ? t("ClassWorkspacePage.typeContainerLxc") : t("ClassWorkspacePage.typeVm")}</span><small>{node.cpu} CPU · {Math.round(node.memory_mb / 1024)} GB RAM · {node.disk_gb} GB</small></div>,
-    },
-    style: { width: 205, padding: 0, borderRadius: 10, borderColor: "var(--color-border)", background: "var(--color-surface)" },
-  }));
+  const publicationCounts = useMemo(() => {
+    const counts = {};
+    for (const publication of item.publications ?? []) {
+      counts[publication.node_key] = (counts[publication.node_key] ?? 0) + 1;
+    }
+    return counts;
+  }, [item.publications]);
+  const nodes = item.nodes.map((node, index) => {
+    // 老師在課程環境排好的座標優先；環境版本查不到才退回依序排開
+    const saved = item.nodePositions?.[node.node_key];
+    return {
+      id: String(node.node_key),
+      type: "classMachine",
+      position: saved
+        ? { x: Number(saved.x), y: Number(saved.y) }
+        : { x: 70 + index * 250, y: 95 + (index % 2) * 35 },
+      data: { node, publicationCount: publicationCounts[node.node_key] ?? 0 },
+    };
+  });
   const edges = item.topologyEdges.map((edge, index) => {
     const bidirectional = edge.direction === "bidirectional";
     return {
@@ -420,6 +480,7 @@ function TopologyPreview({ item }) {
     <ReactFlow
       nodes={nodes}
       edges={edges}
+      nodeTypes={READONLY_NODE_TYPES}
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
@@ -469,7 +530,9 @@ function Machines({ item, templates, template, onRefresh, onTemplate, createdTem
           <div><span>{t("ClassWorkspacePage.envFactStudents")}</span><strong>{t("ClassWorkspacePage.peopleCountUnit", { count: item.students.length })}</strong></div>
           <div><span>{t("ClassWorkspacePage.envFactTotal")}</span><strong>{t("ClassWorkspacePage.machineCountUnit", { count: item.students.length * item.nodes.length })}</strong></div>
           <div><span>{t("ClassWorkspacePage.envFactTopology")}</span><strong>{item.topologyEdges.length ? t("ClassWorkspacePage.envFactLinkCount", { count: item.topologyEdges.length }) : t("ClassWorkspacePage.envFactNoLink")}</strong></div>
+          <div><span>{t("ClassWorkspacePage.envFactPublic")}</span><strong>{item.publications.length ? t("ClassWorkspacePage.envFactPublicCount", { count: item.publications.length }) : t("ClassWorkspacePage.envFactNoPublic")}</strong></div>
         </div>
+        {item.publications.length > 0 && <PublicationSummary item={item} />}
         {item.nodes.length > 0 && <TopologyPreview item={item} />}
       </section>
     </div>;
@@ -484,9 +547,10 @@ function Machines({ item, templates, template, onRefresh, onTemplate, createdTem
     {item.nodes.length > 0 && <section className={styles.card}>
       <div className={styles.cardHeader}>
         <div><h2>{t("ClassWorkspacePage.topologyTitle")}</h2></div>
-        <span className={styles.topologySummary}>{t("ClassWorkspacePage.perStudentUnit", { count: item.nodes.length })} · {item.topologyEdges.length ? t("ClassWorkspacePage.envFactLinkCount", { count: item.topologyEdges.length }) : t("ClassWorkspacePage.envFactNoLink")}</span>
+        <span className={styles.topologySummary}>{t("ClassWorkspacePage.perStudentUnit", { count: item.nodes.length })} · {item.topologyEdges.length ? t("ClassWorkspacePage.envFactLinkCount", { count: item.topologyEdges.length }) : t("ClassWorkspacePage.envFactNoLink")} · {item.publications.length ? t("ClassWorkspacePage.envFactPublicCount", { count: item.publications.length }) : t("ClassWorkspacePage.envFactNoPublic")}</span>
       </div>
       <TopologyPreview item={item} />
+      {item.publications.length > 0 && <PublicationSummary item={item} />}
     </section>}
   </div>;
 }
