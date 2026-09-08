@@ -8,6 +8,7 @@ duplicate the same cluster.resources iteration or qemu/lxc dispatch logic.
 import logging
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import httpx
@@ -29,6 +30,16 @@ from app.infrastructure.proxmox import (
 logger = logging.getLogger(__name__)
 
 ResourceType = Literal["qemu", "lxc"]
+
+
+@dataclass(frozen=True)
+class MonitoringSnapshot:
+    """同一輪監控取樣的節點、資源與連線完成度。"""
+
+    nodes: list[dict[str, Any]]
+    resources: list[dict[str, Any]]
+    failed_connections: int
+    total_connections: int
 
 
 def _connection_keys() -> list[int | None]:
@@ -138,6 +149,50 @@ def list_nodes() -> list[dict]:
     if errors and not results and len(errors) == len(keys):
         raise ProxmoxError(f"All Proxmox connections are unavailable. {errors[0]}")
     return results
+
+
+def collect_monitoring_snapshot() -> MonitoringSnapshot:
+    """以每個連線一次取回 nodes/resources，供監控讀模型使用。
+
+    ``list_nodes`` 與 ``list_all_resources`` 各自查詢時，可能在兩次呼叫間
+    得到不同的連線可用性；監控需要知道這一輪是否只拿到部分叢集資料，
+    因此在同一個 connection client 上完成兩項取樣並保留失敗數。
+    """
+    nodes: list[dict[str, Any]] = []
+    resources: list[dict[str, Any]] = []
+    failures: list[str] = []
+    keys = _connection_keys()
+
+    for key in keys:
+        try:
+            proxmox = get_proxmox_api(key)
+            nodes.extend(proxmox.nodes.get())
+            raw_resources = list(proxmox.cluster.resources.get(type="vm"))
+            pool_name = get_proxmox_settings(key).pool_name
+            resources.extend(
+                resource
+                for resource in raw_resources
+                if resource.get("pool") == pool_name
+            )
+        except Exception as exc:
+            failures.append(str(exc))
+            logger.warning(
+                "Failed to collect monitoring snapshot for Proxmox connection %s: %s",
+                key,
+                exc,
+            )
+
+    if failures and not nodes and not resources and len(failures) == len(keys):
+        raise ProxmoxError(
+            f"All Proxmox connections are unavailable. {failures[0]}"
+        )
+
+    return MonitoringSnapshot(
+        nodes=nodes,
+        resources=resources,
+        failed_connections=len(failures),
+        total_connections=len(keys),
+    )
 
 
 def _admin_disabled_node_names() -> set[str]:
