@@ -276,7 +276,7 @@ function TrendChart({ series, bucket, loading, t }) {
             type="monotone"
             dataKey="error_rate"
             name={t("AiMonitoringPage.chartErrorRate")}
-            stroke="var(--color-warning)"
+            stroke="var(--color-danger)"
             strokeWidth={2}
             strokeDasharray="5 4"
             dot={false}

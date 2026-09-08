@@ -102,9 +102,9 @@
 }
 
 .statusBanner_warning {
-  background: color-mix(in srgb, var(--color-warning) 11%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--color-warning) 30%, var(--color-border));
-  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-danger) 11%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-danger) 30%, var(--color-border));
+  color: var(--color-danger);
 }
 
 .statusBanner_danger {
@@ -154,8 +154,8 @@
 }
 
 .metricIcon_warning {
-  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
-  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  color: var(--color-danger);
 }
 
 .metricIcon_info {
@@ -386,8 +386,8 @@
 
 .gatewayStatus_degraded,
 .gatewayStatus_unknown {
-  background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
-  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
+  color: var(--color-danger);
 }
 
 .gatewayStatus_unavailable {
@@ -439,7 +439,7 @@
 }
 
 .modelDot_online { background: var(--color-success); }
-.modelDot_degraded { background: var(--color-warning); }
+.modelDot_degraded { background: var(--color-danger); }
 .modelDot_offline { background: var(--color-danger); }
 
 .modelInfo {
@@ -475,7 +475,7 @@
 }
 
 .modelStatus_online { background: color-mix(in srgb, var(--color-success) 12%, transparent); color: var(--color-success); }
-.modelStatus_degraded { background: color-mix(in srgb, var(--color-warning) 14%, transparent); color: var(--color-warning); }
+.modelStatus_degraded { background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger); }
 .modelStatus_offline { background: color-mix(in srgb, var(--color-danger) 12%, transparent); color: var(--color-danger); }
 
 .runtimeEmpty {
