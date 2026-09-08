@@ -61,6 +61,12 @@ function overlapsExistingEdge(candidate, existingEdges) {
   ))));
 }
 
+/** 主機名樣板用的機器代稱：取名稱的前兩段，避免整串映像檔名進網址。 */
+function hostnameSlug(name) {
+  const parts = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").split("-").filter(Boolean);
+  return parts.slice(0, 2).join("-").slice(0, 20).replace(/-$/, "") || "app";
+}
+
 /** LXC 映像是 tarball，檔名直接當機器名稱又臭又長，去掉封裝副檔名。 */
 function stripImageExtension(name) {
   return String(name).replace(/\.tar(\.(gz|xz|zst|bz2|lzo))?$/i, "");
@@ -84,6 +90,40 @@ function TopologyMachineNode({ data, selected, isConnectable }) {
 const TOPOLOGY_NODE_TYPES = { courseMachine: TopologyMachineNode };
 const TOPOLOGY_EDGE_TYPES = { connection: ConnectionEdge };
 
+/** 對外服務的設定對話框：欄位放這裡，側欄只留一行摘要。 */
+function PublicationDialog({ draft, zones, onChange, onSave, onClose }) {
+  const { t } = useTranslation("teaching");
+  const isDomain = draft.mode === "domain";
+  const hostnameValid = !isDomain || (draft.hostnamePrefix.includes("{student}") && Boolean(draft.zoneId));
+  const zone = zones.find((item) => item.id === draft.zoneId);
+  const preview = `${String(draft.hostnamePrefix || "").replace("{student}", "alice")}${zone ? `.${zone.name}` : ""}`;
+
+  return <div className={styles.createDialogOverlay} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className={`${styles.createDialog} ${styles.publicationDialog}`} role="dialog" aria-modal="true" aria-labelledby="publication-dialog-title">
+      <header className={styles.createDialogHeader}>
+        <h2 id="publication-dialog-title">{t("CourseTemplateEditorPage.publicAccessLabel")}</h2>
+        <button type="button" className={styles.iconBtn} aria-label={t("CourseTemplateEditorPage.closeAriaLabel")} onClick={onClose}><MIcon name="close" size={19} /></button>
+      </header>
+      <div className={styles.publicationDialogBody}>
+        <div className={styles.inspectorSplit}>
+          <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldInternalPort")}</span><input type="number" min="1" max="65535" value={draft.port} onChange={(event) => onChange({ port: Number(event.target.value) })} /></label>
+          <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldPublishMode")}</span><select value={draft.mode} onChange={(event) => onChange({ mode: event.target.value })}><option value="domain" disabled={!zones.length}>{t("CourseTemplateEditorPage.publishModeDomain")}</option><option value="firewall_only">{t("CourseTemplateEditorPage.publishModeFirewallOnly")}</option></select></label>
+        </div>
+        {!zones.length && <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.noZoneHint")}</p>}
+        {isDomain && <>
+          <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldHostnameTemplate")}</span><input value={draft.hostnamePrefix} onChange={(event) => onChange({ hostnamePrefix: event.target.value })} placeholder="{student}-app" /></label>
+          <label className={styles.field}><span>{t("CourseTemplateEditorPage.fieldZone")}</span><select value={draft.zoneId} onChange={(event) => onChange({ zoneId: event.target.value })}>{zones.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.hostnameTemplateHint", { example: preview })}</p>
+        </>}
+      </div>
+      <footer className={styles.createDialogFooter}>
+        <button type="button" className={styles.btnSecondary} onClick={onClose}>{t("CourseTemplateEditorPage.cancelBtn")}</button>
+        <button type="button" className={styles.btnPrimary} disabled={!hostnameValid} onClick={() => onSave(draft)}>{t("CourseTemplateEditorPage.confirmBtn")}</button>
+      </footer>
+    </section>
+  </div>;
+}
+
 function MachineEditor({ value, edges, publications, onChange, onEdgesChange, onPublicationsChange, pveTemplates, vmImages, lxcImages, zones, sourceNotice, locked = false }) {
   const { t } = useTranslation("teaching");
   const [sourceMode, setSourceMode] = useState("template");
@@ -93,6 +133,7 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
   const [selectedEdgeId, setSelectedEdgeId] = useState("");
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState([]);
   const [topologyNotice, setTopologyNotice] = useState("");
+  const [publicationDraft, setPublicationDraft] = useState(null);
   const atLimit = value.length >= 3;
 
   function addMachine() {
@@ -133,24 +174,28 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
     setSelectedNodeId("");
   }
 
-  function addPublication(node) {
+  function newPublication(node) {
     const used = new Set(publications.filter((item) => item.nodeKey === node.id).map((item) => `${item.port}/${item.protocol}`));
     const port = [80, 443, 8080, 3000, 5678].find((candidate) => !used.has(`${candidate}/tcp`)) ?? 8000;
-    onPublicationsChange([...publications, {
+    return {
       id: `publication-${Date.now()}`,
       nodeKey: node.id,
       mode: zones.length ? "domain" : "firewall_only",
       port,
       protocol: "tcp",
       // 樣板必須帶 {student}，否則全班會搶同一個網址
-      hostnamePrefix: `{student}-${String(node.id).replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase().slice(0, 20).replace(/^-|-$/g, "") || "app"}`,
+      hostnamePrefix: `{student}-${hostnameSlug(node.name)}`,
       zoneId: zones[0]?.id ?? "",
       enableHttps: true,
-    }]);
+    };
   }
 
-  function patchPublication(publicationId, patch) {
-    onPublicationsChange(publications.map((item) => item.id === publicationId ? { ...item, ...patch } : item));
+  function savePublication(draft) {
+    const exists = publications.some((item) => item.id === draft.id);
+    onPublicationsChange(exists
+      ? publications.map((item) => item.id === draft.id ? draft : item)
+      : [...publications, draft]);
+    setPublicationDraft(null);
   }
 
   function removePublication(publicationId) {
@@ -328,29 +373,30 @@ function MachineEditor({ value, edges, publications, onChange, onEdgesChange, on
               <div className={styles.publicationSection}>
                 <div className={styles.publicationHead}>
                   <span>{t("CourseTemplateEditorPage.publicAccessLabel")}</span>
-                  {!locked && <button type="button" className={styles.publicationAddBtn} onClick={() => addPublication(selectedNode)}><MIcon name="add" size={14} />{t("CourseTemplateEditorPage.addPublicationBtn")}</button>}
+                  {!locked && <button type="button" className={styles.publicationAddBtn} onClick={() => setPublicationDraft(newPublication(selectedNode))}><MIcon name="add" size={14} />{t("CourseTemplateEditorPage.addPublicationBtn")}</button>}
                 </div>
-                {!zones.length && <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.noZoneHint")}</p>}
                 {nodePublications.length === 0
                   ? <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.noPublicationHint")}</p>
-                  : nodePublications.map((publication) => <div key={publication.id} className={styles.publicationRow}>
-                      <div className={styles.inspectorSplit}>
-                        <label>{t("CourseTemplateEditorPage.fieldInternalPort")}<input disabled={locked} type="number" min="1" max="65535" value={publication.port} onChange={(event) => patchPublication(publication.id, { port: Number(event.target.value) })} /></label>
-                        <label>{t("CourseTemplateEditorPage.fieldPublishMode")}<select disabled={locked} value={publication.mode} onChange={(event) => patchPublication(publication.id, { mode: event.target.value })}><option value="domain" disabled={!zones.length}>{t("CourseTemplateEditorPage.publishModeDomain")}</option><option value="firewall_only">{t("CourseTemplateEditorPage.publishModeFirewallOnly")}</option></select></label>
-                      </div>
-                      {publication.mode === "domain" ? <>
-                        <label>{t("CourseTemplateEditorPage.fieldHostnameTemplate")}<input disabled={locked} value={publication.hostnamePrefix} onChange={(event) => patchPublication(publication.id, { hostnamePrefix: event.target.value })} placeholder="{student}-app" /></label>
-                        <label>{t("CourseTemplateEditorPage.fieldZone")}<select disabled={locked} value={publication.zoneId} onChange={(event) => patchPublication(publication.id, { zoneId: event.target.value })}>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
-                        <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.hostnameTemplateHint", { example: previewDomain(publication) })}</p>
-                      </> : <p className={styles.inspectorHint}>{t("CourseTemplateEditorPage.firewallOnlyHint")}</p>}
-                      {!locked && <button type="button" className={styles.publicationRemoveBtn} onClick={() => removePublication(publication.id)}><MIcon name="close" size={14} />{t("CourseTemplateEditorPage.removePublicationBtn")}</button>}
-                    </div>)}
+                  : <ul className={styles.publicationList}>{nodePublications.map((publication) => <li key={publication.id}>
+                      <button type="button" className={styles.publicationItem} disabled={locked} onClick={() => setPublicationDraft({ ...publication })}>
+                        <strong>{t(publication.mode === "domain" ? "CourseTemplateEditorPage.publicationSummaryDomain" : "CourseTemplateEditorPage.publicationSummaryFirewall", { port: publication.port })}</strong>
+                        <small>{publication.mode === "domain" ? previewDomain(publication) : t("CourseTemplateEditorPage.publicationInternalOnly")}</small>
+                      </button>
+                      {!locked && <button type="button" className={styles.iconBtnDanger} aria-label={t("CourseTemplateEditorPage.removePublicationBtn")} onClick={() => removePublication(publication.id)}><MIcon name="close" size={15} /></button>}
+                    </li>)}</ul>}
               </div>
               {!locked && <button type="button" className={styles.inspectorDanger} onClick={() => removeMachine(selectedNode.id)}><MIcon name="delete_outline" size={16} />{t("CourseTemplateEditorPage.removeNodeBtn")}</button>}
             </> : null}
           </aside>
         </div>
       </> : <EmptyState icon="dns" title={t("CourseTemplateEditorPage.emptyNodesTitle")} />}
+      {publicationDraft && <PublicationDialog
+        draft={publicationDraft}
+        zones={zones}
+        onChange={(patch) => setPublicationDraft((current) => ({ ...current, ...patch }))}
+        onSave={savePublication}
+        onClose={() => setPublicationDraft(null)}
+      />}
   </section>;
 }
 

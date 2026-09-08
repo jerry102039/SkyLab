@@ -472,8 +472,15 @@
 .publicationHead > span { color: var(--color-text); font-size: $font-size-12; font-weight: $font-weight-500; }
 .publicationAddBtn { display: inline-flex; align-items: center; gap: 3px; padding: 4px 9px; border: 1px solid var(--color-border); border-radius: $radius-pill; color: var(--color-primary); background: var(--color-surface); font-size: $font-size-12; cursor: pointer; }
 .publicationAddBtn:hover { background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface)); }
-.publicationRow { display: flex; flex-direction: column; gap: 9px; padding: 11px; border: 1px solid var(--color-border); border-radius: $radius-8; background: color-mix(in srgb, var(--color-hover) 26%, var(--color-surface)); }
-.publicationRemoveBtn { align-self: flex-start; display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; color: var(--color-danger); background: transparent; font-size: $font-size-12; cursor: pointer; }
+.publicationList { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.publicationList li { display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; gap: 4px; }
+.publicationItem { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: $radius-8; color: inherit; background: color-mix(in srgb, var(--color-hover) 26%, var(--color-surface)); font: inherit; text-align: left; cursor: pointer; }
+.publicationItem:hover:not(:disabled) { border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border)); }
+.publicationItem:disabled { cursor: default; }
+.publicationItem strong { font-size: $font-size-12; font-weight: $font-weight-500; }
+.publicationItem small { overflow: hidden; color: var(--color-text-muted); font-size: $font-size-10; text-overflow: ellipsis; white-space: nowrap; }
+.publicationDialog { width: min(460px, 100%); }
+.publicationDialogBody { display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; }
 .rowActions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .iconBtnDanger:hover { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 9%, transparent); }
 .rowActions button { white-space: nowrap; }
