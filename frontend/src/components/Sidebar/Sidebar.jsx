@@ -95,7 +95,27 @@ const navGroups = [
   },
 ];
 
-function NavGroup({ group, active, onSelect, collapsed, onExpand }) {
+/** 釘選狀態存 localStorage，跨 session 保留（不可用時僅本次瀏覽生效） */
+const PIN_STORAGE_KEY = "skylab.sidebarPins";
+
+function loadPinnedKeys() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(PIN_STORAGE_KEY) ?? "[]");
+    return Array.isArray(stored) ? stored : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePinnedKeys(keys) {
+  try {
+    window.localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(keys));
+  } catch {
+    // localStorage 不可用時釘選僅本次瀏覽生效
+  }
+}
+
+function NavGroup({ group, active, onSelect, collapsed, onExpand, pinnedKeys, onTogglePin }) {
   const { t } = useTranslation("common");
   const [open, setOpen] = useState(
     group.items.some((i) => i.key === active)
@@ -137,17 +157,31 @@ function NavGroup({ group, active, onSelect, collapsed, onExpand }) {
         className={`${styles.groupItems} ${!collapsed && open ? styles.groupItemsOpen : ""}`}
       >
         <div className={styles.groupItemsInner}>
-          {group.items.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className={`${styles.navItem} ${active === item.key ? styles.active : ""}`}
-              onClick={() => onSelect(item.key)}
-              aria-label={t(item.labelKey)}
-            >
-              <span className={styles.navLabel}>{t(item.labelKey)}</span>
-            </button>
-          ))}
+          {group.items.map((item) => {
+            const pinned = pinnedKeys.includes(item.key);
+            return (
+              <div key={item.key} className={styles.navItemRow}>
+                <button
+                  type="button"
+                  className={`${styles.navItem} ${active === item.key ? styles.active : ""}`}
+                  onClick={() => onSelect(item.key)}
+                  aria-label={t(item.labelKey)}
+                >
+                  <span className={styles.navLabel}>{t(item.labelKey)}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.pinBtn} ${pinned ? styles.pinBtnPinned : ""}`}
+                  onClick={() => onTogglePin(item.key)}
+                  title={pinned ? t("Sidebar.unpin") : t("Sidebar.pin")}
+                  aria-label={pinned ? t("Sidebar.unpin") : t("Sidebar.pin")}
+                  aria-pressed={pinned}
+                >
+                  <MIcon name="push_pin" size={14} filled={pinned} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -287,6 +321,20 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
     }))
     .filter((group) => group.items.length > 0);
 
+  const [pinnedKeys, setPinnedKeys] = useState(loadPinnedKeys);
+  const togglePin = useCallback((key) => {
+    setPinnedKeys((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      savePinnedKeys(next);
+      return next;
+    });
+  }, []);
+  // 只留權限內看得到的項目；沒權限的釘選保留在 storage，換帳號登入不會消失
+  const visibleItems = visibleNavGroups.flatMap((group) => group.items);
+  const pinnedItems = pinnedKeys
+    .map((key) => visibleItems.find((item) => item.key === key))
+    .filter(Boolean);
+
   const cls = [
     styles.sidebar,
     collapsed && styles.collapsed,
@@ -331,6 +379,32 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
             {!collapsed && <span className={styles.navLabel}>{t(item.labelKey)}</span>}
           </button>
         ))}
+        {/* 釘選的快速捷徑（保留釘選順序） */}
+        {pinnedItems.map((item) => (
+          <div key={`pinned-${item.key}`} className={styles.navItemRow}>
+            <button
+              type="button"
+              className={`${styles.navItem} ${active === item.key ? styles.active : ""}`}
+              onClick={() => handleNav(item.key)}
+              title={collapsed ? t(item.labelKey) : undefined}
+              aria-label={t(item.labelKey)}
+            >
+              <MIcon name={item.icon} size={20} />
+              {!collapsed && <span className={styles.navLabel}>{t(item.labelKey)}</span>}
+            </button>
+            {!collapsed && (
+              <button
+                type="button"
+                className={styles.pinBtn}
+                onClick={() => togglePin(item.key)}
+                title={t("Sidebar.unpin")}
+                aria-label={t("Sidebar.unpin")}
+              >
+                <MIcon name="push_pin" size={14} filled />
+              </button>
+            )}
+          </div>
+        ))}
         {visibleNavGroups.map((group) => (
           <NavGroup
             key={group.key}
@@ -339,6 +413,8 @@ export default function Sidebar({ collapsed, mobileOpen, onToggle, onClose }) {
             onSelect={handleNav}
             collapsed={collapsed}
             onExpand={onToggle}
+            pinnedKeys={pinnedKeys}
+            onTogglePin={togglePin}
           />
         ))}
       </nav>

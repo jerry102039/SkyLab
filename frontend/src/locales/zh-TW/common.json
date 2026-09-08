@@ -169,6 +169,8 @@
   "Sidebar.itemMonitoring": "資源監控",
   "Sidebar.itemJobs": "背景任務",
   "Sidebar.itemAudit": "稽核日誌",
+  "Sidebar.pin": "釘選",
+  "Sidebar.unpin": "取消釘選",
   "Sidebar.userSettings": "使用者設定",
   "Sidebar.logOut": "登出",
   "Sidebar.userMenuAriaLabel": "使用者選單：{{name}}"

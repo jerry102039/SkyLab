@@ -236,6 +236,75 @@
   @include text-truncate;
 }
 
+/* ===== 釘選 ===== */
+.navItemRow {
+  position: relative;
+
+  .navItem {
+    padding-right: 30px;
+  }
+
+  &:hover {
+    .navItem:not(.active) {
+      background: var(--color-hover);
+      color: var(--color-text);
+    }
+
+    .pinBtn {
+      opacity: 1;
+    }
+  }
+
+  .collapsed & {
+    .navItem {
+      padding-right: 10px;
+    }
+
+    .pinBtn {
+      display: none;
+    }
+  }
+}
+
+.pinBtn {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  translate: 0 -50%;
+  @include flex-center;
+  width: 22px;
+  height: 22px;
+  border-radius: $radius-8;
+  color: var(--color-text-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity $transition-base, color $transition-base, background $transition-base;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--color-text-primary) 12%, transparent);
+    color: var(--color-text);
+    opacity: 1;
+  }
+
+  /* 已釘選：常駐顯示，作為狀態標記兼取消入口 */
+  &.pinBtnPinned {
+    opacity: 1;
+    color: var(--color-text-secondary);
+  }
+}
+
+/* 選中項目底色為主色，釘子改用主色上的文字色才看得見 */
+.navItem.active + .pinBtn {
+  color: color-mix(in srgb, var(--color-text-on-primary) 80%, transparent);
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--color-text-on-primary) 20%, transparent);
+    color: var(--color-text-on-primary);
+  }
+}
+
 .navHint {
   font-size: $font-size-12;
   color: var(--color-text-muted);
