@@ -70,6 +70,7 @@
   "AuditPage.statLoginFailed": "ログイン失敗",
   "AuditPage.statTotal": "総記録数",
   "AuditPage.systemUser": "システム",
+  "AuditPage.toastDateInFuture": "今日より後の日付は検索できません",
   "AuditPage.toastDateRangeInvalid": "開始日は終了日より後に設定できません",
   "AuditPage.toastExportFailed": "エクスポートに失敗しました",
   "AuditPage.toastExported": "CSV をエクスポートしました",

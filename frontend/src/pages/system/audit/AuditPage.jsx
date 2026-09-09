@@ -29,21 +29,34 @@ function toIso(dateStr, endOfDay = false) {
   return new Date(`${dateStr}T${endOfDay ? "23:59:59" : "00:00:00"}`).toISOString();
 }
 
+/** 本地時區的今天（yyyy-mm-dd）；不用 toISOString 以免 UTC 跨日 */
+export function todayDateStr(now = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 /** yyyy-mm-dd 字串可直接用字典序比較；任一為空視為「範圍合法」 */
 export function isDateRangeValid(startDate, endDate) {
   if (!startDate || !endDate) return true;
   return startDate <= endDate;
 }
 
+/** 稽核日誌只有過去的紀錄，起訖任一端落在今天以後就不合法 */
+export function isDateInFuture(dateStr, today = todayDateStr()) {
+  return Boolean(dateStr) && dateStr > today;
+}
+
 /**
- * 更新起訖日期並維持「起始 ≤ 結束」：
+ * 更新起訖日期並維持「起始 ≤ 結束」且不超過今天：
+ * 選到今天以後 → 校正為今天；
  * 起始被改到結束之後 → 結束跟著移到同一天；結束被改到起始之前 → 起始跟著移到同一天。
  */
-export function applyDateField(filters, name, value) {
-  const next = { ...filters, [name]: value };
+export function applyDateField(filters, name, value, today = todayDateStr()) {
+  const clamped = isDateInFuture(value, today) ? today : value;
+  const next = { ...filters, [name]: clamped };
   if (isDateRangeValid(next.startDate, next.endDate)) return next;
-  if (name === "startDate") next.endDate = value;
-  else next.startDate = value;
+  if (name === "startDate") next.endDate = clamped;
+  else next.startDate = clamped;
   return next;
 }
 
@@ -135,6 +148,10 @@ export default function AuditPage() {
 
   function applyFilters(e) {
     e?.preventDefault();
+    if (isDateInFuture(filters.startDate) || isDateInFuture(filters.endDate)) {
+      toast.error(t("AuditPage.toastDateInFuture"));
+      return;
+    }
     if (!isDateRangeValid(filters.startDate, filters.endDate)) {
       toast.error(t("AuditPage.toastDateRangeInvalid"));
       return;

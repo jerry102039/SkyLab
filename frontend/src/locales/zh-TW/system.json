@@ -70,6 +70,7 @@
   "AuditPage.statLoginFailed": "登入失敗",
   "AuditPage.statTotal": "總紀錄數",
   "AuditPage.systemUser": "系統",
+  "AuditPage.toastDateInFuture": "不能查詢今天以後的日期",
   "AuditPage.toastDateRangeInvalid": "起始日期不能晚於結束日期",
   "AuditPage.toastExportFailed": "匯出失敗",
   "AuditPage.toastExported": "已匯出 CSV",

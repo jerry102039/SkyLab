@@ -70,6 +70,7 @@
   "AuditPage.statLoginFailed": "Failed Logins",
   "AuditPage.statTotal": "Total Records",
   "AuditPage.systemUser": "System",
+  "AuditPage.toastDateInFuture": "Dates after today cannot be queried",
   "AuditPage.toastDateRangeInvalid": "The start date cannot be later than the end date",
   "AuditPage.toastExportFailed": "Export failed",
   "AuditPage.toastExported": "CSV exported",
