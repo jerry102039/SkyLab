@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import styles from "../ResourceDetailPage.module.scss";
 import MIcon from "../../../../../components/MIcon";
@@ -329,14 +330,17 @@ export default function FirewallCard({ vmid, canManage, refreshKey }) {
         )}
       </div>
 
-      {addPresence.open && (
-        <RuleModal
-          closing={addPresence.closing}
-          loading={busy}
-          onClose={() => setShowAdd(false)}
-          onSubmit={handleAdd}
-        />
-      )}
+      {/* portal 到 body：卡片的 overflow:hidden + backdrop-filter 會把 fixed modal 困在卡片裡 */}
+      {addPresence.open &&
+        createPortal(
+          <RuleModal
+            closing={addPresence.closing}
+            loading={busy}
+            onClose={() => setShowAdd(false)}
+            onSubmit={handleAdd}
+          />,
+          document.body,
+        )}
     </div>
   );
 }

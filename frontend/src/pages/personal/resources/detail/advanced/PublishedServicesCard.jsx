@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import styles from "../ResourceDetailPage.module.scss";
 import MIcon from "../../../../../components/MIcon";
@@ -457,40 +458,45 @@ export default function PublishedServicesCard({ vmid, resource, canManage, onCha
         )}
       </div>
 
-      {modalPresence.item?.kind === "edit" && (
-        <PublishServiceModal
-          service={modalPresence.item.service}
-          setupContext={setupContext}
-          closing={modalPresence.closing}
-          loading={saving}
-          onClose={() => setModal(null)}
-          onSubmit={handleSubmit}
-        />
-      )}
-      {modalPresence.item?.kind === "delete" && (
-        <div
-          className={`${styles.modalOverlay} ${modalPresence.closing ? styles.modalOverlayOut : ""}`}
-          onMouseDown={() => setModal(null)}
-        >
-          <div className={styles.modal} onMouseDown={(e) => e.stopPropagation()}>
-            <h2 className={styles.modalTitle}>{t("PublishedServicesCard.unpublishTitle")}</h2>
-            <p className={styles.modalDesc}>
-              {t("PublishedServicesCard.unpublishDesc", {
-                target: modalPresence.item.service.domain
-                  ?? `${modalPresence.item.service.port}/${modalPresence.item.service.protocol}`,
-              })}
-            </p>
-            <div className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setModal(null)}>
-                {t("PublishedServicesCard.cancel")}
-              </button>
-              <button type="button" className={styles.btnDanger} disabled={saving} onClick={handleDelete}>
-                {saving ? t("PublishedServicesCard.deleting") : t("PublishedServicesCard.unpublish")}
-              </button>
+      {/* portal 到 body：卡片的 overflow:hidden + backdrop-filter 會把 fixed modal 困在卡片裡 */}
+      {modalPresence.item?.kind === "edit" &&
+        createPortal(
+          <PublishServiceModal
+            service={modalPresence.item.service}
+            setupContext={setupContext}
+            closing={modalPresence.closing}
+            loading={saving}
+            onClose={() => setModal(null)}
+            onSubmit={handleSubmit}
+          />,
+          document.body,
+        )}
+      {modalPresence.item?.kind === "delete" &&
+        createPortal(
+          <div
+            className={`${styles.modalOverlay} ${modalPresence.closing ? styles.modalOverlayOut : ""}`}
+            onMouseDown={() => setModal(null)}
+          >
+            <div className={styles.modal} onMouseDown={(e) => e.stopPropagation()}>
+              <h2 className={styles.modalTitle}>{t("PublishedServicesCard.unpublishTitle")}</h2>
+              <p className={styles.modalDesc}>
+                {t("PublishedServicesCard.unpublishDesc", {
+                  target: modalPresence.item.service.domain
+                    ?? `${modalPresence.item.service.port}/${modalPresence.item.service.protocol}`,
+                })}
+              </p>
+              <div className={styles.modalActions}>
+                <button type="button" className={styles.btnSecondary} onClick={() => setModal(null)}>
+                  {t("PublishedServicesCard.cancel")}
+                </button>
+                <button type="button" className={styles.btnDanger} disabled={saving} onClick={handleDelete}>
+                  {saving ? t("PublishedServicesCard.deleting") : t("PublishedServicesCard.unpublish")}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
