@@ -114,6 +114,13 @@ export default function JobsButton({ collapsed = false }) {
     desktopNotifications.permission === "insecure"
       ? "JobsButton.desktopNotificationsInsecure"
       : "JobsButton.desktopNotificationsBlocked";
+  // Web Push 狀態說明：訂閱成功代表分頁關掉也收得到；不支援／後端未啟用時提醒只有分頁開著才會通知
+  const pushHintKey = {
+    subscribed: "JobsButton.pushSubscribed",
+    unsupported: "JobsButton.pushUnsupported",
+    disabled: "JobsButton.pushDisabled",
+    unsubscribed: "JobsButton.pushUnsubscribed",
+  }[desktopNotifications.push] ?? null;
 
   return (
     <>
@@ -172,6 +179,9 @@ export default function JobsButton({ collapsed = false }) {
                 {desktopBlocked ? t(desktopBlockedKey) : t("JobsButton.desktopNotifications")}
               </span>
             </label>
+          )}
+          {desktopNotifications.enabled && pushHintKey && (
+            <p className={styles.notifyHint}>{t(pushHintKey)}</p>
           )}
           <div className={styles.popoverList}>
             {items === null ? (
