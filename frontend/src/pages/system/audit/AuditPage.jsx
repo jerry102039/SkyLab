@@ -29,6 +29,24 @@ function toIso(dateStr, endOfDay = false) {
   return new Date(`${dateStr}T${endOfDay ? "23:59:59" : "00:00:00"}`).toISOString();
 }
 
+/** yyyy-mm-dd 字串可直接用字典序比較；任一為空視為「範圍合法」 */
+export function isDateRangeValid(startDate, endDate) {
+  if (!startDate || !endDate) return true;
+  return startDate <= endDate;
+}
+
+/**
+ * 更新起訖日期並維持「起始 ≤ 結束」：
+ * 起始被改到結束之後 → 結束跟著移到同一天；結束被改到起始之前 → 起始跟著移到同一天。
+ */
+export function applyDateField(filters, name, value) {
+  const next = { ...filters, [name]: value };
+  if (isDateRangeValid(next.startDate, next.endDate)) return next;
+  if (name === "startDate") next.endDate = value;
+  else next.startDate = value;
+  return next;
+}
+
 function EmptyState({ hasFilter }) {
   const { t } = useTranslation("system");
   return (
@@ -111,8 +129,16 @@ export default function AuditPage() {
     setFilters((prev) => ({ ...prev, [name]: value }));
   }
 
+  function setDateField(name, value) {
+    setFilters((prev) => applyDateField(prev, name, value));
+  }
+
   function applyFilters(e) {
     e?.preventDefault();
+    if (!isDateRangeValid(filters.startDate, filters.endDate)) {
+      toast.error(t("AuditPage.toastDateRangeInvalid"));
+      return;
+    }
     setPage(0);
     setApplied(filters);
   }
@@ -212,13 +238,19 @@ export default function AuditPage() {
           type="date"
           className={styles.filterSelect}
           value={filters.startDate}
-          onChange={(e) => setField("startDate", e.target.value)}
+          max={filters.endDate || undefined}
+          aria-label={t("AuditPage.startDate")}
+          title={t("AuditPage.startDate")}
+          onChange={(e) => setDateField("startDate", e.target.value)}
         />
         <input
           type="date"
           className={styles.filterSelect}
           value={filters.endDate}
-          onChange={(e) => setField("endDate", e.target.value)}
+          min={filters.startDate || undefined}
+          aria-label={t("AuditPage.endDate")}
+          title={t("AuditPage.endDate")}
+          onChange={(e) => setDateField("endDate", e.target.value)}
         />
 
         <button type="submit" className={styles.btnSecondary}>
