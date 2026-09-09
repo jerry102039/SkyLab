@@ -26,7 +26,9 @@ import asyncio
 import json
 import logging
 import re
+import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -96,6 +98,30 @@ SSH 工具（ssh_exec）使用原則：
 - 需要 ssh_exec 時直接呼叫工具，不要先用文字詢問使用者是否同意，也不要在回覆中只展示
   指令等待使用者再次要求。後端會自動判定直接執行、等待確認或 hard-deny。
 - 被攔截的危險指令（如 rm -rf）無法執行。
+
+Guest 廣度診斷工具（get_guest_diagnostic_summary）使用原則：
+- 「現在怎麼了／快速檢查／狀態不明／為什麼很慢」等針對單一 VM/LXC 的廣度問題，
+  優先呼叫 get_guest_diagnostic_summary，一次取得 PVE 資源、systemd 服務、
+  Top processes 與最近一小時 warning/error 記錄。
+- 彙總結果已包含 PVE resource detail；已有彙總結果時，不要重複呼叫 get_resource_detail。
+- 只有針對彙總結果發現的特定 service、process 或 log 線索，才繼續用 ssh_exec 深入；
+  廣度收集不要用 ssh_exec 逐條重做。
+- section 標記 unavailable 或 error 時，該層必須標「❓ 未取得」或說明資料不足，
+  不得把缺少資料寫成正常；PVE disk 數值不等於 Guest 內檔案系統使用率，
+  未取得 df 時不得宣稱 VM 內檔案系統空間正常。
+- 回答此工具結果時，必須使用固定 Markdown 診斷格式：狀態標記只用
+  ✅ 正常、⚠️ 注意、❌ 異常、❓ 未取得；分層標籤固定 [PVE] [VM] [OS] [Service] [Application]；
+  結構固定為「## 診斷結論」→「## 分層結果」（固定表格）→「## 主要證據」→
+  「## 建議下一步」→「## 資料缺口」（僅有缺口時顯示）。
+- 整體狀態判定：有 failed service、VM stopped 或明確錯誤證據 → ❌ 異常；沒有故障但
+  資源偏高或出現 warning → ⚠️ 注意；沒有異常證據但必要 section 未取得 → ❓ 資料不足；
+  必要資料皆取得且無明顯異常 → ✅ 未發現明顯異常。
+- 「診斷結論」最多 3 句；「主要證據」最多 5 點，只放支持結論的數值、failed item 或
+  log 摘要；「建議下一步」最多 3 項，按優先順序排列。
+- 最終回答最多顯示 3 個 failed services、3 個 processes、3 筆 log 證據，其餘以數量摘要；
+  不貼完整 JSON、完整 service/process list、完整 journal 或內部固定指令；不顯示推理過程，
+  只說結論、證據、限制與下一步。
+- 沒有實際資料時不得寫「正常」「已確認」或給出特定數值。
 
 回覆格式：
 - 使用繁體中文，面向系統管理員，先給結論，語氣清楚、簡潔、可快速掃讀。
@@ -207,6 +233,28 @@ _TOOLS: list[dict[str, Any]] = [
             "name": "get_cluster",
             "description": "取得叢集整體概覽：叢集名稱、是否為多節點叢集、節點數、quorum 狀態。",
             "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_guest_diagnostic_summary",
+            "description": (
+                "對指定 VMID 一次取得 Guest 廣度診斷摘要：PVE 資源詳情、systemd 服務統計與"
+                " failed services、CPU/RAM Top 10 processes、最近一小時最多 100 筆"
+                " warning/error 系統記錄。適合回答「這台 VM 現在怎麼了」等廣度問題；"
+                "不需要也不允許傳入任何 shell 指令。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "vmid": {
+                        "type": "integer",
+                        "description": "目標 VM 或 LXC 的 VMID",
+                    },
+                },
+                "required": ["vmid"],
+            },
         },
     },
     {
@@ -429,6 +477,138 @@ async def _execute_ssh_tool(
     # 補充 reason 給前端顯示（AI 提供的說明）
     data["reason"] = str(args.get("reason", t("pveLog.reasonNotProvided")))
     return data
+
+
+async def _execute_guest_diagnostics_tool(
+    args: dict[str, Any],
+    *,
+    context: PveToolContext | None,
+    session: Session | None = None,
+    allowed_vmids: set[int] | None = None,
+) -> dict[str, Any]:
+    """執行 get_guest_diagnostic_summary 工具（async）。
+
+    執行順序（依固定契約）：
+      1. 驗證 vmid 型別與 allowed_vmids（PVE/SSH 前即拒絕）。
+      2. 重用 request-local PveToolContext 取得 PVE resource detail。
+      3. PVE 顯示 stopped → guest sections 全部 unavailable，不嘗試 SSH。
+      4. PVE 失敗但未確認 stopped → 仍嘗試 Guest 收集。
+      5. server-owned batch runner 一次連線執行固定 probes。
+      6. 各 section 獨立解析、組固定 JSON。
+    """
+    from app.ai.pve_log.guest_diagnostics import (
+        ERROR_CODE_CONNECTION_FAILED,
+        ERROR_CODE_RESOLVE_FAILED,
+        ERROR_CODE_SCOPE_RESTRICTED,
+        GUEST_DIAGNOSTIC_PROBES,
+        build_guest_diagnostics_result,
+        build_resource_section,
+        empty_guest_section,
+        parse_guest_probe_results,
+        resource_detail_says_stopped,
+    )
+    from app.ai.pve_log.ssh_exec import run_guest_probe_batch
+
+    started = time.monotonic()
+    try:
+        vmid = int(args["vmid"])
+    except (KeyError, TypeError, ValueError):
+        return build_guest_diagnostics_result(
+            vmid=None,
+            collected_at=datetime.now(timezone.utc),
+            collection_duration_ms=int((time.monotonic() - started) * 1000),
+            resource={
+                "collection_status": "error",
+                "data": None,
+                "error_code": "vmidInvalid",
+            },
+            sections={
+                name: empty_guest_section(name, "error", error_code="vmidInvalid")
+                for name in ("services", "processes", "recent_logs")
+            },
+            warnings=[t("pveLog.guestDiagVmidInvalid")],
+        )
+
+    warnings: list[str] = []
+    if allowed_vmids is not None and vmid not in allowed_vmids:
+        return build_guest_diagnostics_result(
+            vmid=vmid,
+            collected_at=datetime.now(timezone.utc),
+            collection_duration_ms=int((time.monotonic() - started) * 1000),
+            resource=build_resource_section(
+                None,
+                status="error",
+                error_code=ERROR_CODE_SCOPE_RESTRICTED,
+            ),
+            sections={
+                name: empty_guest_section(
+                    name, "error", error_code=ERROR_CODE_SCOPE_RESTRICTED
+                )
+                for name in ("services", "processes", "recent_logs")
+            },
+            warnings=[t("pveLog.scopeRestricted")],
+        )
+
+    # ── PVE resource detail（重用 request-local context）─────────────────
+    resource_detail: dict[str, Any] | None = None
+    vm_stopped = False
+    if context is None:
+        resource_section = build_resource_section(
+            None, status="error", error_code="contextUnavailable"
+        )
+        warnings.append(t("pveLog.guestDiagWarnPveDetailFailed"))
+    else:
+        try:
+            detail = await asyncio.to_thread(
+                context.execute,
+                "get_resource_detail",
+                {"vmid": vmid},
+                allowed_vmids=allowed_vmids,
+            )
+        except Exception as exc:
+            logger.error("Guest 診斷 PVE detail 失敗 vmid=%d：%s", vmid, exc)
+            detail = {"error": "collectorFailed"}
+        if isinstance(detail, dict) and detail.get("error"):
+            resource_section = build_resource_section(
+                None, status="error", error_code="pveResourceUnavailable"
+            )
+            warnings.append(t("pveLog.guestDiagWarnPveDetailFailed"))
+        else:
+            resource_detail = detail if isinstance(detail, dict) else None
+            resource_section = build_resource_section(resource_detail, status="ok")
+            vm_stopped = resource_detail_says_stopped(resource_detail)
+
+    # ── Guest probes（固定指令，模型不可控）──────────────────────────────
+    sections: dict[str, dict[str, Any]]
+    if vm_stopped:
+        sections = {
+            name: empty_guest_section(name, "unavailable")
+            for name in ("services", "processes", "recent_logs")
+        }
+        warnings.append(t("pveLog.guestDiagWarnVmStopped"))
+    else:
+        probe_results = await run_guest_probe_batch(
+            vmid,
+            GUEST_DIAGNOSTIC_PROBES,
+            session=session,
+            allowed_vmids=allowed_vmids,
+        )
+        sections = parse_guest_probe_results(probe_results, warnings=warnings)
+        if all(
+            result.error_code
+            in {ERROR_CODE_RESOLVE_FAILED, ERROR_CODE_CONNECTION_FAILED}
+            for result in probe_results.values()
+        ):
+            warnings.append(t("pveLog.guestDiagWarnGuestCollectFailed"))
+
+    return build_guest_diagnostics_result(
+        vmid=vmid,
+        collected_at=datetime.now(timezone.utc),
+        collection_duration_ms=int((time.monotonic() - started) * 1000),
+        resource=resource_section,
+        sections=sections,
+        warnings=warnings,
+    )
 
 
 def _is_known_read_ssh_call(
@@ -1170,6 +1350,13 @@ async def chat(
                         template_key=template_key,
                         template_keys_by_vmid=template_keys_by_vmid,
                         auto_execute_known_ssh=auto_execute_known_ssh,
+                    )
+                elif func_name == "get_guest_diagnostic_summary":
+                    result = await _execute_guest_diagnostics_tool(
+                        func_args,
+                        context=_tool_context,
+                        session=session,
+                        allowed_vmids=allowed_vmids,
                     )
                 else:
                     if _tool_context is None:
