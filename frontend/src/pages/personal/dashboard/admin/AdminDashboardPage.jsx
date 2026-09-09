@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import AiPveChat from "../../../../components/AiPveChat/AiPveChat";
+import PveOperationsQuickLook from "../../../../components/PveOperationsQuickLook/PveOperationsQuickLook";
 import MIcon from "../../../../components/MIcon";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { AiApiService } from "../../../../services/aiApi";
@@ -118,21 +119,26 @@ export default function AdminDashboardPage() {
           <div>
             <span className={styles.assistantLabel}>{t("AdminDashboardPage.assistantLabel")}</span>
             <h2 id="admin-assistant-title">{t("AdminDashboardPage.assistantTitle")}</h2>
-            {/* 對話開始後這段說明就沒有作用了，版面留給對話 */}
+            {/* 對話開始後這段說明收起，保留硬體快看與對話並排 */}
             {!conversationPrompt && <p>{t("AdminDashboardPage.assistantIntro")}</p>}
           </div>
         </div>
+        <div className={styles.assistantLeft}>
+          <PveOperationsQuickLook />
+        </div>
         {conversationPrompt && (
-          <div className={styles.assistantActions}>
-            {/* 問問題時把上面那區暫時收起來，對話拿到整個版面；隨時可以回去 */}
-            <button type="button" className={styles.assistantReset} onClick={() => setFocusMode((value) => !value)}>
-              <MIcon name={focusMode ? "close_fullscreen" : "open_in_full"} size={16} />
-              {focusMode ? t("AdminDashboardPage.backToOverview") : t("AdminDashboardPage.expandChat")}
-            </button>
-            <button type="button" className={styles.assistantReset} onClick={resetAssistant}>
-              <MIcon name="refresh" size={16} />
-              {t("AdminDashboardPage.askAgain")}
-            </button>
+          <div className={styles.assistantChatColumn}>
+            <div className={styles.assistantActions}>
+              <button type="button" className={styles.assistantReset} onClick={() => setFocusMode((value) => !value)}>
+                <MIcon name={focusMode ? "close_fullscreen" : "open_in_full"} size={16} />
+                {focusMode ? t("AdminDashboardPage.backToOverview") : t("AdminDashboardPage.expandChat")}
+              </button>
+              <button type="button" className={styles.assistantReset} onClick={resetAssistant}>
+                <MIcon name="refresh" size={16} />
+                {t("AdminDashboardPage.askAgain")}
+              </button>
+            </div>
+            <AiPveChat initialPrompt={conversationPrompt} compact={!focusMode} fill={focusMode} />
           </div>
         )}
         {!conversationPrompt && <form className={styles.assistantForm} onSubmit={openAssistant}>
@@ -147,7 +153,6 @@ export default function AdminDashboardPage() {
           </div>
         </form>}
       </div>
-      {conversationPrompt && <AiPveChat initialPrompt={conversationPrompt} compact={!focusMode} fill={focusMode} />}
     </section>
 
   </div>;
