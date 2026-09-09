@@ -1,8 +1,8 @@
 /**
  * FirewallCard — 這台 VM 的防火牆
  * 上半是以這台 VM 為中心的迷你拓撲，下半是 Proxmox 原始規則表。
- * SkyLab: 開頭的受管規則上鎖（由對外服務／拓撲頁管理），其餘可自行新增、停用、刪除。
- * 「新增規則」開的是共用的 ConnectionDialog（預設停在「自訂規則」分頁，也能切到「連線」）。
+ * SkyLab: 開頭的受管規則上鎖（由連線對話框／拓撲頁管理），其餘可自行新增、停用、刪除。
+ * 「新增規則」開的是共用的 ConnectionDialog（預設停在「自訂規則」分頁，也能切到「連線」做對外發布）。
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -23,7 +23,7 @@ import {
 } from "../../../../../services/firewall";
 import MiniTopology from "./MiniTopology";
 
-export default function FirewallCard({ vmid, canManage, refreshKey, onChanged }) {
+export default function FirewallCard({ vmid, canManage }) {
   const { t } = useTranslation("personal");
   const toast = useToast();
   const confirm = useConfirm();
@@ -55,16 +55,15 @@ export default function FirewallCard({ vmid, canManage, refreshKey, onChanged })
 
   useEffect(() => {
     load();
-  }, [load, refreshKey]);
+  }, [load]);
 
   const thisVmName = topology?.nodes?.find((n) => n.vmid === vmid)?.name;
 
-  /* 對話框可能建了自訂規則，也可能建了連線／對外服務；後者要通知對外服務卡片重載 */
+  /* 對話框可能建了自訂規則，也可能建了連線（含對外發布），兩種都重載規則表與迷你拓撲 */
   function handleDialogDone(result) {
     toast.success(result?.kind === "rule" ? t("FirewallCard.ruleAdded") : t("FirewallCard.connectionAdded"));
     setShowAdd(false);
     load();
-    if (result?.kind !== "rule") onChanged?.();
   }
 
   async function handleToggle(rule) {
@@ -239,7 +238,7 @@ export default function FirewallCard({ vmid, canManage, refreshKey, onChanged })
           closing={addPresence.closing}
           onClose={() => setShowAdd(false)}
           onDone={handleDialogDone}
-          onChanged={() => { load(); onChanged?.(); }}
+          onChanged={load}
         />
       )}
     </div>
