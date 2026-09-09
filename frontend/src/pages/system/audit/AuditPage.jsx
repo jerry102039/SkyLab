@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./AuditPage.module.scss";
 import MIcon from "../../../components/MIcon";
@@ -10,6 +10,8 @@ import { AuditLogsService } from "../../../services/auditLogs";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
 const PAGE_SIZE = 50;
+/** 搜尋框即時查詢的防抖間隔（ms）；下拉與日期改變則立即查詢 */
+const SEARCH_DEBOUNCE = 300;
 
 function formatTime(value) {
   if (!value) return "—";
@@ -79,9 +81,11 @@ export default function AuditPage() {
   const [actionOptions, setActionOptions] = useState([]);
   const [userOptions, setUserOptions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(0);
 
+  /** 篩選條件一改就即時查詢；搜尋框另有防抖，避免每個字元都打 API */
   const [filters, setFilters] = useState({
     search: "",
     action: "",
@@ -89,29 +93,47 @@ export default function AuditPage() {
     startDate: "",
     endDate: "",
   });
-  /** 送出查詢用的 filters（按「查詢」後才生效，避免每個字元都打 API） */
-  const [applied, setApplied] = useState(filters);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  /** 最新一次查詢的序號：回應順序錯亂時只採用最後一次的結果 */
+  const requestSeq = useRef(0);
+
+  useEffect(() => {
+    const next = filters.search.trim();
+    const timer = setTimeout(() => {
+      setDebouncedSearch((prev) => {
+        if (prev !== next) setPage(0);
+        return next;
+      });
+    }, SEARCH_DEBOUNCE);
+    return () => clearTimeout(timer);
+  }, [filters.search]);
 
   const queryParams = useMemo(() => ({
     skip: page * PAGE_SIZE,
     limit: PAGE_SIZE,
-    search: applied.search.trim() || undefined,
-    action: applied.action || undefined,
-    userId: applied.userId || undefined,
-    startTime: toIso(applied.startDate) || undefined,
-    endTime: toIso(applied.endDate, true) || undefined,
-  }), [applied, page]);
+    search: debouncedSearch || undefined,
+    action: filters.action || undefined,
+    userId: filters.userId || undefined,
+    startTime: toIso(filters.startDate) || undefined,
+    endTime: toIso(filters.endDate, true) || undefined,
+  }), [debouncedSearch, filters.action, filters.userId, filters.startDate, filters.endDate, page]);
 
   const fetchLogs = useCallback(async () => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     try {
       const res = await AuditLogsService.list(queryParams);
+      if (seq !== requestSeq.current) return;
       setLogs(res?.data ?? []);
       setCount(res?.count ?? 0);
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       toast.error(err?.message ?? t("AuditPage.toastLoadFailed"));
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) {
+        setLoading(false);
+        setHasLoaded(true);
+      }
     }
   }, [queryParams, toast, t]);
 
@@ -121,12 +143,12 @@ export default function AuditPage() {
 
   useEffect(() => {
     AuditLogsService.stats({
-      startTime: toIso(applied.startDate) || undefined,
-      endTime: toIso(applied.endDate, true) || undefined,
+      startTime: toIso(filters.startDate) || undefined,
+      endTime: toIso(filters.endDate, true) || undefined,
     })
       .then(setStats)
       .catch(() => {});
-  }, [applied.startDate, applied.endDate]);
+  }, [filters.startDate, filters.endDate]);
 
   useEffect(() => {
     AuditLogsService.actions().then(setActionOptions).catch(() => {});
@@ -134,36 +156,24 @@ export default function AuditPage() {
   }, []);
 
   const hasFilter = Boolean(
-    applied.search.trim() || applied.action || applied.userId || applied.startDate || applied.endDate,
+    filters.search.trim() || filters.action || filters.userId || filters.startDate || filters.endDate,
   );
   const totalPages = Math.max(Math.ceil(count / PAGE_SIZE), 1);
+  /** 載入過之後的重新查詢：保留畫面、半透明，不整頁換成 loading 動畫 */
+  const isInitialLoading = loading && !hasLoaded;
 
   function setField(name, value) {
     setFilters((prev) => ({ ...prev, [name]: value }));
+    if (name !== "search") setPage(0);
   }
 
   function setDateField(name, value) {
     setFilters((prev) => applyDateField(prev, name, value));
-  }
-
-  function applyFilters(e) {
-    e?.preventDefault();
-    if (isDateInFuture(filters.startDate) || isDateInFuture(filters.endDate)) {
-      toast.error(t("AuditPage.toastDateInFuture"));
-      return;
-    }
-    if (!isDateRangeValid(filters.startDate, filters.endDate)) {
-      toast.error(t("AuditPage.toastDateRangeInvalid"));
-      return;
-    }
     setPage(0);
-    setApplied(filters);
   }
 
   function resetFilters() {
-    const empty = { search: "", action: "", userId: "", startDate: "", endDate: "" };
-    setFilters(empty);
-    setApplied(empty);
+    setFilters({ search: "", action: "", userId: "", startDate: "", endDate: "" });
     setPage(0);
   }
 
@@ -215,7 +225,7 @@ export default function AuditPage() {
         </div>
       )}
 
-      <form className={styles.toolbar} onSubmit={applyFilters}>
+      <form className={styles.toolbar} onSubmit={(e) => e.preventDefault()}>
         <div className={styles.searchBox}>
           <MIcon name="search" size={16} />
           <input
@@ -268,10 +278,6 @@ export default function AuditPage() {
           onChange={(e) => setDateField("endDate", e.target.value)}
         />
 
-        <button type="submit" className={styles.btnSecondary}>
-          <MIcon name="filter_alt" size={16} />
-          {t("AuditPage.query")}
-        </button>
         {hasFilter && (
           <button type="button" className={styles.btnSecondary} onClick={resetFilters}>
             <MIcon name="filter_alt_off" size={16} />
@@ -280,8 +286,8 @@ export default function AuditPage() {
         )}
       </form>
 
-      <div className={styles.content}>
-        {loading ? (
+      <div className={`${styles.content} ${loading && !isInitialLoading ? styles.refreshing : ""}`} aria-busy={loading}>
+        {isInitialLoading ? (
           <LoadingState fullPage text={t("AuditPage.loading")} />
         ) : logs.length === 0 ? (
           <EmptyState hasFilter={hasFilter} />
