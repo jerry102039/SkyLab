@@ -238,7 +238,6 @@ export default function AuditPage() {
           type="date"
           className={styles.filterSelect}
           value={filters.startDate}
-          max={filters.endDate || undefined}
           aria-label={t("AuditPage.startDate")}
           title={t("AuditPage.startDate")}
           onChange={(e) => setDateField("startDate", e.target.value)}
@@ -247,7 +246,6 @@ export default function AuditPage() {
           type="date"
           className={styles.filterSelect}
           value={filters.endDate}
-          min={filters.startDate || undefined}
           aria-label={t("AuditPage.endDate")}
           title={t("AuditPage.endDate")}
           onChange={(e) => setDateField("endDate", e.target.value)}
