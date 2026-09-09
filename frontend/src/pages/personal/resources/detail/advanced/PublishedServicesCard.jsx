@@ -1,7 +1,7 @@
 /**
  * PublishedServicesCard — 對外服務
  * 一列＝VM 裡的一個 port 怎麼對外：用網址（反向代理）、用對外 port（NAT）、或只開放防火牆。
- * 三種模式都走同一條後端路徑（先開防火牆，再套反向代理 / NAT）。
+ * 新增／編輯都走共用的 ConnectionDialog（鎖定「網際網路 → 這台」），三種模式同一條後端路徑。
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -10,24 +10,10 @@ import { useTranslation } from "react-i18next";
 import styles from "../ResourceDetailPage.module.scss";
 import MIcon from "../../../../../components/MIcon";
 import LoadingState from "../../../../../components/LoadingState/LoadingState";
+import ConnectionDialog, { INTERNET_KEY } from "../../../../../components/ConnectionDialog/ConnectionDialog";
 import useDialogPresence from "../../../../../hooks/useDialogPresence";
 import { useToast } from "../../../../../hooks/useToast";
-import {
-  listPublishedServices,
-  publishService,
-  replacePublishedService,
-  unpublishService,
-} from "../../../../../services/firewall";
-import { ReverseProxyService } from "../../../../../services/reverseProxy";
-import {
-  COMMON_PORTS,
-  extractHostnamePrefix,
-  findZoneByDomain,
-} from "../../../../../components/ReverseProxyRuleModal/ReverseProxyRuleModal";
-
-const MODES = ["domain", "port_forward", "firewall_only"];
-const PROTOCOLS = ["tcp", "udp"];
-const AVAILABILITY_DEBOUNCE_MS = 500;
+import { listPublishedServices, unpublishService } from "../../../../../services/firewall";
 
 function modeMeta(mode) {
   if (mode === "domain") return { icon: "language", badge: "badge_info", labelKey: "PublishedServicesCard.modeDomain" };
@@ -35,276 +21,19 @@ function modeMeta(mode) {
   return { icon: "shield", badge: "badge_muted", labelKey: "PublishedServicesCard.modeFirewallOnly" };
 }
 
-/* ── 新增／編輯表單 ── */
-function PublishServiceModal({ service, setupContext, closing, loading, onClose, onSubmit }) {
-  const { t } = useTranslation("personal");
-  const zones = setupContext?.zones ?? [];
-  const domainReady = setupContext?.enabled !== false && zones.length > 0;
-  const matchedZone = service?.domain ? findZoneByDomain(service.domain, zones) : null;
-  const matchedCommon = service ? COMMON_PORTS.find((p) => p.value === String(service.port)) : null;
-
-  const [mode, setMode] = useState(service?.mode ?? (domainReady ? "domain" : "port_forward"));
-  const [port, setPort] = useState(matchedCommon?.value ?? (service ? "" : "80"));
-  const [customPort, setCustomPort] = useState(service && !matchedCommon ? String(service.port) : "");
-  const [useCustomPort, setUseCustomPort] = useState(Boolean(service && !matchedCommon));
-  const [protocol, setProtocol] = useState(service?.protocol ?? "tcp");
-  const [zoneId, setZoneId] = useState(matchedZone?.id ?? zones[0]?.id ?? "");
-  const [prefix, setPrefix] = useState(
-    service?.domain ? (matchedZone ? extractHostnamePrefix(service.domain, matchedZone.name) : service.domain) : "",
-  );
-  const [enableHttps, setEnableHttps] = useState(service?.enable_https ?? true);
-  const [externalPort, setExternalPort] = useState(service?.external_port ? String(service.external_port) : "");
-  const [availability, setAvailability] = useState(null); // { available, reason, message, checking }
-
-  const effectivePort = useCustomPort ? customPort : port;
-  const selectedZone = zones.find((z) => z.id === zoneId);
-  const cleanPrefix = prefix.trim().toLowerCase().replace(/^\.+|\.+$/g, "");
-  const fullDomain = selectedZone ? (cleanPrefix ? `${cleanPrefix}.${selectedZone.name}` : selectedZone.name) : "";
-  const domainUnchanged = Boolean(service?.domain) && fullDomain === service.domain;
-
-  /* 網域即時檢查：不管是本系統建的還是 Cloudflare 上原本就有的，撞名都提醒 */
-  useEffect(() => {
-    if (mode !== "domain" || !fullDomain || domainUnchanged) {
-      setAvailability(null);
-      return undefined;
-    }
-    let cancelled = false;
-    setAvailability({ checking: true });
-    const timer = setTimeout(() => {
-      ReverseProxyService.checkDomainAvailability(fullDomain)
-        .then((res) => !cancelled && setAvailability(res))
-        .catch(() => !cancelled && setAvailability(null));
-    }, AVAILABILITY_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [mode, fullDomain, domainUnchanged]);
-
-  function submit(e) {
-    e.preventDefault();
-    const parsedPort = Number(effectivePort);
-    if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
-      setAvailability({ available: false, message: t("PublishedServicesCard.portRangeError") });
-      return;
-    }
-    const payload = { port: parsedPort, protocol: mode === "domain" ? "tcp" : protocol, mode };
-    if (mode === "domain") {
-      if (!fullDomain) return;
-      if (availability && availability.available === false) return;
-      payload.domain = fullDomain;
-      payload.enable_https = enableHttps;
-    } else if (mode === "port_forward") {
-      const ext = Number(externalPort);
-      if (!Number.isInteger(ext) || ext < 1 || ext > 65535) {
-        setAvailability({ available: false, message: t("PublishedServicesCard.externalPortRangeError") });
-        return;
-      }
-      payload.external_port = ext;
-    }
-    onSubmit(payload);
-  }
-
-  const modeCards = MODES.filter((m) => m !== "domain" || domainReady || service?.mode === "domain");
-
-  return (
-    <div className={`${styles.modalOverlay} ${closing ? styles.modalOverlayOut : ""}`} onMouseDown={onClose}>
-      <form className={`${styles.modal} ${styles.modalWide}`} onSubmit={submit} onMouseDown={(e) => e.stopPropagation()}>
-        <h2 className={styles.modalTitle}>
-          {service ? t("PublishedServicesCard.editTitle") : t("PublishedServicesCard.createTitle")}
-        </h2>
-        <p className={styles.modalDesc}>{t("PublishedServicesCard.modalDesc")}</p>
-
-        <div className={styles.field}>
-          <label>{t("PublishedServicesCard.modeLabel")}</label>
-          <div className={styles.radioGroup}>
-            {modeCards.map((m) => {
-              const meta = modeMeta(m);
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  className={`${styles.radioOption} ${mode === m ? styles.radioOptionActive : ""}`}
-                  onClick={() => setMode(m)}
-                >
-                  <strong><MIcon name={meta.icon} size={14} /> {t(meta.labelKey)}</strong>
-                  <span>{t(`PublishedServicesCard.modeDesc_${m}`)}</span>
-                </button>
-              );
-            })}
-          </div>
-          {!domainReady && (
-            <span className={styles.fieldHint}>
-              {setupContext?.reasons?.[0] ?? t("PublishedServicesCard.domainUnavailable")}
-            </span>
-          )}
-        </div>
-
-        <div className={styles.formGrid}>
-          <div className={styles.field}>
-            <label htmlFor="svc-port">{t("PublishedServicesCard.portLabel")}</label>
-            {useCustomPort ? (
-              <input
-                id="svc-port"
-                type="number"
-                min={1}
-                max={65535}
-                value={customPort}
-                onChange={(e) => setCustomPort(e.target.value)}
-                placeholder={t("PublishedServicesCard.customPortPlaceholder")}
-              />
-            ) : (
-              <select id="svc-port" value={port} onChange={(e) => setPort(e.target.value)}>
-                {COMMON_PORTS.map((p) => (
-                  <option key={p.value} value={p.value}>{t(p.labelKey, { ns: "components" })}</option>
-                ))}
-              </select>
-            )}
-            <button type="button" className={styles.ghostBtn} onClick={() => setUseCustomPort((v) => !v)}>
-              {useCustomPort ? t("PublishedServicesCard.backToCommonPorts") : t("PublishedServicesCard.portNotListed")}
-            </button>
-          </div>
-          <div className={styles.field}>
-            <label htmlFor="svc-proto">{t("PublishedServicesCard.protocolLabel")}</label>
-            <select
-              id="svc-proto"
-              value={mode === "domain" ? "tcp" : protocol}
-              disabled={mode === "domain"}
-              onChange={(e) => setProtocol(e.target.value)}
-            >
-              {PROTOCOLS.map((p) => <option key={p} value={p}>{p.toUpperCase()}</option>)}
-            </select>
-            {mode === "domain" && <span className={styles.fieldHint}>{t("PublishedServicesCard.domainTcpOnly")}</span>}
-          </div>
-        </div>
-
-        {mode === "domain" && (
-          <>
-            <div className={styles.formGrid}>
-              <div className={styles.field}>
-                <label htmlFor="svc-prefix">{t("PublishedServicesCard.prefixLabel")}</label>
-                <input
-                  id="svc-prefix"
-                  value={prefix}
-                  onChange={(e) => setPrefix(e.target.value)}
-                  placeholder={t("PublishedServicesCard.prefixPlaceholder")}
-                />
-              </div>
-              <div className={styles.field}>
-                <label htmlFor="svc-zone">{t("PublishedServicesCard.zoneLabel")}</label>
-                <select id="svc-zone" value={zoneId} onChange={(e) => setZoneId(e.target.value)}>
-                  {zones.map((z) => <option key={z.id} value={z.id}>.{z.name}</option>)}
-                </select>
-              </div>
-            </div>
-            {fullDomain && (
-              <span
-                className={`${styles.hintLine} ${
-                  availability?.checking
-                    ? ""
-                    : availability?.available === false
-                      ? styles.hintBad
-                      : availability?.reason === "unverified"
-                        ? styles.hintWarn
-                        : availability?.available
-                          ? styles.hintOk
-                          : ""
-                }`}
-              >
-                <MIcon
-                  name={
-                    availability?.checking
-                      ? "hourglass_empty"
-                      : availability?.available === false
-                        ? "error"
-                        : availability?.available
-                          ? "check_circle"
-                          : "language"
-                  }
-                  size={14}
-                />
-                {availability?.checking
-                  ? t("PublishedServicesCard.checkingDomain", { domain: fullDomain })
-                  : availability?.message
-                    ? availability.message
-                    : availability?.available
-                      ? t("PublishedServicesCard.domainAvailable", { domain: fullDomain })
-                      : domainUnchanged
-                        ? t("PublishedServicesCard.domainUnchanged", { domain: fullDomain })
-                        : fullDomain}
-              </span>
-            )}
-            <label className={styles.checkRow}>
-              <input type="checkbox" checked={enableHttps} onChange={(e) => setEnableHttps(e.target.checked)} />
-              <span>{t("PublishedServicesCard.enableHttps")}</span>
-            </label>
-          </>
-        )}
-
-        {mode === "port_forward" && (
-          <div className={styles.field}>
-            <label htmlFor="svc-ext">{t("PublishedServicesCard.externalPortLabel")}</label>
-            <input
-              id="svc-ext"
-              type="number"
-              min={1}
-              max={65535}
-              value={externalPort}
-              onChange={(e) => setExternalPort(e.target.value)}
-              placeholder={t("PublishedServicesCard.externalPortPlaceholder")}
-            />
-            <span className={styles.fieldHint}>{t("PublishedServicesCard.externalPortHint")}</span>
-          </div>
-        )}
-
-        {mode !== "domain" && availability?.message && (
-          <span className={`${styles.hintLine} ${styles.hintBad}`}>
-            <MIcon name="error" size={14} />
-            {availability.message}
-          </span>
-        )}
-
-        <div className={styles.modalActions}>
-          <button type="button" className={styles.btnSecondary} onClick={onClose} disabled={loading}>
-            {t("PublishedServicesCard.cancel")}
-          </button>
-          <button
-            type="submit"
-            className={styles.btnPrimary}
-            disabled={loading || availability?.checking || (mode === "domain" && availability?.available === false)}
-          >
-            {loading
-              ? t("PublishedServicesCard.saving")
-              : service
-                ? t("PublishedServicesCard.saveChanges")
-                : t("PublishedServicesCard.publish")}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-/* ── 主卡片 ── */
-export default function PublishedServicesCard({ vmid, resource, canManage, onChanged }) {
+export default function PublishedServicesCard({ vmid, resource, canManage, refreshKey, onChanged }) {
   const { t } = useTranslation("personal");
   const toast = useToast();
   const [services, setServices] = useState([]);
-  const [setupContext, setSetupContext] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [modal, setModal] = useState(null); // { kind: "edit", service? } | { kind: "delete", service }
   const modalPresence = useDialogPresence(modal);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, ctx] = await Promise.all([
-        listPublishedServices(vmid),
-        ReverseProxyService.setupContext().catch(() => null),
-      ]);
-      setServices(list ?? []);
-      if (ctx) setSetupContext(ctx);
+      setServices((await listPublishedServices(vmid)) ?? []);
     } catch (err) {
       toast.error(err?.message ?? t("PublishedServicesCard.loadFailed"));
     } finally {
@@ -314,7 +43,7 @@ export default function PublishedServicesCard({ vmid, resource, canManage, onCha
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   const running = resource?.status === "running";
   const createHint = useMemo(() => {
@@ -323,29 +52,16 @@ export default function PublishedServicesCard({ vmid, resource, canManage, onCha
     return "";
   }, [canManage, running, t]);
 
-  async function handleSubmit(payload) {
-    setSaving(true);
-    try {
-      if (modal?.service) {
-        await replacePublishedService(vmid, { port: modal.service.port, protocol: modal.service.protocol }, payload);
-        toast.success(t("PublishedServicesCard.updated"));
-      } else {
-        await publishService(vmid, payload);
-        toast.success(t("PublishedServicesCard.published"));
-      }
-      setModal(null);
-      await load();
-      onChanged?.();
-    } catch (err) {
-      toast.error(err?.message ?? t("PublishedServicesCard.saveFailed"));
-    } finally {
-      setSaving(false);
-    }
+  function handleDialogDone(result) {
+    toast.success(result?.kind === "replace" ? t("PublishedServicesCard.updated") : t("PublishedServicesCard.published"));
+    setModal(null);
+    load();
+    onChanged?.();
   }
 
   async function handleDelete() {
     if (!modal?.service) return;
-    setSaving(true);
+    setDeleting(true);
     try {
       await unpublishService(vmid, { port: modal.service.port, protocol: modal.service.protocol });
       toast.success(t("PublishedServicesCard.unpublished"));
@@ -355,7 +71,7 @@ export default function PublishedServicesCard({ vmid, resource, canManage, onCha
     } catch (err) {
       toast.error(err?.message ?? t("PublishedServicesCard.deleteFailed"));
     } finally {
-      setSaving(false);
+      setDeleting(false);
     }
   }
 
@@ -458,19 +174,20 @@ export default function PublishedServicesCard({ vmid, resource, canManage, onCha
         )}
       </div>
 
-      {/* portal 到 body：卡片的 overflow:hidden + backdrop-filter 會把 fixed modal 困在卡片裡 */}
-      {modalPresence.item?.kind === "edit" &&
-        createPortal(
-          <PublishServiceModal
-            service={modalPresence.item.service}
-            setupContext={setupContext}
-            closing={modalPresence.closing}
-            loading={saving}
-            onClose={() => setModal(null)}
-            onSubmit={handleSubmit}
-          />,
-          document.body,
-        )}
+      {/* 新增／編輯：共用對話框自己 portal 到 body */}
+      {modalPresence.item?.kind === "edit" && (
+        <ConnectionDialog
+          fixedVmid={vmid}
+          fixedName={resource?.name}
+          initialSource={INTERNET_KEY}
+          service={modalPresence.item.service}
+          closing={modalPresence.closing}
+          onClose={() => setModal(null)}
+          onDone={handleDialogDone}
+          onChanged={() => { load(); onChanged?.(); }}
+        />
+      )}
+      {/* 撤下確認：卡片有 overflow:hidden + backdrop-filter，要 portal 到 body 才能蓋住整頁 */}
       {modalPresence.item?.kind === "delete" &&
         createPortal(
           <div
@@ -489,8 +206,8 @@ export default function PublishedServicesCard({ vmid, resource, canManage, onCha
                 <button type="button" className={styles.btnSecondary} onClick={() => setModal(null)}>
                   {t("PublishedServicesCard.cancel")}
                 </button>
-                <button type="button" className={styles.btnDanger} disabled={saving} onClick={handleDelete}>
-                  {saving ? t("PublishedServicesCard.deleting") : t("PublishedServicesCard.unpublish")}
+                <button type="button" className={styles.btnDanger} disabled={deleting} onClick={handleDelete}>
+                  {deleting ? t("PublishedServicesCard.deleting") : t("PublishedServicesCard.unpublish")}
                 </button>
               </div>
             </div>

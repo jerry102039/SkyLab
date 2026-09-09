@@ -23,7 +23,9 @@ export default function AdvancedSettingsTab({ vmid, backTo }) {
 
   const [resource, setResource] = useState(null);
   const [error, setError] = useState(false);
+  /* 對外服務與防火牆卡片共用同一份連線對話框，任一邊有異動就讓另一邊重載 */
   const [firewallKey, setFirewallKey] = useState(0);
+  const [servicesKey, setServicesKey] = useState(0);
 
   const loadResource = useCallback(async () => {
     try {
@@ -52,11 +54,17 @@ export default function AdvancedSettingsTab({ vmid, backTo }) {
           vmid={vmid}
           resource={resource}
           canManage={canManage}
+          refreshKey={servicesKey}
           onChanged={() => setFirewallKey((k) => k + 1)}
         />
       )}
 
-      <FirewallCard vmid={vmid} canManage={canManage} refreshKey={firewallKey} />
+      <FirewallCard
+        vmid={vmid}
+        canManage={canManage}
+        refreshKey={firewallKey}
+        onChanged={() => setServicesKey((k) => k + 1)}
+      />
 
       {!isShared && <BootOptionsCard vmid={vmid} canManage={canManage} />}
 
