@@ -236,6 +236,25 @@
   strong { color: var(--color-info); }
 }
 
+.noticeProgress {
+  border-color: color-mix(in srgb, var(--color-pending) 34%, transparent);
+  background: color-mix(in srgb, var(--color-pending) 9%, transparent);
+
+  strong { color: var(--color-pending); }
+}
+
+.noticeProgressTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: $font-size-14;
+  font-weight: $font-weight-700;
+}
+
+.noticeProgressHighlight {
+  margin: 0 2px;
+}
+
 .fileMeta {
   font-size: $font-size-12;
   color: var(--color-text-muted);

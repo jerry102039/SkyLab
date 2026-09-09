@@ -73,6 +73,7 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
         const command = sshTool.args?.command || "";
         setPendingTool({
           token: sshTool.result.confirm_token,
+          toolCallId: sshTool.tool_call_id || null,
           command,
           reason: sshTool.args?.reason || t("AiPveChat.defaultConfirmReason"),
         });
@@ -150,15 +151,27 @@ export default function AiPveChat({ initialPrompt = "", compact = false, fill = 
       }
 
       const updatedHistory = [...chatHistory];
-      const targetIndex = updatedHistory.findIndex(
-        (message) => message.role === "tool"
-          && typeof message.content === "string"
-          && message.content.includes(currentToken),
-      );
+      let targetIndex = pendingTool.toolCallId
+        ? updatedHistory.findIndex(
+          (message) => message.role === "tool"
+            && message.tool_call_id === pendingTool.toolCallId,
+        )
+        : -1;
+      if (targetIndex === -1) {
+        targetIndex = updatedHistory.findIndex(
+          (message) => message.role === "tool"
+            && typeof message.content === "string"
+            && message.content.includes(currentToken),
+        );
+      }
       if (targetIndex !== -1) {
+        const canonicalResult = {
+          ...result,
+          confirmation_token: currentToken,
+        };
         updatedHistory[targetIndex] = {
           ...updatedHistory[targetIndex],
-          content: JSON.stringify(result),
+          content: JSON.stringify(canonicalResult),
         };
       }
 

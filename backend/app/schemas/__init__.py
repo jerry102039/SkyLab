@@ -94,7 +94,10 @@ from .monitoring import (
     AlertEventPublic,
     GovernanceConfigPublic,
     GovernanceConfigUpdate,
+    MonitoringIssue,
     MonitoringOverview,
+    MonitoringSignal,
+    MonitoringThresholds,
     NodeMetrics,
     VMTopEntry,
 )
@@ -311,7 +314,10 @@ __all__ = [
     "AlertEventPublic",
     "GovernanceConfigPublic",
     "GovernanceConfigUpdate",
+    "MonitoringIssue",
     "MonitoringOverview",
+    "MonitoringSignal",
+    "MonitoringThresholds",
     "NodeMetrics",
     "VMTopEntry",
     # Mining (module D)

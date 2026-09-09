@@ -36,18 +36,34 @@
 .assistantHero {
   display: grid;
   grid-template-columns: minmax(280px, 0.8fr) minmax(460px, 1.2fr);
+  grid-template-areas:
+    "intro intro"
+    "status form";
   gap: $spacing-32;
   padding: $spacing-32;
   align-items: center;
 }
-/* 對話開始後這一列縮成一條窄標頭，版面全部讓給輸出 */
-.assistantSectionExpanded .assistantHero {
+.assistantLeft {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  min-width: 0;
+  flex-direction: column;
+  gap: $spacing-24;
+  grid-area: status;
+}
+/* 對話開始後保留左側硬體快看，右側縮小比例承載聊天 */
+.assistantSectionExpanded .assistantHero {
+  grid-template-columns: minmax(260px, 0.7fr) minmax(380px, 1.3fr);
+  grid-template-areas:
+    "intro chat"
+    "status chat";
+  gap: $spacing-24;
+  padding: $spacing-24;
+  align-items: stretch;
+}
+.assistantSectionExpanded .assistantLeft {
+  display: flex;
+  min-width: 0;
   gap: $spacing-16;
-  padding: 10px $spacing-16 10px $spacing-24;
-  border-bottom: 1px solid var(--color-divider);
 }
 .assistantSectionExpanded .assistantIntro {
   align-items: center;
@@ -66,10 +82,23 @@
 .assistantSectionExpanded .assistantLabel {
   display: none;
 }
+.assistantChatColumn {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  grid-area: chat;
+}
+.assistantChatColumn > :last-child {
+  width: 100%;
+  min-width: 0;
+}
 .assistantSectionExpanded .assistantActions {
   display: flex;
   flex-shrink: 0;
   align-items: center;
+  justify-content: flex-end;
   gap: $spacing-8;
 }
 
@@ -85,6 +114,21 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
+}
+.assistantSectionFocused .assistantHero {
+  min-height: 0;
+  flex: 1;
+}
+.assistantSectionFocused .assistantLeft,
+.assistantSectionFocused .assistantChatColumn {
+  min-height: 0;
+}
+.assistantSectionFocused .assistantLeft {
+  overflow: auto;
+}
+.assistantSectionFocused .assistantChatColumn > :last-child {
+  min-height: 0;
+  flex: 1;
 }
 
 .assistantReset {
@@ -136,6 +180,7 @@
   display: flex;
   align-items: flex-start;
   gap: $spacing-16;
+  grid-area: intro;
 }
 .assistantIcon {
   display: grid;
@@ -165,7 +210,6 @@
 }
 .assistantIntro p {
   margin: 0;
-  max-width: 42ch;
   color: var(--color-text-secondary);
   font-size: $font-size-14;
   line-height: 1.7;
@@ -175,6 +219,7 @@
   min-width: 0;
   flex-direction: column;
   gap: 10px;
+  grid-area: form;
 }
 .assistantInput {
   display: grid;
@@ -436,6 +481,19 @@
 @media (max-width: $breakpoint-xl) {
   .assistantHero {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "intro"
+      "status"
+      "form";
+  }
+}
+@media (max-width: $breakpoint-lg) {
+  .assistantSectionExpanded .assistantHero {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "intro"
+      "status"
+      "chat";
   }
 }
 @media (max-width: $breakpoint-md) {
@@ -446,6 +504,11 @@
     font-size: $font-size-24;
   }
   .assistantHero {
+    padding: $spacing-16;
+    gap: $spacing-16;
+  }
+  .assistantSectionExpanded .assistantHero {
+    grid-template-columns: 1fr;
     padding: $spacing-16;
     gap: $spacing-16;
   }

@@ -9,6 +9,30 @@ from app.ai.pve_log import chat as pve_chat_module
 from app.ai.pve_log import collector
 
 
+def test_admin_prompt_limits_scope_and_uses_operator_anomaly_rules():
+    prompt = pve_chat_module._SYSTEM_PROMPT
+
+    assert "問題 A 不得自行" in prompt
+    assert "不要列出正常資源" in prompt
+    assert "不要為了讓回答看起來完整而額外呼叫工具" in prompt
+    assert "節點 CPU、記憶體、磁碟使用率達 100% 滿載" in prompt
+    assert "VM/LXC 的 stopped、關機" in prompt
+    assert "滿載都視為正常狀態" in prompt
+    assert "額外錯誤或故障訊號" in prompt
+    assert "同一問題範圍內使用 tools 做必要的下一步診斷" in prompt
+    assert "不得自行擴張成修復或變更操作" in prompt
+    assert "**建議操作：**" in prompt
+    assert "不得把收集錯誤算成特定 VM/LXC" in prompt
+    assert "同一項狀態、異常與證據不得換句話重複" in prompt
+    assert "只保留「異常」" in prompt
+    assert "判定規則是內部回答準則" in prompt
+    assert "stopped 視為" in prompt
+    assert "只有使用者明確詢問判定標準時才說明" in prompt
+    assert "整體狀態 → 異常 → 原因 → 建議" in prompt
+    assert "未詢問原因、" in prompt
+    assert "不主動加入其他延伸段落" in prompt
+
+
 class _Endpoint:
     def __init__(self, calls: Counter[str], key: str, value):
         self._calls = calls
