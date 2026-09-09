@@ -15,6 +15,7 @@
  * - fixedVmid        鎖定一端為這台 VM（資源詳情頁用），另一端自由選；fixedName 為顯示名稱備援
  * - initialSource / initialTarget  預設兩端（"internet" 或 vmid 字串）
  * - initialTab       "connection"（預設）| "rule"
+ * - initialMode      入站預設發布方式 "domain" | "port_forward" | "firewall_only"（網址不可用時退回對外 port）
  * - service          編輯既有對外服務時傳入（鎖定入站、單一 port，改走 replacePublishedService）
  * - onDone(result)   全部成功後回呼（呼叫端負責關閉與重新載入）
  * - onChanged()      可選；多筆發布途中失敗時，已成功的部分會先通知一次
@@ -189,6 +190,7 @@ export default function ConnectionDialog({
   initialSource,
   initialTarget,
   initialTab = "connection",
+  initialMode,
   service,
   onDone,
   onChanged,
@@ -287,13 +289,15 @@ export default function ConnectionDialog({
   const zones = useMemo(() => setupContext?.zones ?? EMPTY, [setupContext]);
   const domainReady = Boolean(setupContext) && setupContext.enabled !== false && zones.length > 0;
 
-  const [mode, setModeState] = useState(service?.mode ?? "port_forward");
-  const modeTouched = useRef(editing);
+  const [mode, setModeState] = useState(service?.mode ?? initialMode ?? "port_forward");
+  const modeTouched = useRef(editing || Boolean(initialMode));
   const setMode = (m) => { modeTouched.current = true; setModeState(m); };
-  /* 網址可用時預設用網址（使用者還沒手動選過才改） */
+  /* 網址可用時預設用網址（使用者或呼叫端還沒指定過才改）；呼叫端指定網址但環境不支援就退回對外 port */
   useEffect(() => {
+    if (!setupContext) return;
     if (domainReady && !modeTouched.current) setModeState("domain");
-  }, [domainReady]);
+    if (!domainReady && !editing) setModeState((m) => (m === "domain" ? "port_forward" : m));
+  }, [setupContext, domainReady, editing]);
   const modeCards = INBOUND_MODES.filter((m) => m !== "domain" || domainReady || service?.mode === "domain");
 
   /* 網址模式 */

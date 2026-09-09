@@ -1,6 +1,7 @@
 /**
  * PublishedServicesCard — 對外服務
- * 一列＝VM 裡的一個 port 怎麼對外：用網址（反向代理）、用對外 port（NAT）、或只開放防火牆。
+ * 以「這台機器有哪些網址」為主：每列一個反向代理網域（可直接點開），
+ * 其他對外入口（對外 port 轉發、僅開放防火牆）縮成下方的小區塊。
  * 新增／編輯都走共用的 ConnectionDialog（鎖定「網際網路 → 這台」），三種模式同一條後端路徑。
  */
 
@@ -15,11 +16,7 @@ import useDialogPresence from "../../../../../hooks/useDialogPresence";
 import { useToast } from "../../../../../hooks/useToast";
 import { listPublishedServices, unpublishService } from "../../../../../services/firewall";
 
-function modeMeta(mode) {
-  if (mode === "domain") return { icon: "language", badge: "badge_info", labelKey: "PublishedServicesCard.modeDomain" };
-  if (mode === "port_forward") return { icon: "swap_horiz", badge: "badge_ok", labelKey: "PublishedServicesCard.modePortForward" };
-  return { icon: "shield", badge: "badge_muted", labelKey: "PublishedServicesCard.modeFirewallOnly" };
-}
+const serviceKey = (svc) => `${svc.port}/${svc.protocol}`;
 
 export default function PublishedServicesCard({ vmid, resource, canManage, refreshKey, onChanged }) {
   const { t } = useTranslation("personal");
@@ -27,7 +24,8 @@ export default function PublishedServicesCard({ vmid, resource, canManage, refre
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
-  const [modal, setModal] = useState(null); // { kind: "edit", service? } | { kind: "delete", service }
+  // { kind: "edit", service?, mode? } | { kind: "delete", service }
+  const [modal, setModal] = useState(null);
   const modalPresence = useDialogPresence(modal);
 
   const load = useCallback(async () => {
@@ -52,6 +50,9 @@ export default function PublishedServicesCard({ vmid, resource, canManage, refre
     return "";
   }, [canManage, running, t]);
 
+  const domains = services.filter((s) => s.mode === "domain");
+  const others = services.filter((s) => s.mode !== "domain");
+
   function handleDialogDone(result) {
     toast.success(result?.kind === "replace" ? t("PublishedServicesCard.updated") : t("PublishedServicesCard.published"));
     setModal(null);
@@ -75,6 +76,36 @@ export default function PublishedServicesCard({ vmid, resource, canManage, refre
     }
   }
 
+  const actions = (svc) =>
+    canManage && (
+      <div className={styles.rpActions}>
+        <button
+          type="button"
+          className={styles.rpIconBtn}
+          title={t("PublishedServicesCard.edit")}
+          disabled={!running}
+          onClick={() => setModal({ kind: "edit", service: svc })}
+        >
+          <MIcon name="edit" size={16} />
+        </button>
+        <button
+          type="button"
+          className={`${styles.rpIconBtn} ${styles.rpIconBtnDanger}`}
+          title={t("PublishedServicesCard.unpublish")}
+          onClick={() => setModal({ kind: "delete", service: svc })}
+        >
+          <MIcon name="delete" size={16} />
+        </button>
+      </div>
+    );
+
+  const missingRuleBadge = (svc) =>
+    !svc.firewall_rule_present && (
+      <span className={`${styles.badge} ${styles.badge_err}`} title={t("PublishedServicesCard.missingRuleHint")}>
+        <MIcon name="warning" size={11} /> {t("PublishedServicesCard.missingRule")}
+      </span>
+    );
+
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
@@ -91,10 +122,10 @@ export default function PublishedServicesCard({ vmid, resource, canManage, refre
             className={styles.btnPrimary}
             disabled={Boolean(createHint)}
             title={createHint}
-            onClick={() => setModal({ kind: "edit" })}
+            onClick={() => setModal({ kind: "edit", mode: "domain" })}
           >
             <MIcon name="add" size={16} />
-            {t("PublishedServicesCard.add")}
+            {t("PublishedServicesCard.addDomain")}
           </button>
         </div>
       </div>
@@ -107,70 +138,82 @@ export default function PublishedServicesCard({ vmid, resource, canManage, refre
         )}
         {loading ? (
           <LoadingState text={t("PublishedServicesCard.loading")} />
-        ) : services.length === 0 ? (
-          <p className={styles.mutedText}>{t("PublishedServicesCard.empty")}</p>
         ) : (
-          <div className={styles.rpList}>
-            {services.map((svc) => {
-              const meta = modeMeta(svc.mode);
-              return (
-                <div key={`${svc.port}/${svc.protocol}`} className={styles.rpItem}>
-                  <div className={styles.rpMain}>
-                    <span className={styles.rpDomain}>
-                      {svc.mode === "domain"
-                        ? svc.domain
-                        : svc.mode === "port_forward"
+          <>
+            {/* 這台機器的網址 */}
+            {domains.length === 0 ? (
+              <p className={styles.mutedText}>{t("PublishedServicesCard.noDomains")}</p>
+            ) : (
+              <div className={styles.rpList}>
+                {domains.map((svc) => (
+                  <div key={serviceKey(svc)} className={styles.rpItem}>
+                    <MIcon name="language" size={20} className={styles.rpLeadIcon} />
+                    <div className={styles.rpMain}>
+                      {svc.url ? (
+                        <a className={styles.rpDomainLink} href={svc.url} target="_blank" rel="noreferrer">
+                          {svc.domain}
+                          <MIcon name="open_in_new" size={13} />
+                        </a>
+                      ) : (
+                        <span className={styles.rpDomain}>{svc.domain}</span>
+                      )}
+                      <span className={styles.rpMeta}>
+                        <span className={`${styles.badge} ${svc.enable_https ? styles.badge_ok : styles.badge_muted}`}>
+                          <MIcon name={svc.enable_https ? "lock" : "lock_open"} size={11} /> {svc.enable_https ? "HTTPS" : "HTTP"}
+                        </span>
+                        {t("PublishedServicesCard.domainTarget", { port: svc.port })}
+                        {missingRuleBadge(svc)}
+                      </span>
+                    </div>
+                    {actions(svc)}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 其他對外入口：對外 port 轉發、僅開放防火牆 */}
+            <div className={styles.rpSubSection}>
+              <div className={styles.rpSubHeader}>
+                <span className={styles.rpSubTitle}>
+                  <MIcon name="swap_horiz" size={14} />
+                  {t("PublishedServicesCard.othersTitle")}
+                </span>
+                {canManage && (
+                  <button
+                    type="button"
+                    className={styles.ghostBtn}
+                    disabled={Boolean(createHint)}
+                    title={createHint}
+                    onClick={() => setModal({ kind: "edit", mode: "port_forward" })}
+                  >
+                    <MIcon name="add" size={14} />
+                    {t("PublishedServicesCard.addOther")}
+                  </button>
+                )}
+              </div>
+              {others.length === 0 ? (
+                <p className={styles.rpSubEmpty}>{t("PublishedServicesCard.noOthers")}</p>
+              ) : (
+                <div className={styles.rpCompactList}>
+                  {others.map((svc) => (
+                    <div key={serviceKey(svc)} className={styles.rpCompactItem}>
+                      <MIcon name={svc.mode === "port_forward" ? "swap_horiz" : "shield"} size={16} className={styles.rpCompactIcon} />
+                      <span className={styles.rpCompactText}>
+                        {svc.mode === "port_forward"
                           ? t("PublishedServicesCard.forwardSummary", { external: svc.external_port, port: svc.port, protocol: svc.protocol })
                           : t("PublishedServicesCard.firewallOnlySummary", { port: svc.port, protocol: svc.protocol })}
-                    </span>
-                    <span className={styles.rpMeta}>
-                      <span className={`${styles.badge} ${styles[meta.badge]}`}>
-                        <MIcon name={meta.icon} size={11} /> {t(meta.labelKey)}
+                        <span className={styles.rpCompactMode}>
+                          {svc.mode === "port_forward" ? t("PublishedServicesCard.modePortForward") : t("PublishedServicesCard.modeFirewallOnly")}
+                        </span>
+                        {missingRuleBadge(svc)}
                       </span>
-                      {t("PublishedServicesCard.internalPort", { port: svc.port, protocol: svc.protocol.toUpperCase() })}
-                      {svc.mode === "domain" && svc.enable_https && (
-                        <span className={`${styles.badge} ${styles.badge_ok}`}>
-                          <MIcon name="lock" size={11} /> HTTPS
-                        </span>
-                      )}
-                      {!svc.firewall_rule_present && (
-                        <span className={`${styles.badge} ${styles.badge_err}`} title={t("PublishedServicesCard.missingRuleHint")}>
-                          <MIcon name="warning" size={11} /> {t("PublishedServicesCard.missingRule")}
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  {svc.url && (
-                    <a className={styles.rpOpen} href={svc.url} target="_blank" rel="noreferrer">
-                      <MIcon name="open_in_new" size={14} />
-                      {t("PublishedServicesCard.open")}
-                    </a>
-                  )}
-                  {canManage && (
-                    <div className={styles.rpActions}>
-                      <button
-                        type="button"
-                        className={styles.rpIconBtn}
-                        title={t("PublishedServicesCard.edit")}
-                        disabled={!running}
-                        onClick={() => setModal({ kind: "edit", service: svc })}
-                      >
-                        <MIcon name="edit" size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.rpIconBtn} ${styles.rpIconBtnDanger}`}
-                        title={t("PublishedServicesCard.unpublish")}
-                        onClick={() => setModal({ kind: "delete", service: svc })}
-                      >
-                        <MIcon name="delete" size={16} />
-                      </button>
+                      {actions(svc)}
                     </div>
-                  )}
+                  ))}
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </div>
+          </>
         )}
       </div>
 
@@ -180,6 +223,7 @@ export default function PublishedServicesCard({ vmid, resource, canManage, refre
           fixedVmid={vmid}
           fixedName={resource?.name}
           initialSource={INTERNET_KEY}
+          initialMode={modalPresence.item.mode}
           service={modalPresence.item.service}
           closing={modalPresence.closing}
           onClose={() => setModal(null)}
