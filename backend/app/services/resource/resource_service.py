@@ -843,6 +843,14 @@ def delete(
         except Exception as exc:
             logger.warning("Failed to clean up reverse proxy rules for VM %s: %s", vmid, exc)
 
+        # NAT 規則的 vmid 外鍵會連帶刪除 DB 紀錄，但不會重寫 Gateway 上的
+        # haproxy 設定；不明確清一次，轉發會留在原地指向已釋放的 IP。
+        try:
+            from app.services.network import nat_service  # noqa: PLC0415
+            nat_service.remove_nat_rules_for_vmid(session, vmid)
+        except Exception as exc:
+            logger.warning("Failed to clean up NAT rules for VM %s: %s", vmid, exc)
+
         # Release IP allocation
         try:
             from app.services.network import ip_management_service  # noqa: PLC0415
@@ -935,6 +943,12 @@ def delete_orphan_db_record(
         reverse_proxy_service.remove_reverse_proxy_rules_for_vmid(session, vmid)
     except Exception as exc:
         logger.warning("Orphan cleanup: failed to remove reverse proxy rules for vmid=%s: %s", vmid, exc)
+
+    try:
+        from app.services.network import nat_service  # noqa: PLC0415
+        nat_service.remove_nat_rules_for_vmid(session, vmid)
+    except Exception as exc:
+        logger.warning("Orphan cleanup: failed to remove NAT rules for vmid=%s: %s", vmid, exc)
 
     try:
         from app.services.network import ip_management_service  # noqa: PLC0415

@@ -169,6 +169,8 @@
   "Sidebar.itemMonitoring": "Resource Monitoring",
   "Sidebar.itemJobs": "Background Jobs",
   "Sidebar.itemAudit": "Audit Log",
+  "Sidebar.pin": "Pin",
+  "Sidebar.unpin": "Unpin",
   "Sidebar.userSettings": "User Settings",
   "Sidebar.logOut": "Log Out",
   "Sidebar.userMenuAriaLabel": "User menu: {{name}}"

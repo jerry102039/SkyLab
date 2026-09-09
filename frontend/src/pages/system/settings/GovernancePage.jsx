@@ -8,7 +8,7 @@ import { useToast } from "../../../hooks/useToast";
 
 /**
  * 治理設定（系統管理 → 治理）：閾值警告 / TTL 回收 / 閒置偵測 / 自動判斷 /
- * 反挖礦 / 快照治理 / 克隆併發。單一儲存鍵送出全部欄位。
+ * 反挖礦 / 快照治理 / 克隆併發 / 課程學習環境。單一儲存鍵送出全部欄位。
  * 2026-09 從「系統設定」的分頁拆成獨立頁面。
  */
 
@@ -91,6 +91,15 @@ function useSections(t) {
       desc: t("GovernanceTab.cloneConcurrencyDesc"),
       toggles: [],
       fields: [{ key: "provision_max_concurrency", label: t("GovernanceTab.provisionMaxConcurrency"), min: 1, max: 16 }],
+    },
+    {
+      title: t("GovernanceTab.courseLabTitle"),
+      desc: t("GovernanceTab.courseLabDesc"),
+      toggles: [],
+      fields: [
+        { key: "course_ttl_hours", label: t("GovernanceTab.courseTtlHours"), min: 1, max: 24, hint: t("GovernanceTab.courseTtlHoursHint") },
+        { key: "course_max_active_per_user", label: t("GovernanceTab.courseMaxActivePerUser"), min: 1, max: 5, hint: t("GovernanceTab.courseMaxActivePerUserHint") },
+      ],
     },
   ], [t]);
 }

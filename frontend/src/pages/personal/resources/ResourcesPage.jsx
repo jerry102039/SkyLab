@@ -9,6 +9,7 @@ import PowerMenu from "../../../components/PowerMenu/PowerMenu";
 import TemplateConvertDialog from "../../../components/TemplateConvertDialog/TemplateConvertDialog";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
+import LoadingState from "../../../components/LoadingState/LoadingState";
 import { ResourcesService } from "../../../services/resources";
 import {
   PENDING_POLL_INTERVAL,
@@ -387,7 +388,8 @@ function EnvironmentMachineRow({ machine, groupStatus, onUpdated }) {
       : <strong>{machine.name}</strong>}<small>{machine.role} · {t(type.labelKey ?? type.label)}{specLabel ? ` · ${specLabel}` : ""}</small></div></div></td>
     <td className={styles.td}><div className={styles.envPrimary}>{machine.os}</div><div className={styles.envSub}>{machine.resource ? t("EnvironmentMachineRow.resourceConnected") : t("EnvironmentMachineRow.creating")}</div></td>
     <td className={styles.td}><StatusBadge status={machine.status} /></td>
-    <td className={styles.td}><span className={styles.mono}>{machine.ip}</span></td>
+    <td className={styles.td}><span className={styles.mono}>{machine.ip}</span>
+      {machine.publicUrl && <a className={styles.publicUrlLink} href={machine.publicUrl} target="_blank" rel="noreferrer"><MIcon name="open_in_new" size={13} />{machine.publicUrl.replace(/^https?:\/\//, "")}</a>}</td>
     <td className={styles.td}><span className={styles.muted}>{t("EnvironmentMachineRow.managedByEnvironment")}</span></td>
     <td className={styles.td}>{machine.node}</td>
     <td className={styles.td}><div className={styles.rowActions}>
@@ -471,11 +473,6 @@ function EnvironmentGroupRows({ group, onUpdated, onEnded }) {
     {expanded && group.machines.map((machine) => <EnvironmentMachineRow key={machine.id} machine={machine} groupStatus={group.status} onUpdated={onUpdated} />)}
     {endConfirm && createPortal(<ConfirmModal title={t("EnvironmentGroupRows.confirmEndTitle")} desc={t("EnvironmentGroupRows.confirmEndDesc")} confirmLabel={t("EnvironmentGroupRows.endPractice")} danger loading={ending} onConfirm={endPractice} onClose={() => setEndConfirm(false)} />, document.body)}
   </>;
-}
-
-/* ── Skeleton ── */
-function SkeletonRow() {
-  return <tr className={styles.tr} aria-hidden>{[0, 1, 2, 3, 4, 5, 6].map((column) => <td key={column} className={styles.td}><div className={`${styles.skeleton} ${styles.skRow}`} style={{ width: column === 0 ? "75%" : "60%", height: 14 }} /></td>)}</tr>;
 }
 
 /* ── Empty / Error states ── */
@@ -641,13 +638,15 @@ export default function ResourcesPage() {
       <div className={styles.content}>
         {error ? (
           <ErrorState onRetry={() => fetchResources()} />
-        ) : !loading && visibleResources.length === 0 && visiblePending.length === 0 && environmentGroups.length === 0 ? (
+        ) : loading ? (
+          <LoadingState fullPage />
+        ) : visibleResources.length === 0 && visiblePending.length === 0 && environmentGroups.length === 0 ? (
           <EmptyState />
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <colgroup>
-                <col />
+                <col className={styles.colName} />
                 <col className={styles.colEnv} />
                 <col className={styles.colStatus} />
                 <col className={styles.colIp} />
@@ -659,11 +658,9 @@ export default function ResourcesPage() {
                 <tr><th className={styles.th}>{t("ResourcesPage.colName")}</th><th className={styles.th}>{t("ResourcesPage.colEnvironment")}</th><th className={styles.th}>{t("ResourcesPage.colStatus")}</th><th className={styles.th}>{t("ResourcesPage.colIp")}</th><th className={styles.th}>{t("ResourcesPage.colExpiry")}</th><th className={styles.th}>{t("ResourcesPage.colNode")}</th><th className={styles.th}>{t("ResourcesPage.colActions")}</th></tr>
               </thead>
               <tbody>
-                {loading ? [0, 1, 2].map((i) => <SkeletonRow key={i} />) : <>
-                  {environmentGroups.map((group) => <EnvironmentGroupRows key={group.id} group={group} onUpdated={handleUpdated} onEnded={() => fetchResources(true)} />)}
-                  {visiblePending.map((req) => <CreatingRow key={`creating:${req.id}`} request={req} onCancelled={refreshPending} />)}
-                  {visibleResources.map((r, index) => <ResourceRow key={resourceRowKey(r, index)} resource={r} onUpdated={handleUpdated} onDeleted={handleDeleted} />)}
-                </>}
+                {environmentGroups.map((group) => <EnvironmentGroupRows key={group.id} group={group} onUpdated={handleUpdated} onEnded={() => fetchResources(true)} />)}
+                {visiblePending.map((req) => <CreatingRow key={`creating:${req.id}`} request={req} onCancelled={refreshPending} />)}
+                {visibleResources.map((r, index) => <ResourceRow key={resourceRowKey(r, index)} resource={r} onUpdated={handleUpdated} onDeleted={handleDeleted} />)}
               </tbody>
             </table>
           </div>

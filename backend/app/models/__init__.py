@@ -39,6 +39,7 @@ from .course_environment import (
     CourseEnvironmentAudience,
     CourseEnvironmentEdge,
     CourseEnvironmentNode,
+    CourseEnvironmentPublication,
     CourseEnvironmentVersion,
     CourseEnvironmentVersionStatus,
 )
@@ -50,12 +51,7 @@ from .ip_allocation import IpAllocation
 from .ldap_config import LdapConfig
 from .mining_incident import MiningIncident, MiningIncidentStatus
 from .nat_rule import NatRule
-from .proxmox_config import (
-    ProxmoxConfig,
-    ProxmoxConnectionConfig,
-    ProxmoxPlacementConfig,
-    ProxmoxSchedulerConfig,
-)
+from .proxmox_config import ProxmoxConfig
 from .proxmox_connection import ProxmoxConnection
 from .proxmox_node import ProxmoxNode
 from .proxmox_storage import ProxmoxStorage
@@ -109,14 +105,7 @@ from .teaching_class import (
 )
 from .tunnel_proxy import TunnelProxy
 from .user import User, UserBase, UserRole
-from .vm_request import (
-    VMProvisioningStatus,
-    VMRequest,
-    VMRequestProvisioningState,
-    VMRequestReviewState,
-    VMRequestScheduleState,
-    VMRequestStatus,
-)
+from .vm_request import VMProvisioningStatus, VMRequest, VMRequestStatus
 from .vm_template import (
     TemplateAttachment,
     VMTemplate,
@@ -150,9 +139,6 @@ __all__ = [
     "VMProvisioningStatus",
     "VMRequest",
     "VMRequestStatus",
-    "VMRequestProvisioningState",
-    "VMRequestReviewState",
-    "VMRequestScheduleState",
     # Audit Log
     "AuditAction",
     "AuditLog",
@@ -172,9 +158,6 @@ __all__ = [
     # Proxmox Config
     "ProxmoxConfig",
     "ProxmoxConnection",
-    "ProxmoxConnectionConfig",
-    "ProxmoxPlacementConfig",
-    "ProxmoxSchedulerConfig",
     # Proxmox Nodes
     "ProxmoxNode",
     # Proxmox Storages
@@ -190,6 +173,7 @@ __all__ = [
     "CourseEnvironment",
     "CourseEnvironmentAudience",
     "CourseEnvironmentEdge",
+    "CourseEnvironmentPublication",
     "CourseEnvironmentVersion",
     "CourseEnvironmentVersionStatus",
     "CourseEnvironmentNode",

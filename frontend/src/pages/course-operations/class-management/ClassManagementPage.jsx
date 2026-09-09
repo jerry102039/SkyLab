@@ -5,6 +5,7 @@ import LoadingState from "../../../components/LoadingState/LoadingState";
 import MIcon from "../../../components/MIcon";
 import EmptyState from "../../../components/EmptyState/EmptyState";
 import { TeachingClassesService } from "../../../services/teachingClasses";
+import { useToast } from "../../../hooks/useToast";
 import styles from "../CourseOperations.module.scss";
 import PageHeader from "../../../components/PageHeader/PageHeader";
 
@@ -103,9 +104,9 @@ export default function ClassManagementPage() {
   const { t } = useTranslation("teaching");
   const navigate = useNavigate();
   const location = useLocation();
+  const toast = useToast();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [showArchived, setShowArchived] = useState(false);
@@ -114,10 +115,17 @@ export default function ClassManagementPage() {
     let active = true;
     TeachingClassesService.list()
       .then((rows) => active && setClasses((rows?.data ?? rows ?? []).map(normalizeClass)))
-      .catch((reason) => active && setError(reason?.message ?? t("ClassManagementPage.loadFailed")))
+      .catch((reason) => active && toast.error(reason?.message ?? t("ClassManagementPage.loadFailed")))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [t]);
+  }, [toast, t]);
+
+  // 導頁帶來的一次性成功訊息改用 toast，吐完即清掉 state 免得重整重播。
+  useEffect(() => {
+    if (!location.state?.message) return;
+    toast.success(location.state.message);
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.state?.message, location.pathname, navigate, toast]);
 
   const archivedCount = useMemo(
     () => classes.filter((item) => item.status === "archived").length,
@@ -154,9 +162,6 @@ export default function ClassManagementPage() {
         <MIcon name="add" size={17} />{t("ClassManagementPage.createClass")}
       </button>
     </PageHeader>
-
-    {error && <p className={styles.errorMessage}>{error}</p>}
-    {location.state?.message && <p className={styles.persistentFeedback}><MIcon name="cloud_done" size={17} />{location.state.message}</p>}
 
     <div className={styles.classToolbar}>
       <label className={styles.searchInput}><MIcon name="search" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("ClassManagementPage.searchPlaceholder")} /></label>

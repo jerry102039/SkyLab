@@ -9,6 +9,7 @@ import { useToast } from "../../../hooks/useToast";
 import useAutoRefresh from "../../../hooks/useAutoRefresh";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import PageHeader from "../../../components/PageHeader/PageHeader";
+import SegmentedControl from "../../../components/SegmentedControl/SegmentedControl";
 
 const PAGE_SIZE = 50;
 const ROLE_OPTIONS = ["student", "teacher", "admin"];
@@ -65,7 +66,7 @@ function StatusBadge({ item }) {
 function RoleBadge({ role }) {
   const { t } = useTranslation("ai");
   if (!role) return <span className={styles.muted}>—</span>;
-  return <span className={`${styles.roleBadge} ${styles[`roleBadge_${role}`]}`}>{roleLabel(role, t)}</span>;
+  return <span className={styles.roleBadge}>{roleLabel(role, t)}</span>;
 }
 
 function EmptyState({ hasFilters }) {
@@ -127,82 +128,61 @@ function DetailItem({ label, value, mono = false }) {
   );
 }
 
-function DetailDrawer({ item, closing = false, onClose, onRevoke }) {
+function KeyDetailPane({ item, onRevoke }) {
   const { t } = useTranslation("ai");
-  const closeButtonRef = useRef(null);
-
-  useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
-
-  if (!item) return null;
   const isActive = item.status === "active";
 
   return (
-    <div
-      className={`${styles.drawerOverlay} ${closing ? styles.drawerOverlayOut : ""}`}
-      role="presentation"
-      onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
-    >
-      <aside className={`${styles.drawer} ${closing ? styles.drawerOut : ""}`} role="dialog" aria-modal="true" aria-labelledby="ai-api-key-drawer-title">
-        <div className={styles.drawerHeader}>
-          <div className={styles.drawerHeading}>
-            <span className={styles.drawerKicker}>{t("AiApiKeysPage.detailTitle")}</span>
-            <h2 id="ai-api-key-drawer-title" className={styles.drawerTitle}>{item.api_key_name}</h2>
-          </div>
-          <button ref={closeButtonRef} type="button" className={styles.iconButton} onClick={onClose} aria-label={t("AiApiKeysPage.close")}>
-            <MIcon name="close" size={18} />
-          </button>
+    <>
+      <div className={styles.detailHeader}>
+        <div className={styles.detailHeading}>
+          <span className={styles.detailKicker}>{t("AiApiKeysPage.detailTitle")}</span>
+          <h2 className={styles.detailTitle}>{item.api_key_name}</h2>
         </div>
-
-        <div className={styles.drawerStatus}><StatusBadge item={item} /></div>
-
-        <section className={styles.detailSection} aria-labelledby="ai-api-key-info-heading">
-          <h3 id="ai-api-key-info-heading">{t("AiApiKeysPage.detailKeyInfo")}</h3>
-          <dl className={styles.detailGrid}>
-            <DetailItem label={t("AiApiKeysPage.detailPrefix")} value={item.api_key_prefix} mono />
-            <DetailItem label={t("AiApiKeysPage.detailCreatedAt")} value={fmtTime(item.created_at)} />
-            <DetailItem label={t("AiApiKeysPage.detailExpiresAt")} value={item.expires_at ? fmtTime(item.expires_at) : t("AiApiKeysPage.detailNeverExpires")} />
-            <DetailItem label={t("AiApiKeysPage.detailRateLimit")} value={item.rate_limit ? `${item.rate_limit} / min` : "—"} />
-          </dl>
-        </section>
-
-        <section className={styles.detailSection} aria-labelledby="ai-api-key-owner-heading">
-          <h3 id="ai-api-key-owner-heading">{t("AiApiKeysPage.detailOwner")}</h3>
-          <dl className={styles.detailGrid}>
-            <DetailItem label={t("AiApiKeysPage.detailName")} value={item.user_full_name || item.user_email} />
-            <DetailItem label={t("AiApiKeysPage.detailEmail")} value={item.user_email} />
-            <DetailItem label={t("AiApiKeysPage.detailRole")} value={<RoleBadge role={item.user_role} />} />
-          </dl>
-        </section>
-
-        <section className={styles.detailSection} aria-labelledby="ai-api-key-request-heading">
-          <h3 id="ai-api-key-request-heading">{t("AiApiKeysPage.detailRequest")}</h3>
-          <dl className={styles.detailGrid}>
-            <DetailItem label={t("AiApiKeysPage.detailPurpose")} value={item.request_purpose} />
-            <DetailItem label={t("AiApiKeysPage.detailReviewer")} value={item.reviewer_full_name || item.reviewer_email} />
-            <DetailItem label={t("AiApiKeysPage.detailReviewedAt")} value={fmtTime(item.reviewed_at)} />
-          </dl>
-        </section>
-
-        <section className={styles.detailSection} aria-labelledby="ai-api-key-activity-heading">
-          <h3 id="ai-api-key-activity-heading">{t("AiApiKeysPage.detailActivity")}</h3>
-          <dl className={styles.detailGrid}>
-            <DetailItem label={t("AiApiKeysPage.detailLastUsedAt")} value={item.last_used_at ? fmtTime(item.last_used_at) : t("AiApiKeysPage.detailNeverUsed")} />
-            {item.inactive_reason && <DetailItem label={t("AiApiKeysPage.detailInactiveReason")} value={item.inactive_reason === "revoked" ? t("AiApiKeysPage.inactiveReasonRevoked") : t("AiApiKeysPage.inactiveReasonExpired")} />}
-            {item.revoked_at && <DetailItem label={t("AiApiKeysPage.detailRevokedAt")} value={fmtTime(item.revoked_at)} />}
-          </dl>
-        </section>
-
         {isActive && (
-          <div className={styles.drawerFooter}>
-            <button type="button" className={styles.btnDanger} onClick={() => onRevoke(item)}>
-              <MIcon name="block" size={16} />{t("AiApiKeysPage.revokeAction")}
-            </button>
-          </div>
+          <button type="button" className={styles.btnDanger} onClick={() => onRevoke(item)}>
+            <MIcon name="block" size={16} />{t("AiApiKeysPage.revokeAction")}
+          </button>
         )}
-      </aside>
-    </div>
+      </div>
+
+      <section className={styles.detailSection} aria-labelledby="ai-api-key-info-heading">
+        <h3 id="ai-api-key-info-heading">{t("AiApiKeysPage.detailKeyInfo")}</h3>
+        <dl className={styles.detailGrid}>
+          <DetailItem label={t("AiApiKeysPage.detailPrefix")} value={item.api_key_prefix} mono />
+          <DetailItem label={t("AiApiKeysPage.detailCreatedAt")} value={fmtTime(item.created_at)} />
+          <DetailItem label={t("AiApiKeysPage.detailExpiresAt")} value={item.expires_at ? fmtTime(item.expires_at) : t("AiApiKeysPage.detailNeverExpires")} />
+          <DetailItem label={t("AiApiKeysPage.detailRateLimit")} value={item.rate_limit ? `${item.rate_limit} / min` : "—"} />
+        </dl>
+      </section>
+
+      <section className={styles.detailSection} aria-labelledby="ai-api-key-owner-heading">
+        <h3 id="ai-api-key-owner-heading">{t("AiApiKeysPage.detailOwner")}</h3>
+        <dl className={styles.detailGrid}>
+          <DetailItem label={t("AiApiKeysPage.detailName")} value={item.user_full_name || item.user_email} />
+          <DetailItem label={t("AiApiKeysPage.detailEmail")} value={item.user_email} />
+          <DetailItem label={t("AiApiKeysPage.detailRole")} value={<RoleBadge role={item.user_role} />} />
+        </dl>
+      </section>
+
+      <section className={styles.detailSection} aria-labelledby="ai-api-key-request-heading">
+        <h3 id="ai-api-key-request-heading">{t("AiApiKeysPage.detailRequest")}</h3>
+        <dl className={styles.detailGrid}>
+          <DetailItem label={t("AiApiKeysPage.detailPurpose")} value={item.request_purpose} />
+          <DetailItem label={t("AiApiKeysPage.detailReviewer")} value={item.reviewer_full_name || item.reviewer_email} />
+          <DetailItem label={t("AiApiKeysPage.detailReviewedAt")} value={fmtTime(item.reviewed_at)} />
+        </dl>
+      </section>
+
+      <section className={styles.detailSection} aria-labelledby="ai-api-key-activity-heading">
+        <h3 id="ai-api-key-activity-heading">{t("AiApiKeysPage.detailActivity")}</h3>
+        <dl className={styles.detailGrid}>
+          <DetailItem label={t("AiApiKeysPage.detailLastUsedAt")} value={item.last_used_at ? fmtTime(item.last_used_at) : t("AiApiKeysPage.detailNeverUsed")} />
+          {item.inactive_reason && <DetailItem label={t("AiApiKeysPage.detailInactiveReason")} value={item.inactive_reason === "revoked" ? t("AiApiKeysPage.inactiveReasonRevoked") : t("AiApiKeysPage.inactiveReasonExpired")} />}
+          {item.revoked_at && <DetailItem label={t("AiApiKeysPage.detailRevokedAt")} value={fmtTime(item.revoked_at)} />}
+        </dl>
+      </section>
+    </>
   );
 }
 
@@ -256,8 +236,7 @@ export default function AiApiKeysPage() {
   const [roleFilters, setRoleFilters] = useState([]);
   const [createdRange, setCreatedRange] = useState("all");
   const [filterOpen, setFilterOpen] = useState(false);
-  const [openMenuId, setOpenMenuId] = useState(null);
-  const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [deletingItem, setDeletingItem] = useState(null);
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState([]);
@@ -267,7 +246,12 @@ export default function AiApiKeysPage() {
   const [inactiveCount, setInactiveCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const deleteDialog = useDialogPresence(deletingItem);
-  const drawer = useDialogPresence(selectedItem);
+
+  /* 右側詳細面板常駐顯示；未點選或選取項已不在列表時，退回第一筆 */
+  const selected = useMemo(
+    () => rows.find((item) => item.id === selectedId) ?? rows[0] ?? null,
+    [rows, selectedId],
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -292,15 +276,6 @@ export default function AiApiKeysPage() {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [filterOpen]);
-
-  useEffect(() => {
-    if (!selectedItem) return undefined;
-    const closeOnEscape = (event) => {
-      if (event.key === "Escape") setSelectedItem(null);
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [selectedItem]);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -352,95 +327,80 @@ export default function AiApiKeysPage() {
     setPage(0);
   }
 
-  function openDetails(item) {
-    setOpenMenuId(null);
-    setSelectedItem(item);
-  }
-
-  function onRowKeyDown(event, item) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      openDetails(item);
-    }
-  }
-
   return (
     <div className={styles.page}>
-      <PageHeader title={t("AiApiKeysPage.pageTitle")} subtitle={t("AiApiKeysPage.pageSubtitle")}>
-        <div className={styles.headerSummary} aria-live="polite">
-          <span>{activeCount} {t("AiApiKeysPage.summaryActive")}</span><span aria-hidden="true">·</span><span>{inactiveCount} {t("AiApiKeysPage.summaryInactive")}</span>
+      <PageHeader title={t("AiApiKeysPage.pageTitle")} subtitle={t("AiApiKeysPage.pageSubtitle")} />
+
+      <div className={styles.controlsRow}>
+        <div className={styles.segmentGroup}>
+          <SegmentedControl
+            className={styles.statusTabs}
+            options={tabs.map(({ key, label, count }) => ({ value: key, label, badge: count }))}
+            value={statusFilter}
+            onChange={(value) => { setStatusFilter(value); setPage(0); }}
+            ariaLabel={t("AiApiKeysPage.statusTabsLabel")}
+          />
+          <div ref={filterAreaRef} className={styles.filterArea}>
+            <button type="button" className={`${styles.filterButton} ${activeFilterCount ? styles.filterButtonActive : ""}`} aria-haspopup="dialog" aria-expanded={filterOpen} onClick={() => setFilterOpen((current) => !current)}>
+              <MIcon name="filter_alt" size={16} />{activeFilterCount ? t("AiApiKeysPage.filterActiveCount", { count: activeFilterCount }) : t("AiApiKeysPage.filterButton")}
+            </button>
+            {filterOpen && <FilterPopover roles={roleFilters} createdRange={createdRange} onToggleRole={toggleRole} onCreatedRangeChange={(value) => { setCreatedRange(value); setPage(0); }} onClear={clearFilters} />}
+          </div>
         </div>
-      </PageHeader>
 
-      <div className={styles.statusTabs} role="tablist" aria-label={t("AiApiKeysPage.statusTabsLabel")}>
-        {tabs.map((tab) => (
-          <button key={tab.key} type="button" role="tab" aria-selected={statusFilter === tab.key} className={`${styles.statusTab} ${statusFilter === tab.key ? styles.statusTabActive : ""}`} onClick={() => { setStatusFilter(tab.key); setPage(0); }}>
-            {tab.label}<span className={styles.tabCount}>{tab.count}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className={styles.toolbar}>
         <div className={styles.searchBox}>
           <MIcon name="search" size={17} />
           <input type="search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder={t("AiApiKeysPage.searchPlaceholder")} aria-label={t("AiApiKeysPage.searchPlaceholder")} />
           {searchInput && <button type="button" className={styles.clearSearch} onClick={() => setSearchInput("")} aria-label={t("AiApiKeysPage.clearSearch")}><MIcon name="close" size={15} /></button>}
         </div>
-        <div ref={filterAreaRef} className={styles.filterArea}>
-          <button type="button" className={`${styles.filterButton} ${activeFilterCount ? styles.filterButtonActive : ""}`} aria-haspopup="dialog" aria-expanded={filterOpen} onClick={() => setFilterOpen((current) => !current)}>
-            <MIcon name="filter_alt" size={16} />{activeFilterCount ? t("AiApiKeysPage.filterActiveCount", { count: activeFilterCount }) : t("AiApiKeysPage.filterButton")}
-          </button>
-          {filterOpen && <FilterPopover roles={roleFilters} createdRange={createdRange} onToggleRole={toggleRole} onCreatedRangeChange={(value) => { setCreatedRange(value); setPage(0); }} onClear={clearFilters} />}
-        </div>
       </div>
 
       <div className={styles.content}>
-        {loading ? <LoadingState fullPage /> : rows.length === 0 ? <EmptyState hasFilters={hasFilters} /> : (
-          <>
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th scope="col" className={styles.th}>{t("AiApiKeysPage.colKeyName")}</th>
-                    <th scope="col" className={styles.th}>{t("AiApiKeysPage.colUser")}</th>
-                    <th scope="col" className={styles.th}>{t("AiApiKeysPage.colIdentity")}</th>
-                    <th scope="col" className={styles.th}>{t("AiApiKeysPage.colKeyPrefix")}</th>
-                    <th scope="col" className={styles.th}>{t("AiApiKeysPage.colStatus")}</th>
-                    <th scope="col" className={styles.th}>{t("AiApiKeysPage.colCreatedAt")}</th>
-                    <th scope="col" className={styles.th}>{t("AiApiKeysPage.colActions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((item) => (
-                    <tr key={item.id} className={`${styles.tr} ${styles.trClickable}`} tabIndex={0} onClick={() => openDetails(item)} onKeyDown={(event) => onRowKeyDown(event, item)} aria-label={t("AiApiKeysPage.rowLabel", { name: item.api_key_name })}>
-                      <td className={`${styles.td} ${styles.keyNameCell}`}>{item.api_key_name || "—"}</td>
-                      <td className={styles.td}><div className={styles.userCell}><span className={styles.userName}>{item.user_full_name || "—"}</span><span className={styles.userEmail}>{item.user_email || "—"}</span></div></td>
-                      <td className={styles.td}><RoleBadge role={item.user_role} /></td>
-                      <td className={`${styles.td} ${styles.mono}`}>{item.api_key_prefix || "—"}</td>
-                      <td className={styles.td}><StatusBadge item={item} /></td>
-                      <td className={styles.td}>{fmtDate(item.created_at)}</td>
-                      <td className={`${styles.td} ${styles.actionsCell}`} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-                        <div className={styles.actionMenuArea}>
-                          <button type="button" className={styles.iconButton} title={t("AiApiKeysPage.actionMenu")} aria-label={t("AiApiKeysPage.actionMenu")} aria-haspopup="menu" aria-expanded={openMenuId === item.id} onClick={() => setOpenMenuId((current) => current === item.id ? null : item.id)}><MIcon name="more_vert" size={18} /></button>
-                          {openMenuId === item.id && <div className={styles.actionMenu} role="menu">
-                            <button type="button" role="menuitem" onClick={() => openDetails(item)}><MIcon name="visibility" size={16} />{t("AiApiKeysPage.viewDetails")}</button>
-                            {item.status === "active" && <button type="button" role="menuitem" className={styles.menuDanger} onClick={() => { setOpenMenuId(null); setDeletingItem(item); }}><MIcon name="block" size={16} />{t("AiApiKeysPage.revokeAction")}</button>}
-                          </div>}
+        {loading ? <LoadingState fullPage /> : (
+          <div className={styles.keysGrid}>
+            <section className={styles.listPane}>
+              {rows.length === 0 ? <EmptyState hasFilters={hasFilters} /> : (
+                <>
+                  <div className={styles.list}>
+                    {rows.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`${styles.row} ${selected?.id === item.id ? styles.rowActive : ""}`}
+                        onClick={() => setSelectedId(item.id)}
+                      >
+                        <div className={styles.rowIcon}>
+                          <MIcon name="vpn_key" size={20} />
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        <div className={styles.rowMain}>
+                          <span className={styles.rowName}>{item.api_key_name || "—"}</span>
+                          <span className={styles.rowMeta}>{item.user_full_name || "—"}・{item.user_email || "—"}</span>
+                        </div>
+                        <div className={styles.rowSide}>
+                          <StatusBadge item={item} />
+                          <span className={styles.rowTime}>{fmtDate(item.created_at)}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
 
-            {totalPages > 1 && <div className={styles.pagination}><span className={styles.paginationInfo}>{t("AiApiKeysPage.paginationInfo", { page: page + 1, totalPages, total })}</span><div className={styles.paginationBtns}><button type="button" className={styles.btnOutline} disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>{t("AiApiKeysPage.prevPage")}</button><button type="button" className={styles.btnOutline} disabled={page + 1 >= totalPages} onClick={() => setPage((current) => current + 1)}>{t("AiApiKeysPage.nextPage")}</button></div></div>}
-          </>
+                  {totalPages > 1 && <div className={styles.pagination}><span className={styles.paginationInfo}>{t("AiApiKeysPage.paginationInfo", { page: page + 1, totalPages, total })}</span><div className={styles.paginationBtns}><button type="button" className={styles.btnOutline} disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>{t("AiApiKeysPage.prevPage")}</button><button type="button" className={styles.btnOutline} disabled={page + 1 >= totalPages} onClick={() => setPage((current) => current + 1)}>{t("AiApiKeysPage.nextPage")}</button></div></div>}
+                </>
+              )}
+            </section>
+
+            <section className={styles.detailPane}>
+              {!selected ? (
+                <div className={styles.stateBox}>{t("AiApiKeysPage.selectAKey")}</div>
+              ) : (
+                <KeyDetailPane item={selected} onRevoke={(item) => setDeletingItem(item)} />
+              )}
+            </section>
+          </div>
         )}
       </div>
 
-      {drawer.open && <DetailDrawer item={drawer.item} closing={drawer.closing} onClose={() => setSelectedItem(null)} onRevoke={(item) => setDeletingItem(item)} />}
-      {deleteDialog.open && <RevokeDialog item={deleteDialog.item} closing={deleteDialog.closing} onClose={() => setDeletingItem(null)} onDone={() => { setSelectedItem(null); load(); }} />}
+      {deleteDialog.open && <RevokeDialog item={deleteDialog.item} closing={deleteDialog.closing} onClose={() => setDeletingItem(null)} onDone={() => load()} />}
     </div>
   );
 }
