@@ -106,7 +106,14 @@ export default function JobsButton({ collapsed = false }) {
     });
   };
 
-  const desktopBlocked = desktopNotifications.permission === "denied";
+  // denied：使用者在瀏覽器封鎖了；insecure：用 http://IP 之類的不安全來源開站，
+  // 瀏覽器根本不會問權限，只能改走 https 或 localhost
+  const desktopBlocked =
+    desktopNotifications.permission === "denied" || desktopNotifications.permission === "insecure";
+  const desktopBlockedKey =
+    desktopNotifications.permission === "insecure"
+      ? "JobsButton.desktopNotificationsInsecure"
+      : "JobsButton.desktopNotificationsBlocked";
 
   return (
     <>
@@ -162,7 +169,7 @@ export default function JobsButton({ collapsed = false }) {
                 onChange={(e) => (e.target.checked ? desktopNotifications.enable() : desktopNotifications.disable())}
               />
               <span>
-                {desktopBlocked ? t("JobsButton.desktopNotificationsBlocked") : t("JobsButton.desktopNotifications")}
+                {desktopBlocked ? t(desktopBlockedKey) : t("JobsButton.desktopNotifications")}
               </span>
             </label>
           )}

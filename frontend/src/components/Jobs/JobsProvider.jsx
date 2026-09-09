@@ -19,6 +19,7 @@ import { CoursesService } from "../../services/courses";
 import { connectJobsWebSocket, JobsService } from "../../services/jobs";
 import JobDetailDialog from "./JobDetailDialog";
 import { JOB_KIND_LABEL_KEYS } from "./JobRow";
+import { diffJobSnapshot } from "./jobSnapshotDiff";
 
 const NOTIFY_ONLY_MINE_KEY = "jobs:notifyOnlyMine";
 const DESKTOP_PROMPT_TOAST_ID = "desktop-notifications-prompt";
@@ -39,16 +40,11 @@ function loadReadReminderIds(user) {
   }
 }
 
-/* 從 running/pending/blocked → 終態時觸發 toast */
-const TERMINAL_STATUSES = new Set(["completed", "failed", "blocked", "cancelled"]);
-
-/** 終態轉換的通知內容；不需通知時回 null */
-function describeJobTransition(job, prevStatus, t) {
-  // 第一次看到（prev undefined）且本來就是終態 → 不通知（避免重整時轟炸）
-  if (prevStatus === undefined) return null;
-  if (prevStatus === job.status) return null;
-  if (!TERMINAL_STATUSES.has(job.status)) return null;
-
+/**
+ * 終態任務的通知內容；哪些任務算「剛轉成終態」由 jobSnapshotDiff 決定，
+ * 這裡只負責把狀態翻成文案。不認得的狀態回 null。
+ */
+function describeJobTransition(job, t) {
   const kindLabel = JOB_KIND_LABEL_KEYS[job.kind] ? t(JOB_KIND_LABEL_KEYS[job.kind]) : job.kind;
   const detail = job.message ?? job.title;
 
@@ -66,8 +62,8 @@ function describeJobTransition(job, prevStatus, t) {
   }
 }
 
-function notifyJobTransition(job, prevStatus, onView, t) {
-  const info = describeJobTransition(job, prevStatus, t);
+function notifyJobTransition(job, onView, t) {
+  const info = describeJobTransition(job, t);
   if (!info) return;
 
   const action = { label: t("JobsProvider.viewAction"), onClick: () => onView(job.id) };
@@ -129,8 +125,8 @@ export default function JobsProvider({ children }) {
   // 使用 ref 送進 WS callback，避免 closure 抓舊設定導致 effect 重連
   const filterRef = useRef({ enabled: false, myUserId: null });
   filterRef.current = { enabled: notifyOnlyMine && isAdmin, myUserId };
-  // 上一次 WS snapshot 中各 job 的狀態，用於 diff 觸發 toast
-  const prevStatusMapRef = useRef(null);
+  // 上一次 WS snapshot 的基準（各 job 狀態 + 時間高水位），用於 diff 觸發通知
+  const snapshotBaselineRef = useRef(null);
   // 上一次 WS snapshot 中的提醒 id，用於偵測「新出現」的提醒發桌面通知
   const prevReminderIdsRef = useRef(null);
 
@@ -160,11 +156,11 @@ export default function JobsProvider({ children }) {
     return () => clearInterval(timer);
   }, [load]);
 
-  /* WebSocket 即時推送 */
+  /* WebSocket 即時推送。token 用函式取：access token 過期後 refresh 會換新值，
+     重連時要拿當下的，否則後端 1008 拒絕、前端每 5 秒重連卻永遠連不上。 */
   useEffect(() => {
-    const token = AuthStorage.getAccessToken();
-    if (!token) return;
-    return connectJobsWebSocket(token, (snapshot) => {
+    if (!AuthStorage.getAccessToken()) return;
+    return connectJobsWebSocket(() => AuthStorage.getAccessToken(), (snapshot) => {
       const all = snapshot?.items ?? [];
       setItems(all.filter((j) => j.status === "running"));
 
@@ -189,20 +185,18 @@ export default function JobsProvider({ children }) {
         prevReminderIdsRef.current = new Set(snapshot.reminders.map((r) => r.id));
       }
 
-      // ── Diff: 比對上一次 snapshot 的狀態，發 toast ──
-      const prev = prevStatusMapRef.current;
-      const next = new Map();
-      for (const j of all) next.set(j.id, j.status);
-      // 只在已建立 baseline 後才比對（首次連線當下視為基準，不要彈通知）
-      if (prev !== null) {
-        const { enabled, myUserId } = filterRef.current;
-        for (const j of all) {
-          // admin 開「只通知自己」：跳過非本人的 job
-          if (enabled && j.user_id !== myUserId) continue;
-          notifyJobTransition(j, prev.get(j.id), setFocusJobId, t);
-        }
+      // ── Diff: 比對上一次 snapshot，找出剛轉成終態的任務 ──
+      // 首次連線只建立基準；之後除了狀態變化，也涵蓋「兩次推送之間
+      // 就建立並完成」的任務（首次看到即終態、時間晚於高水位），
+      // 否則範本轉換／刪除這類幾秒內結束的任務永遠不會通知。
+      const { transitions, baseline } = diffJobSnapshot(all, snapshotBaselineRef.current);
+      snapshotBaselineRef.current = baseline;
+      const { enabled, myUserId } = filterRef.current;
+      for (const j of transitions) {
+        // admin 開「只通知自己」：跳過非本人的 job
+        if (enabled && j.user_id !== myUserId) continue;
+        notifyJobTransition(j, setFocusJobId, t);
       }
-      prevStatusMapRef.current = next;
     });
   }, []);
 
@@ -288,6 +282,9 @@ export default function JobsProvider({ children }) {
     } else if (result === "denied") {
       toast.dismiss(DESKTOP_PROMPT_TOAST_ID);
       toast.error(t("JobsProvider.desktopDenied"));
+    } else if (result === "insecure") {
+      toast.dismiss(DESKTOP_PROMPT_TOAST_ID);
+      toast.error(t("JobsProvider.desktopInsecure"));
     }
     return result;
   }, [t]);
