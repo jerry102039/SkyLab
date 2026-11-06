@@ -108,6 +108,7 @@ async function renderPage() {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  window.localStorage.clear();
   client = createTestQueryClient();
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   mocks.listAllSessions.mockResolvedValue([]);
@@ -195,6 +196,43 @@ describe("ResourceMgmtPage", () => {
     expect(mocks.batchActionInChunks).toHaveBeenCalledWith([101, 102], "start");
     expect(mocks.toast.success).not.toHaveBeenCalled();
     expect(mocks.toast.error).toHaveBeenCalledWith("ResourceMgmtPage.batchPartialFailToast");
+  });
+
+  test("a group keeps its expanded/collapsed state after leaving and returning to the page", async () => {
+    mocks.listAll.mockResolvedValue([]);
+    const group = (id, title, vmid) => ({
+      id,
+      kind: "course",
+      title,
+      timingLabel: "—",
+      nodeLabel: "pve1",
+      machines: [{ id: `m-${vmid}`, name: `machine-${vmid}`, vmid, requestId: vmid, status: "stopped", resource: { vmid } }],
+    });
+    mocks.buildEnvironmentGroups.mockReturnValue([group("course-a", "課程 A", 101), group("course-b", "課程 B", 102)]);
+    const toggleOf = (title) => rowOf(title).querySelector('button[aria-label="ResourceMgmtPage.toggleGroupAria"]');
+
+    await renderPage();
+    // 沒記過的群組照舊展開
+    expect(rowOf("machine-101")).toBeTruthy();
+    expect(rowOf("machine-102")).toBeTruthy();
+
+    await act(async () => { toggleOf("課程 A").click(); });
+    expect(rowOf("machine-101")).toBeUndefined();
+
+    // 離開頁面再回來（重新掛載）：A 維持收起、B 維持展開
+    act(() => root.unmount());
+    root = createRoot(host);
+    await renderPage();
+    expect(toggleOf("課程 A").getAttribute("aria-expanded")).toBe("false");
+    expect(rowOf("machine-101")).toBeUndefined();
+    expect(rowOf("machine-102")).toBeTruthy();
+
+    // 再展開也記得：下次回來是展開的
+    await act(async () => { toggleOf("課程 A").click(); });
+    act(() => root.unmount());
+    root = createRoot(host);
+    await renderPage();
+    expect(rowOf("machine-101")).toBeTruthy();
   });
 
   test("refresh deselects machines that disappeared or moved into an environment group", async () => {

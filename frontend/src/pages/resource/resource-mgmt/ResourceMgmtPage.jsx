@@ -12,6 +12,7 @@ import PowerMenu from "../../../components/PowerMenu/PowerMenu";
 import TemplateFormDialog from "../templates/TemplateFormDialog";
 import useDialogPresence from "../../../hooks/useDialogPresence";
 import useVirtualRows from "../../../hooks/useVirtualRows";
+import usePersistedGroupExpansion from "../../../hooks/usePersistedGroupExpansion";
 import { useQueryView } from "../../../hooks/useQueryLoadState";
 import SharedEmptyState from "../../../components/EmptyState/EmptyState";
 import ErrorState from "../../../components/ErrorState/ErrorState";
@@ -200,7 +201,8 @@ function EnvironmentGroupRows({ group, machines = group.machines, onUpdated, onR
   const { t } = useTranslation("resource");
   const toast = useToast();
   const actionLabel = useActionLabel();
-  const [expanded, setExpanded] = useState(true);
+  /* 開合記在本機：上次收起的群組回到頁面仍是收起的 */
+  const [expanded, toggleExpanded] = usePersistedGroupExpansion("resource-mgmt", group.id);
   const [groupAction, setGroupAction] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menu = useDialogPresence(menuOpen, 130);
@@ -241,7 +243,7 @@ function EnvironmentGroupRows({ group, machines = group.machines, onUpdated, onR
         onClick={(event) => {
           /* 整列都可以開合，但列內的按鈕與勾選框各自處理自己的點擊 */
           if (event.target.closest("button, input, label")) return;
-          setExpanded((value) => !value);
+          toggleExpanded();
         }}
       >
         <td className={`${styles.td} ${styles.checkCell}`}>
@@ -250,7 +252,7 @@ function EnvironmentGroupRows({ group, machines = group.machines, onUpdated, onR
             className={styles.environmentToggle}
             aria-expanded={expanded}
             aria-label={t("ResourceMgmtPage.toggleGroupAria", { name: group.title })}
-            onClick={() => setExpanded((value) => !value)}
+            onClick={toggleExpanded}
           >
             <MIcon name={expanded ? "expand_more" : "chevron_right"} size={20} />
           </button>

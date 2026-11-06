@@ -40,7 +40,7 @@ Each row shows:
 
 Machines that belong to a course teaching environment or a quick practice environment are grouped under one group row.
 
-1. Click the group row (or the arrow at its left) to expand or collapse it. The second line of the group shows how many machines it has, or how many match your search (for example "2 of 5 machines match").
+1. Click the group row (or the arrow at its left) to expand or collapse it. Your browser remembers each group's state, so it stays the same when you leave and come back or reload the page; groups you have never touched start expanded. The second line of the group shows how many machines it has, or how many match your search (for example "2 of 5 machines match").
 2. The **Status** column of the group shows how many machines are running, for example "3/5 running".
 3. To power the whole group, click ⋮ on the group row (**Group power**) and choose **Start all** or **Shut down all**. **Start all** is disabled when every machine is already running; **Shut down all** is disabled when none is running.
 4. Each machine inside the group has its own **Console** / **Terminal** button and ⋮ power menu. Machines in a group show **Managed as part of the environment** in the expiry column and cannot be deleted one by one.

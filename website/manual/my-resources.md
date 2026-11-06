@@ -146,7 +146,7 @@ A row with **Creation Failed** (the machine could not be created) or **Start fai
 
 Machines of a course teaching environment or a quick practice environment are grouped under one row.
 
-1. Click the group row or its arrow to expand or collapse it. The row shows the number of machines and **Course Teaching Environment** or **Quick Practice Environment**.
+1. Click the group row or its arrow to expand or collapse it. Your browser remembers each group's state, so it stays the same when you leave and come back or reload the page; groups you have never touched start expanded. The row shows the number of machines and **Course Teaching Environment** or **Quick Practice Environment**.
 2. The group's **IP Address** column shows how many machines are running, for example "2/3 running".
 3. Open the group's ⋮ menu (**Group power**) to run **Start all**, **Shut down all**, or, for quick practice, **End Practice**.
 4. **End Practice** reclaims every machine in the group immediately. Unsaved content is lost, and the creation count you used is not refunded.
